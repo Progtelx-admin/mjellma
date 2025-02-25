@@ -13,5 +13,4 @@ class HotelImage extends Bookable
         return $this->belongsTo(Hotel::class, 'hotel_id', 'hotel_id');
     }
 
-
 }
