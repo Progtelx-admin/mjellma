@@ -2,13 +2,14 @@
 namespace Modules\Hotel\Controllers;
 
 use App\Http\Controllers\Controller;
-use Modules\Hotel\Models\Hotel;
+use Modules\Hotel\Models\HotelH;
 use Illuminate\Http\Request;
 use Modules\Location\Models\Location;
 use Modules\Location\Models\LocationCategory;
 use Modules\Review\Models\Review;
 use Modules\Core\Models\Attributes;
 use DB;
+use Illuminate\Support\Facades\Log;
 
 class HotelController extends Controller
 {

@@ -1,10 +1,25 @@
 <?php
 use \Illuminate\Support\Facades\Route;
 
-Route::group(['prefix'=>config('hotel.hotel_route_prefix')],function(){
-    Route::get('/','HotelController@index')->name('hotel.search'); // Search
-    Route::get('/{slug}','HotelController@detail')->name('hotel.detail');// Detail
-});
+// Route::group(['prefix'=>config('hotel.hotel_route_prefix')],function(){
+//     Route::get('/','HotelController@index')->name('hotel.search'); // Search
+//     Route::get('/{slug}','HotelController@detail')->name('hotel.detail');// Detail
+// });
+
+Route::get('/hotels', 'HotelHController@showHotels')->name('hotel.show');
+Route::get('/hotels/search', 'HotelHController@searchHotels')->name('hotel.search');
+Route::get('/hotel/{id}', 'HotelHController@hotelInfo')->name('hotel.info');
+Route::get('/hotel-suggestions', 'HotelHController@getHotelSuggestions')->name('hotel.suggestions');
+Route::post('/hotel/prebook', 'HotelHController@prebookRoom')->name('hotel.prebook');
+Route::get('/hotel/prebook/result', 'HotelHController@prebookResult')->name('hotel.prebook.result');
+Route::post('/hotel/book', 'HotelHController@bookRoom')->name('hotel.book');
+Route::get('/hotel/booking/confirmation', 'HotelHController@bookingConfirmation')->name('hotel.booking.confirmation');
+Route::post('/hotel/payment', 'HotelHController@processPayment')->name('hotel.payment');
+Route::post('/hotel/booking/finish', 'HotelHController@finishBooking')->name('hotel.booking.finish');
+Route::get('/hotel/payment/success', function () {
+    return view('Hotel::frontend.payment-success');
+})->name('hotel.payment.success');
+
 
 Route::group(['prefix'=>'user/'.config('hotel.hotel_route_prefix'),'middleware' => ['auth','verified']],function(){
     Route::get('/','VendorController@index')->name('hotel.vendor.index');

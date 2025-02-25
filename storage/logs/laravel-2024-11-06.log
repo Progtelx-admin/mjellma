@@ -1,8 +1,0 @@
-[2024-11-06 20:04:07] production.INFO: Broadcasting [App\Events\PusherNotificationAdminEvent] on channels [admin-channel] with payload:
-{
-    "message": "You have just gotten a new Subscriber",
-    "avatar": "<img class=\"image-responsive\" src=\"https:\/\/rezervo24.com\/images\/avatar.png\" alt=\"Mjellma Travel\">",
-    "link": "https:\/\/rezervo24.com\/admin\/module\/user\/subscriber",
-    "idNotification": "3f861238-74cf-4584-94c5-4600a3f021b3",
-    "socket": null
-}  
