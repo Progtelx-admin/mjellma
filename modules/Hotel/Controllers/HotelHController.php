@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\Cache;
 class HotelHController extends Controller
 {
     private $apiUrl = "https://api.worldota.net/api/b2b/v3/";
-    private $username = "8166"; // Your Basic Auth username
-    private $password = "028c1cb6-c2e7-4ce2-9ace-1bba8aec92a6"; // Your Basic Auth password
+    private $username = "8166";
+    private $password = "028c1cb6-c2e7-4ce2-9ace-1bba8aec92a6";
 
     public function showHotels()
     {
