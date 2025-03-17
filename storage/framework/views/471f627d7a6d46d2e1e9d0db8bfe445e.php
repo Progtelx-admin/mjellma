@@ -26,43 +26,56 @@
             <h1 class="text-white fw-bold mb-4 text-center" style="text-shadow: 2px 2px 5px rgba(0,0,0,0.7);">
                 Escape To Paradise, Unwind In Luxury
             </h1>
-
-            <!-- Form Section -->
             <div class="p-4 rounded shadow-sm bg-white">
                 <!-- Tabs for Flights, Hotels, Cars -->
-                <ul class="nav nav-tabs mb-3" id="searchTabs">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fa fa-plane"></i> Flights</a>
+                <ul class="nav nav-tabs mb-3" id="searchTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
+                            aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i> Flights</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="#"><i class="fa fa-hotel"></i> Hotels</a>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active" id="hotel-tab" data-bs-toggle="tab" href="#hotel" role="tab"
+                            aria-controls="hotel" aria-selected="true"><i class="fa fa-hotel"></i> Hotels</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#"><i class="fa fa-car"></i> Cars</a>
                     </li>
                 </ul>
 
-                <!-- Search Form -->
-                <form method="GET" action="<?php echo e(route('hotel.search')); ?>">
-                    <?php echo csrf_field(); ?>
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Flights Tab Content -->
+                    <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
+                        <div id="thomalex-widget"
+                            data-widget="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=sq-AL"
+                            style="height:320px;"></div>
+                        <script src="https://MjellmaTravel.resvoyage.com/scripts/thomalex-integration.js"></script>
+                    </div>
 
-                    <!-- Global Validation Error Messages -->
-                    <?php if($errors->any()): ?>
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                <?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                    <li><?php echo e($error); ?></li>
-                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
+                    <!-- Hotels Tab Content -->
+                    <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
+                        aria-labelledby="hotel-tab">
+                        <!-- Search Form -->
+                        <form method="GET" action="<?php echo e(route('hotel.search')); ?>">
+                            <?php echo csrf_field(); ?>
 
-                    <div class="row g-3">
-                        <!-- Hotel Name -->
-                        <div class="col-md-6 position-relative">
-                            <label for="hotel_name" class="form-label">Hotel Name:</label>
-                            <input type="text" id="hotel_name" name="hotel_name"
-                                class="form-control <?php $__errorArgs = ['hotel_name'];
+                            <!-- Global Validation Error Messages -->
+                            <?php if($errors->any()): ?>
+                                <div class="alert alert-danger">
+                                    <ul class="mb-0">
+                                        <?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                            <li><?php echo e($error); ?></li>
+                                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                    </ul>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="row g-3">
+                                <!-- Hotel Name -->
+                                <div class="col-md-6 position-relative">
+                                    <label for="hotel_name" class="form-label">Hotel Name:</label>
+                                    <input type="text" id="hotel_name" name="hotel_name"
+                                        class="form-control <?php $__errorArgs = ['hotel_name'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
@@ -70,24 +83,24 @@ $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>"
-                                placeholder="Enter hotel name" value="<?php echo e(old('hotel_name')); ?>">
-                            <?php $__errorArgs = ['hotel_name'];
+                                        placeholder="Enter hotel name" value="<?php echo e(old('hotel_name')); ?>">
+                                    <?php $__errorArgs = ['hotel_name'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
-                        </div>
+                                </div>
 
-                        <!-- Location -->
-                        <div class="col-md-6 position-relative">
-                            <label for="location" class="form-label">Location</label>
-                            <input type="text" id="location" name="location"
-                                class="form-control <?php $__errorArgs = ['location'];
+                                <!-- Location -->
+                                <div class="col-md-6 position-relative">
+                                    <label for="location" class="form-label">Location</label>
+                                    <input type="text" id="location" name="location"
+                                        class="form-control <?php $__errorArgs = ['location'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
@@ -95,105 +108,30 @@ $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>"
-                                placeholder="Where are you going?" autocomplete="off">
-                            <?php $__errorArgs = ['location'];
+                                        placeholder="Where are you going?" autocomplete="off">
+                                    <?php $__errorArgs = ['location'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
 
-                            <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
-                                style="max-height: 200px; overflow-y: auto; z-index: 1000;"></ul>
-                        </div>
-                    </div>
+                                    <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
+                                        style="max-height: 200px; overflow-y: auto; z-index: 1000;"></ul>
+                                </div>
+                            </div>
 
-                    <!-- Check-in, Check-out, Guests, Rooms -->
-                    <div class="row g-3 mt-3">
-                        <!-- Check-in Date -->
-                        <div class="col-6 col-md-3">
-                            <label for="checkin" class="form-label">Check-in Date</label>
-                            <input type="date" id="checkin" name="checkin"
-                                class="form-control <?php $__errorArgs = ['checkin'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>" value="<?php echo e(old('checkin')); ?>"
-                                required>
-                            <?php $__errorArgs = ['checkin'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                        </div>
-
-                        <!-- Check-out Date -->
-                        <div class="col-6 col-md-3">
-                            <label for="checkout" class="form-label">Check-out Date</label>
-                            <input type="date" id="checkout" name="checkout"
-                                class="form-control <?php $__errorArgs = ['checkout'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>" value="<?php echo e(old('checkout')); ?>"
-                                required>
-                            <?php $__errorArgs = ['checkout'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                        </div>
-
-                        <!-- Adults -->
-                        <div class="col-6 col-md-2">
-                            <label for="adults" class="form-label">Adults</label>
-                            <input type="number" id="adults" name="adults"
-                                class="form-control <?php $__errorArgs = ['adults'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>" value="<?php echo e(old('adults', 1)); ?>"
-                                min="1" required>
-                            <?php $__errorArgs = ['adults'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                        </div>
-
-                        <!-- Children -->
-                        <div class="col-6 col-md-2">
-                            <label for="children" class="form-label">Children</label>
-                            <input type="number" id="children" name="children[]"
-                                class="form-control <?php $__errorArgs = ['children.0'];
+                            <!-- Check-in, Check-out, Guests, Rooms -->
+                            <div class="row g-3 mt-3">
+                                <!-- Check-in Date -->
+                                <div class="col-6 col-md-3">
+                                    <label for="checkin" class="form-label">Check-in Date</label>
+                                    <input type="date" id="checkin" name="checkin"
+                                        class="form-control <?php $__errorArgs = ['checkin'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
@@ -201,55 +139,136 @@ $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>"
-                                value="<?php echo e(old('children.0', 0)); ?>" min="0">
-                            <?php $__errorArgs = ['children.0'];
+                                        value="<?php echo e(old('checkin')); ?>" required>
+                                    <?php $__errorArgs = ['checkin'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
-                        </div>
+                                </div>
 
-                        <!-- Rooms -->
-                        <div class="col-6 col-md-2">
-                            <label for="rooms" class="form-label">Rooms</label>
-                            <input type="number" id="rooms" name="rooms"
-                                class="form-control <?php $__errorArgs = ['rooms'];
+                                <!-- Check-out Date -->
+                                <div class="col-6 col-md-3">
+                                    <label for="checkout" class="form-label">Check-out Date</label>
+                                    <input type="date" id="checkout" name="checkout"
+                                        class="form-control <?php $__errorArgs = ['checkout'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
-unset($__errorArgs, $__bag); ?>" value="<?php echo e(old('rooms', 1)); ?>"
-                                min="1" required>
-                            <?php $__errorArgs = ['rooms'];
+unset($__errorArgs, $__bag); ?>"
+                                        value="<?php echo e(old('checkout')); ?>" required>
+                                    <?php $__errorArgs = ['checkout'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
 if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?>
-                                <div class="invalid-feedback"><?php echo e($message); ?></div>
-                            <?php unset($message);
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>
-                        </div>
+                                </div>
+
+                                <!-- Adults -->
+                                <div class="col-6 col-md-2">
+                                    <label for="adults" class="form-label">Adults</label>
+                                    <input type="number" id="adults" name="adults"
+                                        class="form-control <?php $__errorArgs = ['adults'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>"
+                                        value="<?php echo e(old('adults', 1)); ?>" min="1" required>
+                                    <?php $__errorArgs = ['adults'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                </div>
+
+                                <!-- Children -->
+                                <div class="col-6 col-md-2">
+                                    <label for="children" class="form-label">Children</label>
+                                    <input type="number" id="children" name="children[]"
+                                        class="form-control <?php $__errorArgs = ['children.0'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>"
+                                        value="<?php echo e(old('children.0', 0)); ?>" min="0">
+                                    <?php $__errorArgs = ['children.0'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                </div>
+
+                                <!-- Rooms -->
+                                <div class="col-6 col-md-2">
+                                    <label for="rooms" class="form-label">Rooms</label>
+                                    <input type="number" id="rooms" name="rooms"
+                                        class="form-control <?php $__errorArgs = ['rooms'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>"
+                                        value="<?php echo e(old('rooms', 1)); ?>" min="1" required>
+                                    <?php $__errorArgs = ['rooms'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                                        <div class="invalid-feedback"><?php echo e($message); ?></div>
+                                    <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                                </div>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="text-center mt-4">
+                                <button type="submit" class="btn btn-primary w-100">Search</button>
+                            </div>
+
+                            <!-- Hidden Latitude and Longitude -->
+                            <input type="hidden" id="latitude" name="latitude">
+                            <input type="hidden" id="longitude" name="longitude">
+                        </form>
                     </div>
 
-                    <!-- Submit Button -->
-                    <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    <!-- Cars Tab Content -->
+                    <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
+                        <p>#</p>
                     </div>
-
-                    <!-- Hidden Latitude and Longitude -->
-                    <input type="hidden" id="latitude" name="latitude">
-                    <input type="hidden" id="longitude" name="longitude">
-                </form>
-
+                </div>
             </div>
         </div>
     </div>
@@ -319,7 +338,6 @@ unset($__errorArgs, $__bag); ?>
         });
     </script>
 
-    <!-- Styling for Carousel and Form -->
     <style>
         /* Carousel items as background */
         .carousel-item {

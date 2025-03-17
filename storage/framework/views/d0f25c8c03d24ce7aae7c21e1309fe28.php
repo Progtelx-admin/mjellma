@@ -5,21 +5,23 @@
             <div class="date-wrapper">
                 <div class="check-in-wrapper">
                     <label><?php echo e($field['title']); ?></label>
-                    <div class="render check-in-render"><?php echo e(Request::query('start', display_date(strtotime('today')))); ?>
+                    <div class="render check-in-render">
+                        <?php echo e(request()->query('start', display_date(strtotime('today')))); ?>
 
                     </div>
                     <span> - </span>
-                    <div class="render check-out-render"><?php echo e(Request::query('end', display_date(strtotime('+1 day')))); ?>
+                    <div class="render check-out-render">
+                        <?php echo e(request()->query('end', display_date(strtotime('+1 day')))); ?>
 
                     </div>
                 </div>
             </div>
-            <input type="hidden" class="check-in-input" id="checkin"
-                value="<?php echo e(Request::query('start', display_date(strtotime('today')))); ?>" name="start">
-            <input type="hidden" class="check-out-input" id="checkout"
-                value="<?php echo e(Request::query('end', display_date(strtotime('+1 day')))); ?>" name="end">
+            <input type="hidden" class="check-in-input" id="checkin" name="start"
+                value="<?php echo e(request()->query('start', display_date(strtotime('today')))); ?>">
+            <input type="hidden" class="check-out-input" id="checkout" name="end"
+                value="<?php echo e(request()->query('end', display_date(strtotime('+1 day')))); ?>">
             <input type="text" class="check-in-out"
-                value="<?php echo e(Request::query('date', date('Y-m-d') . ' - ' . date('Y-m-d', strtotime('+1 day')))); ?>">
+                value="<?php echo e(request()->query('date', date('Y-m-d') . ' - ' . date('Y-m-d', strtotime('+1 day')))); ?>">
         </div>
     </div>
 </div>

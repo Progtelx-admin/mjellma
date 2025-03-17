@@ -31,27 +31,28 @@ class ModuleProvider extends ModuleServiceProvider
         $this->app->register(RouterServiceProvider::class);
     }
 
-    public static function getAdminMenu()
-    {
-        return [
-            'coupon'=>[
-                "position"=>51,
-                'url'        => route('coupon.admin.index'),
-                'title'      => __('Coupon'),
-                'icon'       => 'fa fa-ticket',
-                'permission' => 'coupon_view',
-            ],
-        ];
-    }
-    public static function getUserMenu()
-    {
-        $res['coupon'] = [
-            'url'   => route('coupon.vendor.index'),
-            'title'      => __("Coupon"),
-            'icon'       => "fa fa-ticket",
-            'position'   => 80,
-            'permission' => 'coupon_view',
-        ];
-        return $res;
-    }
+    // public static function getAdminMenu()
+    // {
+    //     return [
+    //         'coupon'=>[
+    //             "position"=>51,
+    //             'url'        => route('coupon.admin.index'),
+    //             'title'      => __('Coupon'),
+    //             'icon'       => 'fa fa-ticket',
+    //             'permission' => 'coupon_view',
+    //         ],
+    //     ];
+    // }
+
+    // public static function getUserMenu()
+    // {
+    //     $res['coupon'] = [
+    //         'url'   => route('coupon.vendor.index'),
+    //         'title'      => __("Coupon"),
+    //         'icon'       => "fa fa-ticket",
+    //         'position'   => 80,
+    //         'permission' => 'coupon_view',
+    //     ];
+    //     return $res;
+    // }
 }

@@ -1,0 +1,18 @@
+[2025-03-10 08:10:21] production.INFO: Rendering hotel search form.  
+[2025-03-10 08:10:55] production.INFO: Rendering hotel search form.  
+[2025-03-10 08:12:16] production.INFO: Broadcasting [App\Events\PusherNotificationAdminEvent] on channels [admin-channel] with payload:
+{
+    "message": "System Admin has created event ",
+    "avatar": "<img class=\"image-responsive\" src=\"https:\/\/mjellma.test\/images\/avatar.png\" alt=\"System Admin\">",
+    "link": "https:\/\/mjellma.test\/admin\/module\/event\/edit\/13",
+    "idNotification": "32e2459a-ce93-4504-b175-2938f75e6f57",
+    "socket": null
+}  
+[2025-03-10 13:32:34] production.INFO: Rendering hotel search form.  
+[2025-03-10 13:36:54] production.INFO: Starting hotel search {"input":{"_token":"xcoRkROZK4kW2vHSt1fKi4rIFNDAcb2COE5wyX8K","hotel_name":"hana","location":null,"checkin":"2026-12-01","checkout":"2027-12-01","adults":"1","children":["0"],"rooms":"1","latitude":null,"longitude":null}} 
+[2025-03-10 13:36:54] production.ERROR: Error during hotel search {"error":"SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mjellma.hotels' doesn't exist (Connection: mysql, SQL: select `hotel_id`, `name`, `latitude`, `longitude`, `star_rating` from `hotels` where `name` LIKE %hana% limit 11 offset 0)"} 
+[2025-03-10 13:36:54] production.INFO: Rendering hotel search form.  
+[2025-03-10 13:38:18] production.INFO: Rendering hotel search form.  
+[2025-03-10 13:38:43] production.INFO: Starting hotel search {"input":{"_token":"xcoRkROZK4kW2vHSt1fKi4rIFNDAcb2COE5wyX8K","hotel_name":"Test Hotel","location":null,"checkin":"2025-12-01","checkout":"2025-12-02","adults":"1","children":["0"],"rooms":"1","latitude":null,"longitude":null}} 
+[2025-03-10 13:38:43] production.ERROR: Error during hotel search {"error":"SQLSTATE[42S02]: Base table or view not found: 1146 Table 'mjellma.hotels' doesn't exist (Connection: mysql, SQL: select `hotel_id`, `name`, `latitude`, `longitude`, `star_rating` from `hotels` where `name` LIKE %Test Hotel% limit 11 offset 0)"} 
+[2025-03-10 13:38:44] production.INFO: Rendering hotel search form.  

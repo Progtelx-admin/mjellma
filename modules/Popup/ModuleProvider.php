@@ -20,18 +20,18 @@ class ModuleProvider extends ModuleServiceProvider
         $this->app->register(RouterServiceProvider::class);
     }
 
-    public static function getAdminMenu()
-    {
-        return [
-            'popup'=>[
-                "position"=>50,
-                'url'        => route('popup.admin.index'),
-                'title'      => __('Popup'),
-                'icon'       => 'ion ion-ios-cube',
-                'permission' => 'popup_view',
-                'group' => 'system'
-            ]
-        ];
-    }
+    // public static function getAdminMenu()
+    // {
+    //     return [
+    //         'popup'=>[
+    //             "position"=>50,
+    //             'url'        => route('popup.admin.index'),
+    //             'title'      => __('Popup'),
+    //             'icon'       => 'ion ion-ios-cube',
+    //             'permission' => 'popup_view',
+    //             'group' => 'system'
+    //         ]
+    //     ];
+    // }
 
 }

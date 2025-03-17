@@ -36,47 +36,47 @@ class ModuleProvider extends ModuleServiceProvider
         $this->app->register(RouterServiceProvider::class);
     }
 
-    public static function getAdminMenu()
-    {
-        if(!Space::isEnable()) return [];
-        return [
-            'space'=>[
-                "position"=>41,
-                'url'        => route('space.admin.index'),
-                'title'      => __('Space'),
-                'icon'       => 'ion ion-md-home',
-                'permission' => 'space_view',
-                'children'   => [
-                    'add'=>[
-                        'url'        => route('space.admin.index'),
-                        'title'      => __('All Spaces'),
-                        'permission' => 'space_view',
-                    ],
-                    'create'=>[
-                        'url'        => route('space.admin.create'),
-                        'title'      => __('Add new Space'),
-                        'permission' => 'space_create',
-                    ],
-                    'attribute'=>[
-                        'url'        => route('space.admin.attribute.index'),
-                        'title'      => __('Attributes'),
-                        'permission' => 'space_manage_attributes',
-                    ],
-                    'availability'=>[
-                        'url'        => route('space.admin.availability.index'),
-                        'title'      => __('Availability'),
-                        'permission' => 'space_create',
-                    ],
-                    'recovery'=>[
-                        'url'        => route('space.admin.recovery'),
-                        'title'      => __('Recovery'),
-                        'permission' => 'space_view',
-                    ],
+    // public static function getAdminMenu()
+    // {
+    //     if(!Space::isEnable()) return [];
+    //     return [
+    //         'space'=>[
+    //             "position"=>41,
+    //             'url'        => route('space.admin.index'),
+    //             'title'      => __('Space'),
+    //             'icon'       => 'ion ion-md-home',
+    //             'permission' => 'space_view',
+    //             'children'   => [
+    //                 'add'=>[
+    //                     'url'        => route('space.admin.index'),
+    //                     'title'      => __('All Spaces'),
+    //                     'permission' => 'space_view',
+    //                 ],
+    //                 'create'=>[
+    //                     'url'        => route('space.admin.create'),
+    //                     'title'      => __('Add new Space'),
+    //                     'permission' => 'space_create',
+    //                 ],
+    //                 'attribute'=>[
+    //                     'url'        => route('space.admin.attribute.index'),
+    //                     'title'      => __('Attributes'),
+    //                     'permission' => 'space_manage_attributes',
+    //                 ],
+    //                 'availability'=>[
+    //                     'url'        => route('space.admin.availability.index'),
+    //                     'title'      => __('Availability'),
+    //                     'permission' => 'space_create',
+    //                 ],
+    //                 'recovery'=>[
+    //                     'url'        => route('space.admin.recovery'),
+    //                     'title'      => __('Recovery'),
+    //                     'permission' => 'space_view',
+    //                 ],
 
-                ]
-            ]
-        ];
-    }
+    //             ]
+    //         ]
+    //     ];
+    // }
 
     public static function getBookableServices()
     {
@@ -99,41 +99,41 @@ class ModuleProvider extends ModuleServiceProvider
         ];
     }
 
-    public static function getUserMenu()
-    {
-        $res = [];
-        if (Space::isEnable()) {
-            $res['space'] = [
-                'url'        => route('space.vendor.index'),
-                'title'      => __("Manage Space"),
-                'icon'       => Space::getServiceIconFeatured(),
-                'position'   => 50,
-                'permission' => 'space_view',
-                'children'   => [
-                    [
-                        'url'   => route('space.vendor.index'),
-                        'title' => __("All Spaces"),
-                    ],
-                    [
-                        'url'        => route('space.vendor.create'),
-                        'title'      => __("Add Space"),
-                        'permission' => 'space_create',
-                    ],
-                    [
-                        'url'        => route('space.vendor.availability.index'),
-                        'title'      => __("Availability"),
-                        'permission' => 'space_create',
-                    ],
-                    [
-                        'url'   => route('space.vendor.recovery'),
-                        'title'      => __("Recovery"),
-                        'permission' => 'space_create',
-                    ],
-                ]
-            ];
-        }
-        return $res;
-    }
+    // public static function getUserMenu()
+    // {
+    //     $res = [];
+    //     if (Space::isEnable()) {
+    //         $res['space'] = [
+    //             'url'        => route('space.vendor.index'),
+    //             'title'      => __("Manage Space"),
+    //             'icon'       => Space::getServiceIconFeatured(),
+    //             'position'   => 50,
+    //             'permission' => 'space_view',
+    //             'children'   => [
+    //                 [
+    //                     'url'   => route('space.vendor.index'),
+    //                     'title' => __("All Spaces"),
+    //                 ],
+    //                 [
+    //                     'url'        => route('space.vendor.create'),
+    //                     'title'      => __("Add Space"),
+    //                     'permission' => 'space_create',
+    //                 ],
+    //                 [
+    //                     'url'        => route('space.vendor.availability.index'),
+    //                     'title'      => __("Availability"),
+    //                     'permission' => 'space_create',
+    //                 ],
+    //                 [
+    //                     'url'   => route('space.vendor.recovery'),
+    //                     'title'      => __("Recovery"),
+    //                     'permission' => 'space_create',
+    //                 ],
+    //             ]
+    //         ];
+    //     }
+    //     return $res;
+    // }
 
     public static function getTemplateBlocks(){
         if(!Space::isEnable()) return [];

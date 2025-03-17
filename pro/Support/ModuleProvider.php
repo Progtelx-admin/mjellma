@@ -33,7 +33,7 @@ class ModuleProvider extends ModuleServiceProvider
         ]);
         $this->loadViewsFrom(__DIR__ . '/Views', 'Support');
 
-        AdminMenuManager::register_group('support', __("Support Center"), 160, ['is_pro' => true]);
+        // AdminMenuManager::register_group('support', __("Support Center"), 160, ['is_pro' => true]);
 
     }
 
@@ -43,70 +43,70 @@ class ModuleProvider extends ModuleServiceProvider
         $this->app->register(RouterServiceProvider::class);
     }
 
-    public static function getAdminMenu()
-    {
-        return [
-            'ticket' => [
-                "position"   => 10,
-                'url'        => route('support.admin.ticket.index'),
-                'title'      => __("Tickets"),
-                'icon'       => 'ion-md-bookmarks',
-                'permission' => 'support_ticket_view',
-                'group'      => 'support',
-                'children'   => [
-                    'view' => [
-                        'url'        => route('support.admin.ticket.index'),
-                        'title'      => __("All Tickets"),
-                        'permission' => 'support_ticket_view',
-                    ],
-                    'cat'  => [
-                        'url'        => route('support.admin.ticket.category.index'),
-                        'title'      => __("Categories"),
-                        'permission' => 'support_ticket_manage',
-                    ],
-                ]
-            ],
-            'topic'  => [
-                "position"   => 10,
-                'url'        => route('support.admin.topic.index'),
-                'title'      => __("Topics"),
-                'icon'       => 'ion-md-bookmarks',
-                'permission' => 'support_topic_view',
-                'group'      => 'support',
-                'children'   => [
-                    'view'   => [
-                        'url'        => route('support.admin.topic.index'),
-                        'title'      => __("All Topics"),
-                        'permission' => 'support_topic_view',
-                    ],
-                    'create' => [
-                        'url'        => route('support.admin.topic.create'),
-                        'title'      => __("Add Topic"),
-                        'permission' => 'support_topic_create',
-                    ],
-                    'cat'    => [
-                        'url'        => route('support.admin.topic.category.index'),
-                        'title'      => __("Categories"),
-                        'permission' => 'support_topic_create',
-                    ],
-                    'tag'    => [
-                        'url'        => route('support.admin.topic.tag.index'),
-                        'title'      => __("Tags"),
-                        'permission' => 'support_topic_create',
-                    ],
-                ]
-            ],
-        ];
-    }
+    // public static function getAdminMenu()
+    // {
+    //     return [
+    //         'ticket' => [
+    //             "position"   => 10,
+    //             'url'        => route('support.admin.ticket.index'),
+    //             'title'      => __("Tickets"),
+    //             'icon'       => 'ion-md-bookmarks',
+    //             'permission' => 'support_ticket_view',
+    //             'group'      => 'support',
+    //             'children'   => [
+    //                 'view' => [
+    //                     'url'        => route('support.admin.ticket.index'),
+    //                     'title'      => __("All Tickets"),
+    //                     'permission' => 'support_ticket_view',
+    //                 ],
+    //                 'cat'  => [
+    //                     'url'        => route('support.admin.ticket.category.index'),
+    //                     'title'      => __("Categories"),
+    //                     'permission' => 'support_ticket_manage',
+    //                 ],
+    //             ]
+    //         ],
+    //         'topic'  => [
+    //             "position"   => 10,
+    //             'url'        => route('support.admin.topic.index'),
+    //             'title'      => __("Topics"),
+    //             'icon'       => 'ion-md-bookmarks',
+    //             'permission' => 'support_topic_view',
+    //             'group'      => 'support',
+    //             'children'   => [
+    //                 'view'   => [
+    //                     'url'        => route('support.admin.topic.index'),
+    //                     'title'      => __("All Topics"),
+    //                     'permission' => 'support_topic_view',
+    //                 ],
+    //                 'create' => [
+    //                     'url'        => route('support.admin.topic.create'),
+    //                     'title'      => __("Add Topic"),
+    //                     'permission' => 'support_topic_create',
+    //                 ],
+    //                 'cat'    => [
+    //                     'url'        => route('support.admin.topic.category.index'),
+    //                     'title'      => __("Categories"),
+    //                     'permission' => 'support_topic_create',
+    //                 ],
+    //                 'tag'    => [
+    //                     'url'        => route('support.admin.topic.tag.index'),
+    //                     'title'      => __("Tags"),
+    //                     'permission' => 'support_topic_create',
+    //                 ],
+    //             ]
+    //         ],
+    //     ];
+    // }
 
-    public static function getUserMenu()
-    {
-        if (!isPro()) return [];
-        return [
-            'support' => [
-                'url'   => route('support.index'),
-                'title' => __("Support Center"),
-            ]
-        ];
-    }
+    // public static function getUserMenu()
+    // {
+    //     if (!isPro()) return [];
+    //     return [
+    //         'support' => [
+    //             'url'   => route('support.index'),
+    //             'title' => __("Support Center"),
+    //         ]
+    //     ];
+    // }
 }

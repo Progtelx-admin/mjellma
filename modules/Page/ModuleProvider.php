@@ -39,19 +39,19 @@ class ModuleProvider extends ModuleServiceProvider
         $this->app->register(RouterServiceProvider::class);
     }
 
-    public static function getAdminMenu()
-    {
-        return [
-            'page'=>[
-                "position"=>20,
-                'url'   => route('page.admin.index'),
-                'title' => __("Page"),
-                'icon'  => 'icon ion-ios-bookmarks',
-                'permission' => 'page_view',
-                'group'      => 'content'
-            ],
-        ];
-    }
+    // public static function getAdminMenu()
+    // {
+    //     return [
+    //         'page'=>[
+    //             "position"=>20,
+    //             'url'   => route('page.admin.index'),
+    //             'title' => __("Page"),
+    //             'icon'  => 'icon ion-ios-bookmarks',
+    //             'permission' => 'page_view',
+    //             'group'      => 'content'
+    //         ],
+    //     ];
+    // }
 
     public static function getAdminMenuGroups()
     {

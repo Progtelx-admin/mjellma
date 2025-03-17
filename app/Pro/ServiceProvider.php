@@ -5,12 +5,12 @@ namespace App\Pro;
 class ServiceProvider extends \Illuminate\Support\ServiceProvider
 {
 
-    public function boot()
-    {
-        $this->mergeConfigFrom(__DIR__ . '/Config/config.php', 'pro');
-        $this->loadRoutesFrom(__DIR__ . '/Routes/web.php');
-        $this->loadViewsFrom(__DIR__ . '/Views', 'Pro');
-    }
+    // public function boot()
+    // {
+    //     $this->mergeConfigFrom(__DIR__ . '/Config/config.php', 'pro');
+    //     $this->loadRoutesFrom(__DIR__ . '/Routes/web.php');
+    //     $this->loadViewsFrom(__DIR__ . '/Views', 'Pro');
+    // }
 
     public function register()
     {

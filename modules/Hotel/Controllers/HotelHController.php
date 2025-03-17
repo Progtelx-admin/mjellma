@@ -648,7 +648,6 @@ class HotelHController extends Controller
                 throw new \Exception($responseData['error'] ?? 'Unknown error occurred.');
             }
         } catch (\Exception $e) {
-            // Log and pass the error message as a flash notification
             Log::error('Booking finish failed', ['error' => $e->getMessage()]);
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }

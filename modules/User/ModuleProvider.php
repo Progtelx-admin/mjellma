@@ -67,11 +67,11 @@ class ModuleProvider extends ModuleServiceProvider
                     'permission' => 'role_view',
                     'icon'       => 'fa fa-lock',
                 ],
-                'subscriber'=>[
-                    'url'        => route('user.admin.subscriber.index'),
-                    'title'      => __('Subscribers'),
-                    'permission' => 'newsletter_manage',
-                ],
+                // 'subscriber'=>[
+                //     'url'        => route('user.admin.subscriber.index'),
+                //     'title'      => __('Subscribers'),
+                //     'permission' => 'newsletter_manage',
+                // ],
                 'userUpgradeRequest'=>[
                     'url'        => route('user.admin.upgrade'),
                     'title'      => __('Upgrade Request :count',['count'=>$noti_upgrade ? sprintf('<span class="badge badge-warning">%d</span>',$noti_upgrade) : '']),

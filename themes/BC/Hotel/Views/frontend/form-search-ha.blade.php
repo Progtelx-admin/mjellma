@@ -28,132 +28,151 @@
             <h1 class="text-white fw-bold mb-4 text-center" style="text-shadow: 2px 2px 5px rgba(0,0,0,0.7);">
                 Escape To Paradise, Unwind In Luxury
             </h1>
-
-            <!-- Form Section -->
             <div class="p-4 rounded shadow-sm bg-white">
                 <!-- Tabs for Flights, Hotels, Cars -->
-                <ul class="nav nav-tabs mb-3" id="searchTabs">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fa fa-plane"></i> Flights</a>
+                <ul class="nav nav-tabs mb-3" id="searchTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
+                            aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i> Flights</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="#"><i class="fa fa-hotel"></i> Hotels</a>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active" id="hotel-tab" data-bs-toggle="tab" href="#hotel" role="tab"
+                            aria-controls="hotel" aria-selected="true"><i class="fa fa-hotel"></i> Hotels</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#"><i class="fa fa-car"></i> Cars</a>
                     </li>
                 </ul>
 
-                <!-- Search Form -->
-                <form method="GET" action="{{ route('hotel.search') }}">
-                    @csrf
-
-                    <!-- Global Validation Error Messages -->
-                    @if ($errors->any())
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                @foreach ($errors->all() as $error)
-                                    <li>{{ $error }}</li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @endif
-
-                    <div class="row g-3">
-                        <!-- Hotel Name -->
-                        <div class="col-md-6 position-relative">
-                            <label for="hotel_name" class="form-label">Hotel Name:</label>
-                            <input type="text" id="hotel_name" name="hotel_name"
-                                class="form-control @error('hotel_name') is-invalid @enderror"
-                                placeholder="Enter hotel name" value="{{ old('hotel_name') }}">
-                            @error('hotel_name')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        <!-- Location -->
-                        <div class="col-md-6 position-relative">
-                            <label for="location" class="form-label">Location</label>
-                            <input type="text" id="location" name="location"
-                                class="form-control @error('location') is-invalid @enderror"
-                                placeholder="Where are you going?" autocomplete="off">
-                            @error('location')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-
-                            <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
-                                style="max-height: 200px; overflow-y: auto; z-index: 1000;"></ul>
-                        </div>
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Flights Tab Content -->
+                    <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
+                        <div id="thomalex-widget"
+                            data-widget="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=sq-AL"
+                            style="height:320px;"></div>
+                        <script src="https://MjellmaTravel.resvoyage.com/scripts/thomalex-integration.js"></script>
                     </div>
 
-                    <!-- Check-in, Check-out, Guests, Rooms -->
-                    <div class="row g-3 mt-3">
-                        <!-- Check-in Date -->
-                        <div class="col-6 col-md-3">
-                            <label for="checkin" class="form-label">Check-in Date</label>
-                            <input type="date" id="checkin" name="checkin"
-                                class="form-control @error('checkin') is-invalid @enderror" value="{{ old('checkin') }}"
-                                required>
-                            @error('checkin')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                    <!-- Hotels Tab Content -->
+                    <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
+                        aria-labelledby="hotel-tab">
+                        <!-- Search Form -->
+                        <form method="GET" action="{{ route('hotel.search') }}">
+                            @csrf
 
-                        <!-- Check-out Date -->
-                        <div class="col-6 col-md-3">
-                            <label for="checkout" class="form-label">Check-out Date</label>
-                            <input type="date" id="checkout" name="checkout"
-                                class="form-control @error('checkout') is-invalid @enderror" value="{{ old('checkout') }}"
-                                required>
-                            @error('checkout')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                            <!-- Global Validation Error Messages -->
+                            @if ($errors->any())
+                                <div class="alert alert-danger">
+                                    <ul class="mb-0">
+                                        @foreach ($errors->all() as $error)
+                                            <li>{{ $error }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
 
-                        <!-- Adults -->
-                        <div class="col-6 col-md-2">
-                            <label for="adults" class="form-label">Adults</label>
-                            <input type="number" id="adults" name="adults"
-                                class="form-control @error('adults') is-invalid @enderror" value="{{ old('adults', 1) }}"
-                                min="1" required>
-                            @error('adults')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                            <div class="row g-3">
+                                <!-- Hotel Name -->
+                                <div class="col-md-6 position-relative">
+                                    <label for="hotel_name" class="form-label">Hotel Name:</label>
+                                    <input type="text" id="hotel_name" name="hotel_name"
+                                        class="form-control @error('hotel_name') is-invalid @enderror"
+                                        placeholder="Enter hotel name" value="{{ old('hotel_name') }}">
+                                    @error('hotel_name')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
 
-                        <!-- Children -->
-                        <div class="col-6 col-md-2">
-                            <label for="children" class="form-label">Children</label>
-                            <input type="number" id="children" name="children[]"
-                                class="form-control @error('children.0') is-invalid @enderror"
-                                value="{{ old('children.0', 0) }}" min="0">
-                            @error('children.0')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                                <!-- Location -->
+                                <div class="col-md-6 position-relative">
+                                    <label for="location" class="form-label">Location</label>
+                                    <input type="text" id="location" name="location"
+                                        class="form-control @error('location') is-invalid @enderror"
+                                        placeholder="Where are you going?" autocomplete="off">
+                                    @error('location')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
 
-                        <!-- Rooms -->
-                        <div class="col-6 col-md-2">
-                            <label for="rooms" class="form-label">Rooms</label>
-                            <input type="number" id="rooms" name="rooms"
-                                class="form-control @error('rooms') is-invalid @enderror" value="{{ old('rooms', 1) }}"
-                                min="1" required>
-                            @error('rooms')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                                    <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
+                                        style="max-height: 200px; overflow-y: auto; z-index: 1000;"></ul>
+                                </div>
+                            </div>
+
+                            <!-- Check-in, Check-out, Guests, Rooms -->
+                            <div class="row g-3 mt-3">
+                                <!-- Check-in Date -->
+                                <div class="col-6 col-md-3">
+                                    <label for="checkin" class="form-label">Check-in Date</label>
+                                    <input type="date" id="checkin" name="checkin"
+                                        class="form-control @error('checkin') is-invalid @enderror"
+                                        value="{{ old('checkin') }}" required>
+                                    @error('checkin')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <!-- Check-out Date -->
+                                <div class="col-6 col-md-3">
+                                    <label for="checkout" class="form-label">Check-out Date</label>
+                                    <input type="date" id="checkout" name="checkout"
+                                        class="form-control @error('checkout') is-invalid @enderror"
+                                        value="{{ old('checkout') }}" required>
+                                    @error('checkout')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <!-- Adults -->
+                                <div class="col-6 col-md-2">
+                                    <label for="adults" class="form-label">Adults</label>
+                                    <input type="number" id="adults" name="adults"
+                                        class="form-control @error('adults') is-invalid @enderror"
+                                        value="{{ old('adults', 1) }}" min="1" required>
+                                    @error('adults')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <!-- Children -->
+                                <div class="col-6 col-md-2">
+                                    <label for="children" class="form-label">Children</label>
+                                    <input type="number" id="children" name="children[]"
+                                        class="form-control @error('children.0') is-invalid @enderror"
+                                        value="{{ old('children.0', 0) }}" min="0">
+                                    @error('children.0')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <!-- Rooms -->
+                                <div class="col-6 col-md-2">
+                                    <label for="rooms" class="form-label">Rooms</label>
+                                    <input type="number" id="rooms" name="rooms"
+                                        class="form-control @error('rooms') is-invalid @enderror"
+                                        value="{{ old('rooms', 1) }}" min="1" required>
+                                    @error('rooms')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="text-center mt-4">
+                                <button type="submit" class="btn btn-primary w-100">Search</button>
+                            </div>
+
+                            <!-- Hidden Latitude and Longitude -->
+                            <input type="hidden" id="latitude" name="latitude">
+                            <input type="hidden" id="longitude" name="longitude">
+                        </form>
                     </div>
 
-                    <!-- Submit Button -->
-                    <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                    <!-- Cars Tab Content -->
+                    <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
+                        <p>#</p>
                     </div>
-
-                    <!-- Hidden Latitude and Longitude -->
-                    <input type="hidden" id="latitude" name="latitude">
-                    <input type="hidden" id="longitude" name="longitude">
-                </form>
-
+                </div>
             </div>
         </div>
     </div>
@@ -223,7 +242,6 @@
         });
     </script>
 
-    <!-- Styling for Carousel and Form -->
     <style>
         /* Carousel items as background */
         .carousel-item {
