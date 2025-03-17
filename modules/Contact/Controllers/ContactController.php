@@ -65,7 +65,7 @@ class ContactController extends Controller
             $this->sendEmail($row);
             $data = [
                 'status'    => 1,
-                'message'    => __('Thank you for contacting us! We will get back to you soon'),
+                'message'    => __('Thank you for contacting us! We will get back to you soon.'),
             ];
             return response()->json($data, 200);
         }
