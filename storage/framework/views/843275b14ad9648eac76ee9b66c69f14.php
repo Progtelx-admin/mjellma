@@ -1,1 +1,0 @@
-<?php echo $__env->make("Layout::user", \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?><?php /**PATH /home/u983725807/domains/rezervo24.com/resources/views/layouts/user.blade.php ENDPATH**/ ?>
