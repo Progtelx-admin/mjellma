@@ -15,7 +15,7 @@ class MenuWalker
     {
         $items = json_decode($this->menu->items, true);
         if (!empty($items)) {
-            echo '<ul class="main-menu menu-generated">';
+            echo '<ul class="main-menu menu-generated" style="color: #1a2b48;">';
             $this->generateTree($items);
             echo '</ul>';
         }
@@ -60,7 +60,7 @@ class MenuWalker
             if (!empty($item['children'])) {
                 $item['name'] .= ' <i class="caret fa fa-angle-down"></i>';
             }
-            printf('<a  target="%s" href="%s" >%s</a>', e($item['target']), e($url), clean($item['name']));
+            printf('<a style="color:#1a2b48;"  target="%s" href="%s" >%s</a>', e($item['target']), e($url), clean($item['name']));
 
 
             if (!empty($item['children'])) {

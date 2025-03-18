@@ -15,7 +15,7 @@
 		{
 			$items = json_decode($this->menu->items, true);
 			if (!empty($items)) {
-				echo '<ul class="main-menu menu-generated">';
+				echo '<ul class="main-menu menu-generated" style="color: #1a2b48;">';
 				$this->generateTree($items);
 				echo '</ul>';
 			}

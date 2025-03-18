@@ -383,4 +383,6 @@ $style_typo = json_decode(setting_item_with_lang('style_typo',false,"{}"),true);
 
     <?php echo (setting_item('style_custom_css')); ?>
 
-    <?php echo (setting_item_with_lang_raw('style_custom_css')); ?><?php /**PATH C:\laragon\www\mjellma\modules/Layout/parts/custom-css.blade.php ENDPATH**/ ?>
+    <?php echo (setting_item_with_lang_raw('style_custom_css')); ?>
+
+<?php /**PATH C:\laragon\www\mjellma\modules/Layout/parts/custom-css.blade.php ENDPATH**/ ?>
