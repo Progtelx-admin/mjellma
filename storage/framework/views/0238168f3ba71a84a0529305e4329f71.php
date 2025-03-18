@@ -1,2 +1,0 @@
-<?php echo $__env->make('Review::frontend.form', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?>
-<?php /**PATH /home/u983725807/domains/rezervo24.com/themes/BC/Space/Views/frontend/layouts/details/space-review.blade.php ENDPATH**/ ?>
