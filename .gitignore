@@ -31,3 +31,7 @@ storage/installed
 public/themes/*/dist
 storage/framework/cache/data
 
+/storage/debugbar
+/storage/framework/sessions
+/storage/framework/views
+/storage/logs

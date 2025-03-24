@@ -236,6 +236,7 @@ class HotelHController extends Controller
         }
     }
 
+
     public function hotelInfo($id, Request $request)
     {
         Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
@@ -253,13 +254,16 @@ class HotelHController extends Controller
             // Fetch hotel data from the database
             $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
 
+            if (!$dbHotel) {
+                Log::error('Hotel not found in database', ['hotel_id' => $id]);
+                return redirect()->back()->withErrors(['error' => 'Hotel not found']);
+            }
+
             // Fetch hotel images from the database
             $hotelImages = DB::table('hotel_images')
                 ->where('hotel_id', $id)
                 ->pluck('image_url')
                 ->toArray();
-
-            $hotel->image_url = $apiHotel['images'][0]['url'] ?? $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
 
             // Prepare API payload
             $apiBody = [
@@ -290,15 +294,24 @@ class HotelHController extends Controller
             ]);
 
             if ($response->failed()) {
+                Log::error('Hotel API Request Failed', [
+                    'status' => $response->status(),
+                    'response_body' => $response->body(),
+                ]);
                 throw new \Exception('Failed to fetch hotel info');
             }
 
             // Parse the response data
-            $apiData = $response->json()['data']['hotels'][0] ?? [];
+            $apiData = $response->json()['data']['hotels'][0] ?? null;
+
+            if (!$apiData) {
+                Log::error('Hotel details not found in API response', ['hotel_id' => $id]);
+                return redirect()->back()->withErrors(['error' => 'Failed to fetch hotel details from API']);
+            }
 
             // Merge database and API data
             $hotel = [
-                'id' => $apiData['id'] ?? $dbHotel->id ?? null,
+                'id' => $apiData['id'] ?? $dbHotel->hotel_id ?? null,
                 'name' => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
                 'address' => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
                 'star_rating' => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
@@ -314,6 +327,7 @@ class HotelHController extends Controller
 
             // Return the view with the extracted data
             return view('Hotel::frontend.info-ha', compact('hotel', 'roomRates', 'hasRoomRates', 'checkin', 'checkout', 'residency', 'language', 'adults', 'children', 'currency'));
+
         } catch (\Exception $e) {
             // Log and return an error response
             Log::error('Error fetching hotel details', [
@@ -323,6 +337,7 @@ class HotelHController extends Controller
             return redirect()->back()->withErrors(['error' => 'An error occurred while fetching hotel details.']);
         }
     }
+
 
 
     public function getHotelSuggestions(Request $request)
