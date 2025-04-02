@@ -1,6 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $user = Auth::user();
+    @endphp
+
     <div class="container mt-5 mb-5">
         <h1 class="fw-bold text-center">Complete Your Booking</h1>
         <hr class="w-50 mx-auto mb-4">
@@ -20,17 +24,45 @@
                 {{ session('success') }}
             </div>
         @endif
+        <p>Book Hash: {{ $book_hash }}</p>
 
         <form action="{{ route('hotel.booking.finish') }}" method="POST" id="bookingForm" class="card shadow-sm p-4">
             @csrf
             <input type="hidden" id="partner_order_id" name="partner_order_id"
                 value="{{ $bookingData['partner_order_id'] ?? '' }}">
-            <input type="hidden" id="user_email" name="user[email]" value="default@example.com">
-            <input type="hidden" id="user_phone" name="user[phone]" value="+123456789">
-            <input type="hidden" id="supplier_first_name" name="supplier_data[first_name_original]" value="SupplierFirst">
-            <input type="hidden" id="supplier_last_name" name="supplier_data[last_name_original]" value="SupplierLast">
-            <input type="hidden" id="supplier_phone" name="supplier_data[phone]" value="+987654321">
-            <input type="hidden" id="supplier_email" name="supplier_data[email]" value="supplier@example.com">
+            @if ($user)
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input type="name" class="form-control" name="user[name]" value="{{ $user->name }}" readonly>
+                </div>
+            @endif
+            @if ($user)
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" name="user[email]" value="{{ $user->email }}" readonly>
+                </div>
+            @else
+                <input type="hidden" id="user_email" name="user[email]" value="default@example.com">
+            @endif
+            @if ($user)
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <input type="text" class="form-control" name="user[phone]" value="{{ $user->phone }}" readonly>
+                </div>
+            @else
+                <input type="hidden" id="user_phone" name="user[phone]" value="+123456789">
+            @endif
+
+            <!-- Supplier Data -->
+            <input type="hidden" id="supplier_first_name" name="supplier_data[first_name_original]"
+                value="{{ $user ? $user->first_name : 'SupplierFirst' }}">
+            <input type="hidden" id="supplier_last_name" name="supplier_data[last_name_original]"
+                value="{{ $user ? $user->last_name : 'SupplierLast' }}">
+            <input type="hidden" id="supplier_phone" name="supplier_data[phone]"
+                value="{{ $user ? $user->phone : '+987654321' }}">
+            <input type="hidden" id="supplier_email" name="supplier_data[email]"
+                value="{{ $user ? $user->email : 'supplier@example.com' }}">
+
             <input type="hidden" id="return_path" name="return_path" value="">
 
             <h3 class="fw-bold">Guests</h3>
@@ -117,26 +149,6 @@
                     </div>`;
                 guestsContainer.appendChild(guestDiv);
             });
-        });
-    </script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const paymentTypeSelect = document.getElementById('payment_type');
-            const returnPathField = document.getElementById('return_path');
-
-            function updateReturnPath() {
-                const selectedOption = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
-                if (selectedOption.value === "now") {
-                    returnPathField.value = "{{ route('hotel.booking.confirmation') }}";
-                } else {
-                    returnPathField.value = "";
-                }
-            }
-
-            // Update return_path on load and when changing selection
-            updateReturnPath();
-            paymentTypeSelect.addEventListener('change', updateReturnPath);
         });
     </script>
 

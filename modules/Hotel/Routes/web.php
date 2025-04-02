@@ -13,7 +13,7 @@ Route::get('/hotel-suggestions', 'HotelHController@getHotelSuggestions')->name('
 Route::post('/hotel/prebook', 'HotelHController@prebookRoom')->name('hotel.prebook');
 Route::get('/hotel/prebook/result', 'HotelHController@prebookResult')->name('hotel.prebook.result');
 Route::post('/hotel/book', 'HotelHController@bookRoom')->name('hotel.book');
-Route::get('/hotel/booking/confirmation', 'HotelHController@bookingConfirmation')->name('hotel.booking.confirmation');
+Route::get('/hotel/booking/confirmation/{book_hash}', 'HotelHController@bookingConfirmation')->name('hotel.booking.confirmation');
 Route::post('/hotel/payment', 'HotelHController@processPayment')->name('hotel.payment');
 Route::post('/hotel/booking/finish', 'HotelHController@finishBooking')->name('hotel.booking.finish');
 Route::get('/hotel/payment/success', function () {

@@ -48,15 +48,11 @@
                 <div class="tab-content">
                     <!-- Flights Tab Content -->
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
-                        <div style="width: 100%; height: 400px; overflow: hidden; position: relative;">
-                            <iframe src="https://mjellmatravel.resvoyage.com/airtravel.htm?lang=sq-AL"
-                                style="width: 100%; height: 400px; border: none; overflow-y: hidden;"></iframe>
-                        </div>
-
-                        <script src="https://MjellmaTravel.resvoyage.com/scripts/thomalex-integration.js"></script>
+                        <div id="thomalex-widget"
+                            data-widget="https://mjellmatravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang="
+                            style="height:400px;"></div>
+                        <script src="https://mjellmatravel.resvoyage.com/scripts/thomalex-integration.js"></script>
                     </div>
-
-
 
                     <!-- Hotels Tab Content -->
                     <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
