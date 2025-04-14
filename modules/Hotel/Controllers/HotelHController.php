@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class HotelHController extends Controller
 {
@@ -462,22 +463,34 @@ class HotelHController extends Controller
         ));
     }
 
-
     public function bookRoom(Request $request)
     {
         try {
-            // Validate the request
             $request->validate([
                 'book_hash' => 'required|string',
                 'partner_order_id' => 'required|string',
                 'user_ip' => 'required|ip',
+                'hotel_id' => 'required|string',
+                'checkin' => 'required|date',
+                'checkout' => 'required|date',
+                'meal_plan' => 'nullable|string',
             ]);
 
             $bookHash = $request->input('book_hash');
             $partnerOrderId = $request->input('partner_order_id');
             $userIp = $request->input('user_ip');
 
-            // Prepare the API payload
+            // Save booking data in session
+            session([
+                'booking.partner_order_id' => $partnerOrderId,
+                'booking.book_hash' => $bookHash,
+                'booking.user_ip' => $userIp,
+                'booking.hotel_id' => $request->input('hotel_id'),
+                'booking.checkin' => $request->input('checkin'),
+                'booking.checkout' => $request->input('checkout'),
+                'booking.meal_plan' => $request->input('meal_plan'),
+            ]);
+
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
                 'book_hash' => $bookHash,
@@ -485,14 +498,13 @@ class HotelHController extends Controller
                 'user_ip' => $userIp,
             ];
 
-            Log::info('Requesting booking with API payload', ['payload' => $apiBody]);
+            Log::info('📤 Sending booking form request to API', ['payload' => $apiBody]);
 
-            // Call the Booking API
             $response = Http::withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->apiUrl . 'hotel/order/booking/form/', $apiBody);
 
-            Log::info('Booking API Response', [
+            Log::info('📥 Booking API Response', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -503,25 +515,29 @@ class HotelHController extends Controller
 
             $bookingData = $response->json();
 
-            // Check if booking was successful and has relevant data
             if (isset($bookingData['status']) && $bookingData['status'] === 'ok') {
-                // Store the bookingData in session
-                session(['bookingData' => $bookingData['data']]);
+                $data = $bookingData['data'];
+                session(['bookingData' => $data]);
 
-                // Redirect to booking confirmation, passing book_hash as a route param
+                // 🔥 Store with order_id in cache for PCB
+                $token = Str::random(32);
+                Cache::put("pending_booking_{$token}", array_merge($request->all(), [
+                    'order_id' => $data['order_id'],
+                ]), now()->addMinutes(10));
+
                 return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
             } else {
                 throw new \Exception('Booking failed: ' . ($bookingData['error'] ?? 'Unknown error'));
             }
+
         } catch (\Exception $e) {
-            Log::error('Booking failed', [
+            Log::error('❌ Booking failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
             return redirect()->back()->withErrors(['error' => 'Booking failed: ' . $e->getMessage()]);
         }
     }
-
 
     public function bookingConfirmation($book_hash)
     {
@@ -630,63 +646,299 @@ class HotelHController extends Controller
         }
     }
 
+    // public function finishBooking(Request $request)
+    // {
+    //     try {
+    //         // Validate the request
+    //         $request->validate([
+    //             'partner_order_id' => 'required|string',
+    //             'user.email' => 'required|email',
+    //             'user.phone' => 'required|string',
+    //             'supplier_data.first_name_original' => 'required|string',
+    //             'supplier_data.last_name_original' => 'required|string',
+    //             'supplier_data.phone' => 'required|string',
+    //             'supplier_data.email' => 'required|email',
+    //             'rooms' => 'required|array',
+    //             'rooms.*.guests' => 'required|array',
+    //             'rooms.*.guests.*.first_name' => 'required|string',
+    //             'rooms.*.guests.*.last_name' => 'required|string',
+    //             'payment_type.type' => 'required|string',
+    //             'payment_type.amount' => 'required|string',
+    //             'payment_type.currency_code' => 'required|string',
+    //         ]);
+
+    //         // Extract data from the request
+    //         $data = $request->all();
+
+    //         // Prepare the API payload
+    //         $apiPayload = [
+    //             'user' => $data['user'],
+    //             'supplier_data' => $data['supplier_data'],
+    //             'partner' => [
+    //                 'partner_order_id' => $data['partner_order_id'],
+    //             ],
+    //             'language' => 'en',
+    //             'rooms' => $data['rooms'],
+    //             'payment_type' => $data['payment_type'],
+    //         ];
+
+    //         // Add return_path if payment_type is 'now'
+    //         if (isset($data['payment_type']['type']) && $data['payment_type']['type'] === 'now') {
+    //             $apiPayload['return_path'] = route('hotel.payment.success');
+    //         }
+
+
+    //         // Call the API
+    //         $response = Http::withBasicAuth($this->username, $this->password)
+    //             ->withHeaders(['Content-Type' => 'application/json'])
+    //             ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiPayload);
+
+    //         if ($response->failed()) {
+    //             throw new \Exception('API request failed: ' . $response->body());
+    //         }
+
+    //         $responseData = $response->json();
+
+    //         // Handle the response
+    //         if ($responseData['status'] === 'ok') {
+    //             return redirect()->route('hotel.payment.success')->with('success', 'Booking completed successfully!');
+    //         } else {
+    //             throw new \Exception($responseData['error'] ?? 'Unknown error occurred.');
+    //         }
+    //     } catch (\Exception $e) {
+    //         Log::error('Booking finish failed', ['error' => $e->getMessage()]);
+    //         return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+    //     }
+    // }
+
+    public function handlePcbReturn(Request $request)
+    {
+        $orderId = $request->query('ID');
+        $status = $request->query('STATUS');
+        $token = $request->query('token');
+
+        Log::info('📨 PCB Bank returned with', [
+            'ID' => $orderId,
+            'STATUS' => $status,
+            'token' => $token,
+        ]);
+
+        $bookingData = Cache::get("pending_booking_{$token}");
+        $pcbOrder = Cache::get("pcb_order_{$token}");
+
+        if (!$bookingData || !$pcbOrder) {
+            Log::error('❌ No booking data found in cache');
+            return redirect()->route('hotel.search')->withErrors(['error' => 'Session expired. Please try again.']);
+        }
+
+        // ✅ Inject UUIDs and order_id from PCB and bookingData
+        $bookingData['init_uuid'] = $pcbOrder['id'];
+        $bookingData['pay_uuid'] = $pcbOrder['password'];
+
+        // ✅ Make sure to include `order_id`
+        if (!isset($bookingData['order_id'])) {
+            // Fallback: Try to retrieve from session or from earlier cached data
+            $sessionBookingData = session('bookingData');
+            if ($sessionBookingData && isset($sessionBookingData['order_id'])) {
+                $bookingData['order_id'] = $sessionBookingData['order_id'];
+                Log::info("ℹ️ Injected order_id from session: {$bookingData['order_id']}");
+            } else {
+                Log::error('❌ Missing order_id — cannot complete booking');
+                return response()->json(['error' => 'Missing order_id'], 422);
+            }
+        }
+
+        Log::info('🔄 Confirming booking after PCB', ['payload' => $bookingData]);
+
+        return app()->call([$this, 'finishBooking'], ['request' => new Request($bookingData)]);
+    }
+
+
+    public function handleBookingSubmission(Request $request)
+    {
+        $paymentType = $request->input('payment_type.type');
+        $requiresCard = $request->input('payment_type.is_need_credit_card_data', false);
+
+        Log::info('📥 Booking Submission', [
+            'payment_type' => $paymentType,
+            'requires_card' => $requiresCard,
+        ]);
+
+        if ($paymentType === 'now' && $requiresCard) {
+            // ✅ Generate token to store booking
+            $token = Str::random(32);
+            Cache::put("pending_booking_{$token}", $request->all(), now()->addMinutes(10));
+
+            $amount = $request->input('payment_type.amount');
+            $description = 'Hotel Booking Pre-Payment';
+            $redirectUrl = route('pcb.booking.return', ['token' => $token]);
+
+            $pcb = new \App\Services\PcbBankService();
+            $order = $pcb->createOrder($amount, $description, $redirectUrl);
+
+            if ($order && isset($order['id'], $order['password'], $order['hppUrl'])) {
+                Cache::put("pcb_order_{$token}", [
+                    'id' => $order['id'],
+                    'password' => $order['password'],
+                ], now()->addMinutes(10));
+
+                Log::info('🔁 Redirecting to PCB Bank', ['url' => $order['hppUrl']]);
+                return redirect($order['hppUrl'] . "?id={$order['id']}&password={$order['password']}");
+            }
+
+            Log::error('❌ PCB createOrder failed');
+            return back()->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
+        }
+
+        Log::info('✅ No credit card required — calling finishBooking directly');
+        return app()->call([$this, 'finishBooking'], ['request' => $request]);
+    }
+
+    public function confirmAfterPcb(Request $request)
+    {
+        $partnerOrderId = $request->input('ID');
+        $status = $request->input('STATUS');
+
+        Log::info('📨 PCB Bank returned with', ['ID' => $partnerOrderId, 'STATUS' => $status]);
+
+        $bookingData = Cache::get('booking_' . $partnerOrderId);
+        $pcbData = Cache::get('pcb_order_' . $partnerOrderId);
+
+        if (!$bookingData || !$pcbData) {
+            Log::error('❌ No booking data found in cache');
+            return redirect()->route('hotel.search')->withErrors(['error' => 'Booking session expired or not found.']);
+        }
+
+        if (!in_array(strtolower($status), ['success', 'fullypaid', 'paid'])) {
+            Log::error('❌ PCB Bank payment was not successful');
+            return redirect()->route('hotel.search')->withErrors(['error' => 'Payment was not successful.']);
+        }
+
+        // Inject UUIDs into bookingData
+        $bookingData['init_uuid'] = $pcbData['id'];
+        $bookingData['pay_uuid'] = $pcbData['password'];
+
+        Log::info('🔄 Confirming booking after PCB', ['payload' => $bookingData]);
+
+        // Build a request manually
+        $newRequest = new \Illuminate\Http\Request($bookingData);
+
+        return app()->call([$this, 'finishBooking'], ['request' => $newRequest]);
+    }
+
+
+    public function sendBookingForm($partnerOrderId, $bookHash, $userIp)
+    {
+        $payload = [
+            'partner_order_id' => $partnerOrderId,
+            'book_hash' => $bookHash,
+            'language' => 'en',
+            'user_ip' => $userIp,
+        ];
+
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/booking/form/', $payload);
+
+        if ($response->successful()) {
+            $data = $response->json()['data'];
+            return $data; // contains order_id, item_id, payment_types, etc.
+        }
+
+        Log::error('❌ Booking form failed', ['response' => $response->body()]);
+        return null;
+    }
+
+    public function getCardTokenFromPcb($orderId, $initUuid, $payUuid)
+    {
+        $payload = [
+            'order_id' => (int) $orderId,
+            'init_uuid' => $initUuid,
+            'pay_uuid' => $payUuid,
+        ];
+
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/booking/credit-card/', $payload);
+
+        if ($response->successful() && isset($response->json()['data']['token'])) {
+            return $response->json()['data']['token'];
+        }
+
+        Log::error('❌ Failed to get credit card token from RateHawk', ['response' => $response->body()]);
+        return null;
+    }
+
     public function finishBooking(Request $request)
     {
-        try {
-            // Validate the request
-            $request->validate([
-                'partner_order_id' => 'required|string',
-                'user.email' => 'required|email',
-                'user.phone' => 'required|string',
-                'supplier_data.first_name_original' => 'required|string',
-                'supplier_data.last_name_original' => 'required|string',
-                'supplier_data.phone' => 'required|string',
-                'supplier_data.email' => 'required|email',
-                'rooms' => 'required|array',
-                'rooms.*.guests' => 'required|array',
-                'rooms.*.guests.*.first_name' => 'required|string',
-                'rooms.*.guests.*.last_name' => 'required|string',
-                'payment_type.type' => 'required|string',
-                'payment_type.amount' => 'required|string',
-                'payment_type.currency_code' => 'required|string',
-            ]);
+        $data = $request->all();
 
-            // Extract data from the request
-            $data = $request->all();
+        $payload = [
+            'user' => [
+                'email' => $data['user']['email'],
+                'phone' => $data['user']['phone'],
+            ],
+            'supplier_data' => [
+                'first_name_original' => $data['supplier_data']['first_name_original'],
+                'last_name_original'  => $data['supplier_data']['last_name_original'],
+                'phone'               => $data['supplier_data']['phone'],
+                'email'               => $data['supplier_data']['email'],
+            ],
+            'partner' => [
+                'partner_order_id' => $data['partner_order_id'],
+            ],
+            'language' => 'en',
+            'rooms' => $data['rooms'],
+            'payment_type' => [
+                'type'                  => $data['payment_type']['type'],
+                'amount'                => $data['payment_type']['amount'],
+                'currency_code'         => $data['payment_type']['currency_code'],
+                // You can try sending this in the original format or as a boolean
+                'is_need_credit_card_data' => $data['payment_type']['is_need_credit_card_data'],
+            ],
+            'return_path' => $data['return_path'],
+        ];
 
-            // Prepare the API payload
-            $apiPayload = [
-                'user' => $data['user'],
-                'supplier_data' => $data['supplier_data'],
-                'partner' => [
-                    'partner_order_id' => $data['partner_order_id'],
-                ],
-                'language' => 'en',
-                'rooms' => $data['rooms'],
-                'payment_type' => $data['payment_type'],
+        Log::debug('Final payload before credit card data check', ['payload' => $payload]);
+
+        // Add credit card data if required
+        if (!empty($data['payment_type']['is_need_credit_card_data'])) {
+            if (empty($data['init_uuid']) || empty($data['pay_uuid'])) {
+                Log::error('Credit card data missing: init_uuid or pay_uuid not found', [
+                    'init_uuid' => $data['init_uuid'] ?? 'not set',
+                    'pay_uuid'  => $data['pay_uuid'] ?? 'not set'
+                ]);
+            }
+            $payload['credit_card_data'] = [
+                'init_uuid' => (string)$data['init_uuid'], // Cast to string just in case
+                'pay_uuid'  => $data['pay_uuid'],
             ];
-
-            // Call the API
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiPayload);
-
-            if ($response->failed()) {
-                throw new \Exception('API request failed: ' . $response->body());
-            }
-
-            $responseData = $response->json();
-
-            // Handle the response
-            if ($responseData['status'] === 'ok') {
-                return redirect()->route('hotel.payment.success')->with('success', 'Booking completed successfully!');
-            } else {
-                throw new \Exception($responseData['error'] ?? 'Unknown error occurred.');
-            }
-        } catch (\Exception $e) {
-            Log::error('Booking finish failed', ['error' => $e->getMessage()]);
-            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        } else {
+            Log::debug('Payment type does not require credit card data');
         }
+
+        Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
+
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+
+        Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
+
+        $json = $response->json();
+
+        if ($response->successful() && $json['status'] === 'ok') {
+            Log::info('✅ Booking success', ['response' => $json]);
+            return response()->json(['success' => true, 'result' => $json]);
+        }
+
+        Log::error('❌ Booking failed', [
+            'payload_sent' => $payload,
+            'response_body' => $response->body()
+        ]);
+
+        return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
     }
+
 
 }

@@ -58,6 +58,15 @@
                                 <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
                                 <input type="hidden" name="partner_order_id" value="order_{{ uniqid() }}">
                                 <input type="hidden" name="user_ip" value="{{ request()->ip() }}">
+
+                                <!-- Add hidden fields needed for finishBooking -->
+                                <input type="hidden" name="hotel_id" value="{{ $hotel['id'] }}">
+                                <input type="hidden" name="rate_key" value="{{ $rate['rate_key'] ?? '' }}">
+                                <input type="hidden" name="checkin" value="{{ $checkin }}">
+                                <input type="hidden" name="checkout" value="{{ $checkout }}">
+                                <input type="hidden" name="room_code" value="{{ $rate['room_code'] ?? '' }}">
+                                <input type="hidden" name="meal_plan" value="{{ $rate['meal'] ?? 'N/A' }}">
+
                                 <button type="submit" class="btn btn-primary w-100 py-2 mt-3">Confirm Booking</button>
                             </form>
                         @else

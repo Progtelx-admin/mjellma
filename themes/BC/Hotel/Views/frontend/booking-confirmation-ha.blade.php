@@ -3,6 +3,13 @@
 @section('content')
     @php
         $user = Auth::user();
+        // You can pass additional dynamic booking data from your controller
+        // For example: partner_order_id, order_id, language, book_hash, item_id, etc.
+        $partnerOrderId = $bookingData['partner_order_id'] ?? session('partner_order_id', Str::uuid());
+        $orderId = $bookingData['order_id'] ?? session('order_id', rand(100000000, 999999999));
+        $language = $bookingData['language'] ?? 'en';
+        $bookHash = $bookingData['book_hash'] ?? ($selectedRate['book_hash'] ?? '');
+        $itemId = $bookingData['item_id'] ?? '';
     @endphp
 
     <div class="container mt-5 mb-5">
@@ -11,7 +18,7 @@
 
         @if ($errors->any())
             <div class="alert alert-danger">
-                <ul>
+                <ul class="mb-0">
                     @foreach ($errors->all() as $error)
                         <li>{{ $error }}</li>
                     @endforeach
@@ -24,132 +31,139 @@
                 {{ session('success') }}
             </div>
         @endif
-        <p>Book Hash: {{ $book_hash }}</p>
 
-        <form action="{{ route('hotel.booking.finish') }}" method="POST" id="bookingForm" class="card shadow-sm p-4">
+        <form action="{{ route('hotel.booking.handle') }}" method="POST" id="bookingForm" class="card shadow-sm p-4">
             @csrf
-            <input type="hidden" id="partner_order_id" name="partner_order_id"
-                value="{{ $bookingData['partner_order_id'] ?? '' }}">
+
+            <!-- Dynamic Hidden Inputs -->
+            <input type="hidden" name="partner_order_id" value="{{ $partnerOrderId }}">
+            <input type="hidden" name="order_id" value="{{ $orderId }}">
+            <input type="hidden" name="return_path" value="{{ route('hotel.payment.success') }}">
+            <input type="hidden" name="language" value="{{ $language }}">
+            <input type="hidden" name="book_hash" value="{{ $bookHash }}">
+            <input type="hidden" name="item_id" value="{{ $itemId }}">
+
+            {{-- User Info --}}
             @if ($user)
                 <div class="mb-3">
                     <label class="form-label">Name</label>
-                    <input type="name" class="form-control" name="user[name]" value="{{ $user->name }}" readonly>
+                    <input type="text" class="form-control" name="user[name]" value="{{ $user->name }}" readonly>
                 </div>
-            @endif
-            @if ($user)
                 <div class="mb-3">
                     <label class="form-label">Email</label>
                     <input type="email" class="form-control" name="user[email]" value="{{ $user->email }}" readonly>
                 </div>
-            @else
-                <input type="hidden" id="user_email" name="user[email]" value="default@example.com">
-            @endif
-            @if ($user)
                 <div class="mb-3">
                     <label class="form-label">Phone</label>
                     <input type="text" class="form-control" name="user[phone]" value="{{ $user->phone }}" readonly>
                 </div>
             @else
-                <input type="hidden" id="user_phone" name="user[phone]" value="+123456789">
+                <input type="hidden" name="user[email]" value="guest@example.com">
+                <input type="hidden" name="user[phone]" value="+1000000000">
             @endif
 
-            <!-- Supplier Data -->
-            <input type="hidden" id="supplier_first_name" name="supplier_data[first_name_original]"
-                value="{{ $user ? $user->first_name : 'SupplierFirst' }}">
-            <input type="hidden" id="supplier_last_name" name="supplier_data[last_name_original]"
-                value="{{ $user ? $user->last_name : 'SupplierLast' }}">
-            <input type="hidden" id="supplier_phone" name="supplier_data[phone]"
-                value="{{ $user ? $user->phone : '+987654321' }}">
-            <input type="hidden" id="supplier_email" name="supplier_data[email]"
-                value="{{ $user ? $user->email : 'supplier@example.com' }}">
+            {{-- Supplier Info (use user details if available, otherwise fallback values) --}}
+            <input type="hidden" name="supplier_data[first_name_original]"
+                value="{{ $user->first_name ?? 'SupplierFirst' }}">
+            <input type="hidden" name="supplier_data[last_name_original]"
+                value="{{ $user->last_name ?? 'SupplierLast' }}">
+            <input type="hidden" name="supplier_data[phone]" value="{{ $user->phone ?? '+999999999' }}">
+            <input type="hidden" name="supplier_data[email]" value="{{ $user->email ?? 'supplier@example.com' }}">
 
-            <input type="hidden" id="return_path" name="return_path" value="">
-
+            {{-- Guests Section --}}
             <h3 class="fw-bold">Guests</h3>
             <div id="guests-container">
                 <div class="guest mb-4">
                     <div class="row">
                         <div class="col-md-6">
-                            <label for="guest_first_name_1" class="form-label">Guest First Name</label>
-                            <input type="text" class="form-control" id="guest_first_name_1"
-                                name="rooms[0][guests][0][first_name]" required>
+                            <label class="form-label">First Name</label>
+                            <input type="text" class="form-control" name="rooms[0][guests][0][first_name]" required>
                         </div>
                         <div class="col-md-6">
-                            <label for="guest_last_name_1" class="form-label">Guest Last Name</label>
-                            <input type="text" class="form-control" id="guest_last_name_1"
-                                name="rooms[0][guests][0][last_name]" required>
+                            <label class="form-label">Last Name</label>
+                            <input type="text" class="form-control" name="rooms[0][guests][0][last_name]" required>
                         </div>
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-secondary mb-3" id="addGuest">Add Another Guest</button>
+            <button type="button" class="btn btn-outline-secondary mb-3" id="addGuest">Add Another Guest</button>
 
-            <h3 class="fw-bold">Payment Type</h3>
+            {{-- Payment Type Section --}}
+            <h3 class="fw-bold">Payment</h3>
             <div class="mb-3">
-                <label for="payment_type" class="form-label">Payment Type</label>
-                <select class="form-select" id="payment_type" name="payment_type[type]" required>
+                <label class="form-label">Payment Type</label>
+                <select class="form-select" id="payment_type" required>
                     @foreach ($bookingData['payment_types'] as $payment)
-                        <option value="{{ $payment['type'] }}" data-amount="{{ $payment['amount'] }}"
-                            data-currency="{{ $payment['currency_code'] }}">
+                        <option value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
+                            data-type="{{ $payment['type'] }}" data-currency="{{ $payment['currency_code'] }}"
+                            data-amount="{{ $payment['amount'] }}"
+                            data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}">
                             {{ ucfirst($payment['type']) }} - {{ $payment['amount'] }} {{ $payment['currency_code'] }}
+                            @if ($payment['is_need_credit_card_data'])
+                                (Pay with Card)
+                            @endif
                         </option>
                     @endforeach
                 </select>
             </div>
-            <div class="mb-3">
-                <label for="payment_amount" class="form-label">Amount</label>
-                <input type="text" class="form-control" id="payment_amount" name="payment_type[amount]" readonly>
-            </div>
-            <div class="mb-3">
-                <label for="payment_currency" class="form-label">Currency</label>
-                <input type="text" class="form-control" id="payment_currency" name="payment_type[currency_code]"
-                    readonly>
-            </div>
 
-            <button type="submit" class="btn btn-primary w-100 py-2 mt-3">Finish Booking</button>
+            <!-- Hidden fields to capture payment type details dynamically -->
+            <input type="hidden" id="payment_type_amount" name="payment_type[amount]">
+            <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
+            <input type="hidden" id="payment_type_type" name="payment_type[type]">
+            <input type="hidden" id="payment_type_is_need_credit_card_data"
+                name="payment_type[is_need_credit_card_data]">
+
+            <button type="submit" class="btn btn-primary w-100 mt-3">Finish Booking</button>
         </form>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const paymentTypeSelect = document.getElementById('payment_type');
-            const paymentAmount = document.getElementById('payment_amount');
-            const paymentCurrency = document.getElementById('payment_currency');
+            const paymentAmountInput = document.getElementById('payment_type_amount');
+            const paymentCurrencyInput = document.getElementById('payment_type_currency_code');
+            const paymentTypeHiddenInput = document.getElementById('payment_type_type');
+            const creditCardRequiredInput = document.getElementById('payment_type_is_need_credit_card_data');
+            const guestsContainer = document.getElementById('guests-container');
 
-            paymentTypeSelect.addEventListener('change', function() {
-                const selectedOption = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
-                paymentAmount.value = selectedOption.dataset.amount;
-                paymentCurrency.value = selectedOption.dataset.currency;
-            });
+            // Function to update hidden payment fields based on selected option
+            function updatePaymentFields() {
+                const selected = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
+                const type = selected.dataset.type;
+                const currency = selected.dataset.currency;
+                const amount = selected.dataset.amount;
+                const needCard = selected.dataset.needCard === '1';
 
-            if (paymentTypeSelect.options.length > 0) {
-                const selectedOption = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
-                paymentAmount.value = selectedOption.dataset.amount;
-                paymentCurrency.value = selectedOption.dataset.currency;
+                paymentAmountInput.value = amount;
+                paymentCurrencyInput.value = currency;
+                paymentTypeHiddenInput.value = type;
+                creditCardRequiredInput.value = needCard ? '1' : '0';
             }
 
-            const addGuestButton = document.getElementById('addGuest');
-            const guestsContainer = document.getElementById('guests-container');
-            let guestIndex = 1;
+            paymentTypeSelect.addEventListener('change', updatePaymentFields);
+            updatePaymentFields(); // Initialize on page load
 
-            addGuestButton.addEventListener('click', function() {
-                guestIndex++;
+            // Add additional guest fields dynamically
+            let guestIndex = 1;
+            document.getElementById('addGuest').addEventListener('click', function() {
                 const guestDiv = document.createElement('div');
                 guestDiv.classList.add('guest', 'mb-4');
                 guestDiv.innerHTML = `
                     <div class="row">
                         <div class="col-md-6">
-                            <label class="form-label">Guest First Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex - 1}][first_name]" required>
+                            <label class="form-label">First Name</label>
+                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Guest Last Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex - 1}][last_name]" required>
+                            <label class="form-label">Last Name</label>
+                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required>
                         </div>
-                    </div>`;
+                    </div>
+                `;
                 guestsContainer.appendChild(guestDiv);
+                guestIndex++;
             });
         });
     </script>
-
 @endsection

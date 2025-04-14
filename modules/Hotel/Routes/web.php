@@ -5,6 +5,9 @@ use \Illuminate\Support\Facades\Route;
 //     Route::get('/','HotelController@index')->name('hotel.search'); // Search
 //     Route::get('/{slug}','HotelController@detail')->name('hotel.detail');// Detail
 // });
+Route::post('/hotel/booking/handle', 'HotelHController@handleBookingSubmission')->name('hotel.booking.handle');
+Route::get('/pcb-return', 'HotelHController@handlePcbReturn')->name('pcb.booking.return');
+Route::get('/hotel/payment/confirm', 'HotelHController@confirmAfterPcb')->name('hotel.payment.confirm');
 
 Route::get('/hotels', 'HotelHController@showHotels')->name('hotel.show');
 Route::get('/hotels/search', 'HotelHController@searchHotels')->name('hotel.search');
@@ -19,6 +22,8 @@ Route::post('/hotel/booking/finish', 'HotelHController@finishBooking')->name('ho
 Route::get('/hotel/payment/success', function () {
     return view('Hotel::frontend.payment-success');
 })->name('hotel.payment.success');
+
+
 
 
 Route::group(['prefix' => 'user/' . config('hotel.hotel_route_prefix'), 'middleware' => ['auth', 'verified']], function () {
