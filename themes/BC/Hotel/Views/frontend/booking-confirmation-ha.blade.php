@@ -2,9 +2,13 @@
 
 @section('content')
     @php
+        use Illuminate\Support\Str;
+
         $user = Auth::user();
-        // You can pass additional dynamic booking data from your controller
-        // For example: partner_order_id, order_id, language, book_hash, item_id, etc.
+
+        // Retrieve dynamic booking data passed from the controller.
+        // If not available in the current view, fallback to session/default values.
+        $bookingData = $bookingData ?? [];
         $partnerOrderId = $bookingData['partner_order_id'] ?? session('partner_order_id', Str::uuid());
         $orderId = $bookingData['order_id'] ?? session('order_id', rand(100000000, 999999999));
         $language = $bookingData['language'] ?? 'en';
@@ -16,6 +20,7 @@
         <h1 class="fw-bold text-center">Complete Your Booking</h1>
         <hr class="w-50 mx-auto mb-4">
 
+        <!-- Error and Success Messages -->
         @if ($errors->any())
             <div class="alert alert-danger">
                 <ul class="mb-0">
@@ -32,6 +37,7 @@
             </div>
         @endif
 
+        <!-- Booking Form -->
         <form action="{{ route('hotel.booking.handle') }}" method="POST" id="bookingForm" class="card shadow-sm p-4">
             @csrf
 
@@ -43,7 +49,7 @@
             <input type="hidden" name="book_hash" value="{{ $bookHash }}">
             <input type="hidden" name="item_id" value="{{ $itemId }}">
 
-            {{-- User Info --}}
+            <!-- User Information -->
             @if ($user)
                 <div class="mb-3">
                     <label class="form-label">Name</label>
@@ -58,29 +64,42 @@
                     <input type="text" class="form-control" name="user[phone]" value="{{ $user->phone }}" readonly>
                 </div>
             @else
-                <input type="hidden" name="user[email]" value="guest@example.com">
-                <input type="hidden" name="user[phone]" value="+1000000000">
+                <div class="mb-3">
+                    <label class="form-label">Your Name</label>
+                    <input type="text" class="form-control" name="user[name]" value="{{ old('user.name') }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" name="user[email]" value="{{ old('user.email') }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <!-- Provide a default value so that the phone number meets the minimum length requirement -->
+                    <input type="text" class="form-control" name="user[phone]"
+                        value="{{ old('user.phone', '+0000000000') }}" required>
+                </div>
             @endif
 
-            {{-- Supplier Info (use user details if available, otherwise fallback values) --}}
-            <input type="hidden" name="supplier_data[first_name_original]"
-                value="{{ $user->first_name ?? 'SupplierFirst' }}">
-            <input type="hidden" name="supplier_data[last_name_original]"
-                value="{{ $user->last_name ?? 'SupplierLast' }}">
-            <input type="hidden" name="supplier_data[phone]" value="{{ $user->phone ?? '+999999999' }}">
-            <input type="hidden" name="supplier_data[email]" value="{{ $user->email ?? 'supplier@example.com' }}">
+            <!-- Supplier Information (hidden) -->
+            <div style="display: none;">
+                <input type="hidden" name="supplier_data[first_name_original]" value="Mjellma Travel">
+                <input type="hidden" name="supplier_data[last_name_original]" value="Mjellma Travel">
+                <input type="hidden" name="supplier_data[email]" value="mjellmatravel@hotmail.com">
+                <!-- Random phone number is generated if needed -->
+                <input type="hidden" name="supplier_data[phone]" value="{{ rand(1000000000, 9999999999) }}">
+            </div>
 
-            {{-- Guests Section --}}
+            <!-- Guests Section -->
             <h3 class="fw-bold">Guests</h3>
             <div id="guests-container">
                 <div class="guest mb-4">
                     <div class="row">
                         <div class="col-md-6">
-                            <label class="form-label">First Name</label>
+                            <label class="form-label">Guest First Name</label>
                             <input type="text" class="form-control" name="rooms[0][guests][0][first_name]" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Last Name</label>
+                            <label class="form-label">Guest Last Name</label>
                             <input type="text" class="form-control" name="rooms[0][guests][0][last_name]" required>
                         </div>
                     </div>
@@ -88,7 +107,7 @@
             </div>
             <button type="button" class="btn btn-outline-secondary mb-3" id="addGuest">Add Another Guest</button>
 
-            {{-- Payment Type Section --}}
+            <!-- Payment Section -->
             <h3 class="fw-bold">Payment</h3>
             <div class="mb-3">
                 <label class="form-label">Payment Type</label>
@@ -107,7 +126,7 @@
                 </select>
             </div>
 
-            <!-- Hidden fields to capture payment type details dynamically -->
+            <!-- Hidden Payment Fields -->
             <input type="hidden" id="payment_type_amount" name="payment_type[amount]">
             <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
             <input type="hidden" id="payment_type_type" name="payment_type[type]">
@@ -142,9 +161,9 @@
             }
 
             paymentTypeSelect.addEventListener('change', updatePaymentFields);
-            updatePaymentFields(); // Initialize on page load
+            updatePaymentFields();
 
-            // Add additional guest fields dynamically
+            // Dynamically add additional guest fields
             let guestIndex = 1;
             document.getElementById('addGuest').addEventListener('click', function() {
                 const guestDiv = document.createElement('div');
@@ -152,11 +171,11 @@
                 guestDiv.innerHTML = `
                     <div class="row">
                         <div class="col-md-6">
-                            <label class="form-label">First Name</label>
+                            <label class="form-label">Guest First Name</label>
                             <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Last Name</label>
+                            <label class="form-label">Guest Last Name</label>
                             <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required>
                         </div>
                     </div>

@@ -13,12 +13,11 @@
 
         <div class="row mt-4">
             <!-- Sidebar Filters -->
-            <!-- NOTE: Use .sticky-top, and optional inline style for top offset -->
             <div class="col-md-3 mb-5 filter-section sticky-top" style="top: 1rem;">
                 <h5 class="fw-bold">Filters</h5>
                 <hr>
                 <form method="GET" action="{{ route('hotel.search') }}">
-                    <!-- Hidden inputs to preserve existing search parameters -->
+                    <!-- Hidden inputs to preserve search parameters -->
                     <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
                     <input type="hidden" name="location" value="{{ request('location') }}">
                     <input type="hidden" name="checkin" value="{{ request('checkin') }}">
@@ -80,7 +79,7 @@
                     <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
                 </form>
 
-                <!-- ✅ Button to Open Map Modal -->
+                <!-- Button to Open Map Modal -->
                 <button type="button" class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#mapModal">
                     Show on the Map
                 </button>
@@ -88,8 +87,16 @@
 
             <!-- Hotel List Section -->
             <div class="col-md-9">
+                <!-- Toggle Buttons for List/Grid Views -->
+                <div class="view-toggle mb-3 text-end">
+                    <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"
+                            aria-hidden="true"></i>
+                    </button>
+                    <button id="grid-view-btn" class="btn btn-outline-secondary"><i class="fa fa-th"></i></button>
+                </div>
+
                 @if ($hotels && $hotels->count() > 0)
-                    <!-- Container where we append hotels -->
+                    <!-- Container where hotels are appended -->
                     <div id="hotel-list">
                         @foreach ($hotels as $hotel)
                             <div class="card mb-4 hotel-list-item border-0 shadow-sm">
@@ -130,8 +137,7 @@
 
                                             <p class="text-primary fw-semibold fs-5">
                                                 Starting from <span
-                                                    class="font-weight-bold">{{ $hotel->daily_price ?? __('Price not available') }}
-                                                </span>
+                                                    class="font-weight-bold">{{ $hotel->daily_price ?? __('Price not available') }}</span>
                                                 / per night
                                             </p>
 
@@ -147,8 +153,7 @@
 
                     <!-- Loading Spinner (hidden by default) -->
                     <div id="loading-spinner" class="my-3 text-center" style="display: none;">
-                        <div class="spinner-border" role="status">
-                        </div>
+                        <div class="spinner-border" role="status"></div>
                     </div>
 
                     <!-- Sentinel element for infinite scroll -->
@@ -162,7 +167,7 @@
         </div>
     </div>
 
-    <!-- ✅ Bootstrap Modal for Map -->
+    <!-- Bootstrap Modal for Map -->
     <div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
@@ -183,7 +188,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- ✅ Bootstrap JS + Popper.js -->
+    <!-- Bootstrap JS + Popper.js -->
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
 
@@ -205,8 +210,6 @@
 
         function initializeMap() {
             var map = L.map('hotelMap');
-
-            // Load OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
@@ -256,7 +259,7 @@
                         padding: [40, 40]
                     });
                 } else {
-                    map.setView([42.6629, 21.1655], 13); // Default location if no markers
+                    map.setView([42.6629, 21.1655], 13);
                 }
 
                 setTimeout(() => {
@@ -268,9 +271,9 @@
         /* -------------------------
          *   Infinite Scrolling
          * ------------------------- */
-        let currentPage = 1; // We assume page=1 loaded initially
-        let isLoading = false; // Flag to prevent multiple simultaneous loads
-        let hasMore = true; // We'll assume there's more until the server tells us otherwise
+        let currentPage = 1;
+        let isLoading = false;
+        let hasMore = true;
 
         const observerOptions = {
             root: null,
@@ -278,36 +281,29 @@
             threshold: 0.1
         };
 
-        // Callback to load more hotels when the sentinel enters view
         const observerCallback = (entries) => {
             const sentinel = entries[0];
-            if (sentinel.isIntersecting) {
-                if (!isLoading && hasMore) {
-                    loadMoreHotels();
-                }
+            if (sentinel.isIntersecting && !isLoading && hasMore) {
+                loadMoreHotels();
             }
         };
 
-        // Create the intersection observer once DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             const sentinelElement = document.getElementById('infinite-scroll-sentinel');
             if (sentinelElement) {
+                const observer = new IntersectionObserver(observerCallback, observerOptions);
                 observer.observe(sentinelElement);
             }
         });
 
         function loadMoreHotels() {
             isLoading = true;
-            currentPage += 1; // increment to next page
-
-            // Show loading spinner
+            currentPage++;
             document.getElementById('loading-spinner').style.display = 'block';
 
-            // Build query from current URL (filters, etc.), set page=next
             const params = new URLSearchParams(window.location.search);
             params.set('page', currentPage);
 
-            // Make AJAX request to the same route
             fetch("{{ route('hotel.search') }}?" + params.toString(), {
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'
@@ -315,21 +311,16 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    // Hide spinner
                     document.getElementById('loading-spinner').style.display = 'none';
                     isLoading = false;
-
-                    // If the server returns hotels
                     if (data.hotels && data.hotels.length > 0) {
                         appendHotels(data.hotels);
                     } else {
-                        // No more hotels
                         hasMore = false;
                     }
                 })
                 .catch(error => {
                     console.error("Error loading more hotels:", error);
-                    // Hide spinner and stop further loads
                     document.getElementById('loading-spinner').style.display = 'none';
                     hasMore = false;
                     isLoading = false;
@@ -338,7 +329,6 @@
 
         function appendHotels(hotels) {
             const hotelList = document.getElementById('hotel-list');
-
             hotels.forEach(hotel => {
                 const cardWrapper = document.createElement('div');
                 cardWrapper.classList.add('card', 'mb-4', 'hotel-list-item', 'border-0', 'shadow-sm');
@@ -349,12 +339,11 @@
                             <a href="{{ route('hotel.info', ['id' => '__ID__', 'checkin' => $checkin, 'checkout' => $checkout]) }}">
                                 <div class="hotel-image">
                                     ${hotel.image_url ? `
-                                                <img src="${hotel.image_url}" alt="${hotel.name || 'No name'}"
-                                                     class="img-fluid"
-                                                     onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';" />
-                                            ` : `
-                                                <div class="no-image-placeholder">No Image Available</div>
-                                            `}
+                                                                            <img src="${hotel.image_url}" alt="${hotel.name || 'No name'}" class="img-fluid"
+                                                                                 onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
+                                                                        ` : `
+                                                                            <div class="no-image-placeholder">No Image Available</div>
+                                                                        `}
                                 </div>
                             </a>
                         </div>
@@ -363,17 +352,17 @@
                                 <h5 class="fw-bold text-primary">
                                     <a href="{{ route('hotel.info', ['id' => '__ID__', 'checkin' => $checkin, 'checkout' => $checkout]) }}"
                                        class="text-decoration-none">
-                                       ${hotel.name || 'No name available'}
+                                        ${hotel.name || 'No name available'}
                                     </a>
                                 </h5>
                                 <p class="text-warning mb-2">
                                     ${renderStars(hotel.star_rating)}
                                 </p>
-                                <p class="text-muted">${hotel.address ? hotel.address : 'Address not available'}</p>
+                                <p class="text-muted">
+                                    ${hotel.address ? hotel.address : 'Address not available'}
+                                </p>
                                 <p class="text-primary fw-semibold fs-5">
-                                    Starting from <span class="font-weight-bold">
-                                        ${hotel.daily_price || 'Price not available'}
-                                    </span> / per night
+                                    Starting from <span class="font-weight-bold">${hotel.daily_price || 'Price not available'}</span> / per night
                                 </p>
                                 <p class="text-success">
                                     Breakfast Included: ${hotel.has_breakfast ? 'Yes' : 'No'}
@@ -382,10 +371,7 @@
                         </div>
                     </div>
                 `;
-
-                // Replace placeholder with actual hotel_id
                 cardWrapper.innerHTML = cardWrapper.innerHTML.replaceAll('__ID__', hotel.hotel_id);
-
                 hotelList.appendChild(cardWrapper);
             });
         }
@@ -398,29 +384,30 @@
             }
             return stars;
         }
+
+        // Grid/List View Toggle Logic
+        document.getElementById('list-view-btn').addEventListener('click', function() {
+            document.getElementById('hotel-list').classList.remove('grid-view');
+            this.classList.add('active');
+            document.getElementById('grid-view-btn').classList.remove('active');
+        });
+
+        document.getElementById('grid-view-btn').addEventListener('click', function() {
+            document.getElementById('hotel-list').classList.add('grid-view');
+            this.classList.add('active');
+            document.getElementById('list-view-btn').classList.remove('active');
+        });
     </script>
 
     <style>
-        /* Remove custom position: sticky from .filter-section
-                   because .sticky-top does it automatically. */
-        .filter-section {
-            /* We only keep default styling; .sticky-top handles the sticky behavior. */
-        }
-
-        /* Example override: If you want more top offset (like 1rem)
-                   you can add this:
-                   .sticky-top {
-                       top: 1rem !important;
-                   }
-                */
-
-        /* Hotel List Item */
+        /*-------------------------------
+                                            Default List View Styles
+                                        -------------------------------*/
         .hotel-list-item {
             display: flex;
             border-radius: 8px;
         }
 
-        /* Hotel Image */
         .hotel-image {
             height: 200px;
             background-color: #f8f9fa;
@@ -437,7 +424,6 @@
             border-bottom-left-radius: 8px;
         }
 
-        /* Placeholder for missing images */
         .no-image-placeholder {
             width: 100%;
             height: 100%;
@@ -451,6 +437,70 @@
             border-bottom-left-radius: 8px;
         }
 
+        /*-------------------------------
+                                            Updated Grid View Styles
+                                        -------------------------------*/
+        #hotel-list.grid-view {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        #hotel-list.grid-view .hotel-list-item {
+            flex-direction: column;
+            flex: 0 0 calc(33.3333% - 20px);
+            max-width: calc(33.3333% - 20px);
+            margin: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #hotel-list.grid-view .row.g-0 {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+        }
+
+        #hotel-list.grid-view .col-md-4,
+        #hotel-list.grid-view .col-md-8 {
+            width: 100%;
+            max-width: 100%;
+            flex: none;
+        }
+
+        #hotel-list.grid-view .hotel-image {
+            height: 200px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        #hotel-list.grid-view .card-body {
+            padding: 15px;
+            border-top: none;
+            background-color: #fff;
+        }
+
+        /* Responsive: For tablets (2 columns) */
+        @media (max-width: 992px) {
+            #hotel-list.grid-view .hotel-list-item {
+                flex: 0 0 calc(50% - 20px);
+                max-width: calc(50% - 20px);
+            }
+        }
+
+        /* Responsive: For mobile devices (1 column) */
+        @media (max-width: 576px) {
+            #hotel-list.grid-view .hotel-list-item {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+        }
+
+        /*-------------------------------
+                                            Filter Section Styles
+                                        -------------------------------*/
         .filter-section .custom-checkbox {
             display: flex;
             align-items: center;
@@ -461,7 +511,6 @@
             position: relative;
         }
 
-        /* Hide default checkbox */
         .filter-section .custom-checkbox input {
             position: absolute;
             opacity: 0;
@@ -470,7 +519,6 @@
             width: 0;
         }
 
-        /* Custom checkmark */
         .filter-section .checkmark {
             height: 18px;
             width: 18px;
@@ -513,7 +561,6 @@
             display: flex;
         }
 
-        /* Price Inputs */
         .filter-section .form-control {
             border-radius: 5px;
             border: 1px solid #ccc;
