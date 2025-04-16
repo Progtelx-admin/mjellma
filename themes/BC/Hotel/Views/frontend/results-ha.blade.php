@@ -339,11 +339,11 @@
                             <a href="{{ route('hotel.info', ['id' => '__ID__', 'checkin' => $checkin, 'checkout' => $checkout]) }}">
                                 <div class="hotel-image">
                                     ${hotel.image_url ? `
-                                                                            <img src="${hotel.image_url}" alt="${hotel.name || 'No name'}" class="img-fluid"
-                                                                                 onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
-                                                                        ` : `
-                                                                            <div class="no-image-placeholder">No Image Available</div>
-                                                                        `}
+                                                                                <img src="${hotel.image_url}" alt="${hotel.name || 'No name'}" class="img-fluid"
+                                                                                     onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
+                                                                            ` : `
+                                                                                <div class="no-image-placeholder">No Image Available</div>
+                                                                            `}
                                 </div>
                             </a>
                         </div>
@@ -401,8 +401,8 @@
 
     <style>
         /*-------------------------------
-                                            Default List View Styles
-                                        -------------------------------*/
+                                                Default List View Styles
+                                            -------------------------------*/
         .hotel-list-item {
             display: flex;
             border-radius: 8px;
@@ -438,8 +438,8 @@
         }
 
         /*-------------------------------
-                                            Updated Grid View Styles
-                                        -------------------------------*/
+                                                Updated Grid View Styles
+                                            -------------------------------*/
         #hotel-list.grid-view {
             display: flex;
             flex-wrap: wrap;
@@ -499,8 +499,8 @@
         }
 
         /*-------------------------------
-                                            Filter Section Styles
-                                        -------------------------------*/
+                                                Filter Section Styles
+                                            -------------------------------*/
         .filter-section .custom-checkbox {
             display: flex;
             align-items: center;

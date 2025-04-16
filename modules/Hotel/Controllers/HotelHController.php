@@ -27,6 +27,7 @@ class HotelHController extends Controller
     public function searchHotels(Request $request)
     {
         try {
+            // Validate input request parameters
             $request->validate([
                 'hotel_name'         => 'nullable|string',
                 'location'           => 'nullable|string',
@@ -46,11 +47,11 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
             ]);
 
-            // Basic DB query only
+            // Basic DB query only for hotels
             $hotelQuery = DB::table('hotels')
                 ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
 
-            // Filtering: name, star rating, location...
+            // Apply filters like hotel name, star rating, location
             if ($request->filled('hotel_name')) {
                 $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
             }
@@ -58,7 +59,7 @@ class HotelHController extends Controller
                 $hotelQuery->whereIn('star_rating', $request->star_rating);
             }
 
-            // Example bounding-box geolocation filter (optional)
+            // Geolocation filter if latitude and longitude are provided
             if ($request->filled('latitude') && $request->filled('longitude')) {
                 $latitude  = $request->latitude;
                 $longitude = $request->longitude;
@@ -75,68 +76,29 @@ class HotelHController extends Controller
 
                 $hotelQuery->whereBetween('latitude', $latRange)
                            ->whereBetween('longitude', $lngRange);
-
-                // Add distance calculation if desired
             }
 
-            // We'll just get all results (or do offset/limit if you have infinite scroll)
+            // Fetch hotels (limit 30 results for now)
             $hotels = $hotelQuery->limit(30)->get();
 
-            // We also fetch images from DB, if available
+            // Fetch images for hotels
             $hotelIds = $hotels->pluck('hotel_id')->toArray();
             $hotelImages = DB::table('hotel_images')
                 ->whereIn('hotel_id', $hotelIds)
                 ->groupBy('hotel_id')
                 ->pluck('image_url', 'hotel_id');
 
-            // Attach images to each hotel
+            // Attach images and initialize price & breakfast data for each hotel
             foreach ($hotels as $hotel) {
-                $hotel->image_url = $hotelImages[$hotel->hotel_id]
-                    ?? asset('images/default-image.jpg');
-                // We'll set daily_price = null for now
-                $hotel->daily_price = null;
-                $hotel->has_breakfast = false;
+                $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
+                $hotel->daily_price = null;  // Default daily price
+                $hotel->has_breakfast = false;  // Default breakfast info
             }
 
-            // If we want to do any server-side filtering (breakfast_included, min_price, max_price),
-            // we must do that AFTER we fetch actual rates. Instead, we do it in fetchHotelPrices()
-            // or in the front-end.
-
-            // Return the Blade with the basic hotels
-            return view('Hotel::frontend.results-ha', [
-                'hotels'    => $hotels,
-                'checkin'   => $request->checkin,
-                'checkout'  => $request->checkout,
-                'adults'    => $request->adults,
-                'children'  => $request->children ?? [],
-                'minPrice'  => 0,   // We can set defaults for now
-                'maxPrice'  => 999, // ...
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
-            return back()->with('error', 'An error occurred: ' . $e->getMessage());
-        }
-    }
-
-    // 2) New method: fetchHotelPrices => returns pricing in JSON
-    public function fetchHotelPrices(Request $request)
-    {
-        try {
-            $request->validate([
-                'ids'      => 'required|array',
-                'ids.*'    => 'integer',
-                'checkin'  => 'required|date',
-                'checkout' => 'required|date|after:checkin',
-                'adults'   => 'required|integer|min:1',
-            ]);
-
-            $hotelIds = $request->ids;
-
-            // Check for cached API results
+            // Fetch pricing information for the hotels from the external API
             $cacheKey = 'hotel_prices_' . implode('_', $hotelIds) . '_' . $request->checkin . '_' . $request->checkout;
             $apiData = Cache::remember($cacheKey, 300, function () use ($request, $hotelIds) {
-                // Make the external API call
+                // Prepare the API request data
                 $apiBody = [
                     'checkin'   => $request->checkin,
                     'checkout'  => $request->checkout,
@@ -150,6 +112,7 @@ class HotelHController extends Controller
                     'currency'  => 'EUR',
                 ];
 
+                // Call the external API and fetch hotel pricing
                 $response = Http::withBasicAuth($this->username, $this->password)
                                 ->withHeaders(['Content-Type' => 'application/json'])
                                 ->post($this->apiUrl . 'search/serp/hotels', $apiBody);
@@ -157,8 +120,10 @@ class HotelHController extends Controller
                 return $response->json()['data']['hotels'] ?? [];
             });
 
-            // Build a response array keyed by hotel_id => {daily_price, has_breakfast, ...}
+            // Create an associative array for hotel_id => pricing data
             $pricesResult = [];
+            $minPrice = PHP_INT_MAX; // Initialize with a very high number
+            $maxPrice = PHP_INT_MIN; // Initialize with a very low number
 
             foreach ($apiData as $apiHotel) {
                 $hotelId = $apiHotel['id'] ?? null;
@@ -166,12 +131,10 @@ class HotelHController extends Controller
                     continue;
                 }
 
-                // Get the first daily price from the array (if available)
+                // Get the first daily price from the API response (if available)
                 $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-
-                // Default to null if no price is available
                 if (!$dailyPrice) {
-                    $dailyPrice = null;
+                    $dailyPrice = null;  // Default if no price is available
                 }
 
                 // Check for breakfast inclusion
@@ -185,23 +148,42 @@ class HotelHController extends Controller
                     }
                 }
 
+                // Store pricing data
                 $pricesResult[$hotelId] = [
                     'daily_price'   => $dailyPrice,
                     'has_breakfast' => $hasBreakfast,
                 ];
+
+                // Track min and max price
+                if ($dailyPrice !== null) {
+                    $minPrice = min($minPrice, $dailyPrice);
+                    $maxPrice = max($maxPrice, $dailyPrice);
+                }
             }
 
-            return response()->json([
-                'success' => true,
-                'prices'  => $pricesResult,
+            // Merge the pricing data into each hotel
+            foreach ($hotels as $hotel) {
+                $hotelId = $hotel->hotel_id;
+                if (isset($pricesResult[$hotelId])) {
+                    $hotel->daily_price = $pricesResult[$hotelId]['daily_price'];
+                    $hotel->has_breakfast = $pricesResult[$hotelId]['has_breakfast'];
+                }
+            }
+
+            // Return the results to the view
+            return view('Hotel::frontend.results-ha', [
+                'hotels'   => $hotels,
+                'checkin'  => $request->checkin,
+                'checkout' => $request->checkout,
+                'adults'   => $request->adults,
+                'children' => $request->children ?? [],
+                'minPrice' => $minPrice === PHP_INT_MAX ? 0 : $minPrice,  // If no price found, set minPrice to 0
+                'maxPrice' => $maxPrice === PHP_INT_MIN ? 999 : $maxPrice, // If no price found, set maxPrice to 999
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error fetching hotel prices', ['message' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'error'   => $e->getMessage(),
-            ], 500);
+            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+            return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
 
