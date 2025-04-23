@@ -6,19 +6,10 @@
             <h1 class="fw-bold text-success">Payment Successful!</h1>
             <p class="mt-3">Your booking has been successfully completed.</p>
 
-            <!-- Display booking details -->
+            <!-- Display order_id and partner_order_id -->
             <div class="mt-4">
-                <h4>Booking Details:</h4>
-                <p><strong>Hotel Name:</strong> {{ $bookingDetails['hotel_name'] ?? 'N/A' }}</p>
-                <p><strong>Check-In:</strong> {{ $bookingDetails['check_in'] ?? 'N/A' }}</p>
-                <p><strong>Check-Out:</strong> {{ $bookingDetails['check_out'] ?? 'N/A' }}</p>
-                <p><strong>Guests:</strong></p>
-                <ul>
-                    @foreach ($bookingDetails['guest_names'] as $guest)
-                        <li>{{ $guest }}</li>
-                    @endforeach
-                </ul>
-                <p><strong>Room:</strong> {{ $bookingDetails['room_name'] ?? 'Standard Room' }}</p>
+                <p><strong>Order ID:</strong> {{ $order_id }}</p>
+                <p><strong>Partner Order ID:</strong> {{ $partner_order_id }}</p>
             </div>
 
             <!-- Back to Search button -->

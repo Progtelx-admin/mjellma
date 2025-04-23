@@ -72,6 +72,30 @@
     </div>
 @endif
 
+<a href="https://wa.me/+38343555527?text=Hi!%20I%20have%20a%20question%20about%20Reservation" class="whatsapp-float"
+    target="_blank" title="Chat with us on WhatsApp">
+    <i class="fa fa-whatsapp"></i>
+</a>
+
+<style>
+    .whatsapp-float {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #25D366;
+        color: white;
+        border-radius: 50%;
+        padding: 15px;
+        font-size: 24px;
+        z-index: 9999;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .whatsapp-float:hover {
+        background-color: #1ebe57;
+    }
+</style>
+
 @include('Layout::parts.login-register-modal')
 @include('Popup::frontend.popup')
 @if (Auth::check() and !empty($is_user_page))

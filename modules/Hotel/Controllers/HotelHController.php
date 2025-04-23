@@ -4,6 +4,7 @@ namespace Modules\Hotel\Controllers;
 
 use App\Http\Controllers\Controller;
 use Modules\Hotel\Models\HotelH;
+use Modules\Hotel\Models\MjellmaBooking;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Http;
 use DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 
 class HotelHController extends Controller
 {
@@ -998,6 +1000,111 @@ class HotelHController extends Controller
     //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
     // }
 
+    // public function finishBooking(Request $request)
+    // {
+    //     $data = $request->all();
+
+    //     if (!isset($data['order_id'])) {
+    //         \Log::error('Missing order_id in booking data.');
+    //         return response()->json(['error' => 'Missing order_id'], 422);
+    //     }
+
+    //     // Normalize user details.
+    //     $userFirstName = isset($data['first_name']) ? trim($data['first_name']) : '';
+    //     $userLastName  = isset($data['last_name']) ? trim($data['last_name']) : '';
+    //     $userEmail     = (isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL))
+    //                         ? trim($data['email'])
+    //                         : 'guest@example.com';
+    //     $userPhone     = isset($data['phone']) ? trim($data['phone']) : '';
+    //     if (strlen($userPhone) < 5) {
+    //         $userPhone = '+0000000000';
+    //     }
+
+    //     // Determine the original payment type from the input (it may be "now" for a PCB flow or something else)
+    //     $originalPaymentType = $data['payment_type']['type'] ?? 'deposit';
+
+    //     // For testing: if it's a PCB ("now") flow, keep type "now" but override credit card requirement to false.
+    //     // Otherwise, use "deposit".
+    //     if ($originalPaymentType === 'now') {
+    //         $finalPaymentType = 'now';
+    //     } else {
+    //         $finalPaymentType = 'deposit';
+    //     }
+
+    //     $payload = [
+    //         'user' => [
+    //             'first_name' => $userFirstName,
+    //             'last_name'  => $userLastName,
+    //             'email'      => $userEmail,
+    //             'phone'      => $userPhone,
+    //         ],
+    //         'supplier_data' => [
+    //             'first_name_original' => $data['supplier_data']['first_name_original'] ?? '',
+    //             'last_name_original'  => $data['supplier_data']['last_name_original'] ?? '',
+    //             'phone'               => $data['supplier_data']['phone'] ?? '',
+    //             'email'               => $data['supplier_data']['email'] ?? '',
+    //         ],
+    //         'partner' => [
+    //             'partner_order_id'  => $data['partner_order_id'] ?? '',
+    //             'comment'           => $data['partner_comment'] ?? '',
+    //             'amount_sell_b2b2c' => isset($data['amount_sell_b2b2c']) && is_numeric($data['amount_sell_b2b2c'])
+    //                                     ? number_format($data['amount_sell_b2b2c'], 2, '.', '')
+    //                                     : '0.00',
+    //         ],
+    //         'order_id'   => $data['order_id'],
+    //         'language'   => $data['language'] ?? 'en',
+    //         'rooms'      => $data['rooms'] ?? [],
+    //         'payment_type' => [
+    //             'type'          => $finalPaymentType,
+    //             'amount'        => $data['payment_type']['amount'] ?? '',
+    //             'currency_code' => $data['payment_type']['currency_code'] ?? 'EUR',
+    //             // For testing, always mark as not requiring credit card data
+    //             'is_need_credit_card_data' => false,
+    //         ],
+    //         'return_path' => $data['return_path'] ?? '',
+    //     ];
+
+    //     \Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
+
+    //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+    //         ->withHeaders(['Content-Type' => 'application/json'])
+    //         ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+
+    //     \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
+
+    //     $json = $response->json();
+
+    //     // For testing only: if RateHawk returns "insufficient_b2b_balance", simulate a successful booking.
+    //     if (isset($json['error']) && $json['error'] === 'insufficient_b2b_balance') {
+    //         \Log::warning('Simulating booking success due to insufficient_b2b_balance for testing.');
+    //         $json = [
+    //             'status' => 'ok',
+    //             'data'   => [
+    //                 'order_id' => $payload['order_id'],
+    //                 'item_id'  => $payload['rooms'][0]['guests'][0]['first_name'] . '_simulated',
+    //                 // Add additional simulated booking details as needed.
+    //             ],
+    //         ];
+    //     }
+
+    //     if (isset($json['status']) && $json['status'] === 'ok') {
+    //         \Log::info('Booking success', ['response' => $json]);
+
+    //         // Return the view with order_id and partner_order_id for displaying to the user.
+    //         return view('Hotel::frontend.payment-success', [
+    //             'order_id' => $payload['order_id'],
+    //             'partner_order_id' => $data['partner_order_id'] ?? null,
+    //         ]);
+    //     }
+
+    //     \Log::error('Booking failed', [
+    //         'payload_sent'  => $payload,
+    //         'response_body' => $response->body()
+    //     ]);
+
+    //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
+    // }
+
     public function finishBooking(Request $request)
     {
         $data = $request->all();
@@ -1007,32 +1114,43 @@ class HotelHController extends Controller
             return response()->json(['error' => 'Missing order_id'], 422);
         }
 
-        // Normalize user details.
-        $userFirstName = isset($data['first_name']) ? trim($data['first_name']) : '';
-        $userLastName  = isset($data['last_name']) ? trim($data['last_name']) : '';
-        $userEmail     = (isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL))
-                            ? trim($data['email'])
-                            : 'guest@example.com';
-        $userPhone     = isset($data['phone']) ? trim($data['phone']) : '';
-        if (strlen($userPhone) < 5) {
-            $userPhone = '+0000000000';
+        // Handle user email/phone fallback
+        $userEmail = isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)
+            ? trim($data['email']) : 'guest@example.com';
+
+        $userPhone = isset($data['phone']) ? trim($data['phone']) : '+0000000000';
+        if (strlen($userPhone) < 5) $userPhone = '+0000000000';
+
+        // Determine who booked
+        $bookedBy = 'guest';
+        $adminId = null;
+        $agentId = null;
+        $userId = null;
+
+        if (auth()->check()) {
+            switch (auth()->user()->role_id) {
+                case 1:
+                    $bookedBy = 'admin';
+                    $adminId = auth()->id();
+                    $agentId = $data['agent_id'] ?? null;
+                    break;
+                case 2:
+                    $bookedBy = 'agent';
+                    $agentId = auth()->id();
+                    break;
+                case 3:
+                    $bookedBy = 'user';
+                    $userId = auth()->id();
+                    break;
+            }
         }
 
-        // Determine the original payment type from the input (it may be "now" for a PCB flow or something else)
-        $originalPaymentType = $data['payment_type']['type'] ?? 'deposit';
-
-        // For testing: if it's a PCB ("now") flow, keep type "now" but override credit card requirement to false.
-        // Otherwise, use "deposit".
-        if ($originalPaymentType === 'now') {
-            $finalPaymentType = 'now';
-        } else {
-            $finalPaymentType = 'deposit';
-        }
+        $finalPaymentType = $data['payment_type']['type'] ?? 'deposit';
 
         $payload = [
             'user' => [
-                'first_name' => $userFirstName,
-                'last_name'  => $userLastName,
+                'first_name' => $data['first_name'] ?? '',
+                'last_name'  => $data['last_name'] ?? '',
                 'email'      => $userEmail,
                 'phone'      => $userPhone,
             ],
@@ -1046,17 +1164,15 @@ class HotelHController extends Controller
                 'partner_order_id'  => $data['partner_order_id'] ?? '',
                 'comment'           => $data['partner_comment'] ?? '',
                 'amount_sell_b2b2c' => isset($data['amount_sell_b2b2c']) && is_numeric($data['amount_sell_b2b2c'])
-                                        ? number_format($data['amount_sell_b2b2c'], 2, '.', '')
-                                        : '0.00',
+                    ? number_format($data['amount_sell_b2b2c'], 2, '.', '') : '0.00',
             ],
-            'order_id'   => $data['order_id'],
-            'language'   => $data['language'] ?? 'en',
-            'rooms'      => $data['rooms'] ?? [],
+            'order_id' => $data['order_id'],
+            'language' => $data['language'] ?? 'en',
+            'rooms'    => $data['rooms'] ?? [],
             'payment_type' => [
                 'type'          => $finalPaymentType,
                 'amount'        => $data['payment_type']['amount'] ?? '',
                 'currency_code' => $data['payment_type']['currency_code'] ?? 'EUR',
-                // For testing, always mark as not requiring credit card data
                 'is_need_credit_card_data' => false,
             ],
             'return_path' => $data['return_path'] ?? '',
@@ -1072,22 +1188,42 @@ class HotelHController extends Controller
 
         $json = $response->json();
 
-        // For testing only: if RateHawk returns "insufficient_b2b_balance", simulate a successful booking.
+        // Simulate success for testing
         if (isset($json['error']) && $json['error'] === 'insufficient_b2b_balance') {
             \Log::warning('Simulating booking success due to insufficient_b2b_balance for testing.');
             $json = [
                 'status' => 'ok',
                 'data'   => [
                     'order_id' => $payload['order_id'],
-                    'item_id'  => $payload['rooms'][0]['guests'][0]['first_name'] . '_simulated',
-                    // Add additional simulated booking details as needed.
+                    'status'   => 'Simulated'
                 ],
             ];
         }
 
         if (isset($json['status']) && $json['status'] === 'ok') {
             \Log::info('Booking success', ['response' => $json]);
-            return response()->json(['success' => true, 'result' => $json]);
+
+            MjellmaBooking::create([
+                'order_id'         => $data['order_id'],
+                'partner_order_id' => $data['partner_order_id'] ?? null,
+                'booked_by'        => $bookedBy,
+                'admin_id'         => $adminId,
+                'agent_id'         => $agentId,
+                'user_id'          => $userId,
+                'user_email'       => $userEmail,
+                'user_phone'       => $userPhone,
+                'payment_type'     => $finalPaymentType,
+                'payment_amount'   => $data['payment_type']['amount'] ?? null,
+                'currency_code'    => $data['payment_type']['currency_code'] ?? 'EUR',
+                'pcb_status'       => $json['data']['status'] ?? null,
+                'api_status'       => $json['status'],
+                'api_error'        => $json['error'] ?? null,
+            ]);
+
+            return view('Hotel::frontend.payment-success', [
+                'order_id' => $data['order_id'],
+                'partner_order_id' => $data['partner_order_id'] ?? null,
+            ]);
         }
 
         \Log::error('Booking failed', [
@@ -1096,6 +1232,104 @@ class HotelHController extends Controller
         ]);
 
         return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
+    }
+
+
+    public function index(Request $request)
+    {
+        $user = auth()->user();
+
+        if ($user->role_id === 1) {
+            $bookings = MjellmaBooking::orderBy('created_at', 'desc')->paginate(20);
+        } else {
+            $bookings = MjellmaBooking::where(function ($query) use ($user) {
+                $query->where('user_id', $user->id)->orWhere('agent_id', $user->id);
+            })->orderBy('created_at', 'desc')->paginate(20);
+        }
+
+        // Get all order_ids to request live status from RateHawk
+        $orderIds = $bookings->pluck('order_id')->filter()->values()->map(function ($id) {
+            return (int) $id;
+        })->toArray();
+
+        $statuses = [];
+
+        if (!empty($orderIds)) {
+            $response = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->apiUrl . 'hotel/order/info/', [
+                    'ordering' => [
+                        'ordering_type' => 'desc',
+                        'ordering_by' => 'created_at'
+                    ],
+                    'pagination' => [
+                        'page_size' => count($orderIds),
+                        'page_number' => 1
+                    ],
+                    'search' => [
+                        'order_ids' => $orderIds
+                    ],
+                    'language' => 'en'
+                ]);
+
+            $data = $response->json();
+            if (isset($data['data']['orders'])) {
+                foreach ($data['data']['orders'] as $order) {
+                    $statuses[$order['order_id']] = $order['status'];
+                }
+            }
+        }
+
+        return view('Hotel::admin.booking', compact('bookings', 'statuses'));
+    }
+
+    //see details
+    public function showBookingDetails(Request $request, $orderId)
+    {
+        $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/info/', [
+                "ordering" => [
+                    "ordering_type" => "desc",
+                    "ordering_by"   => "created_at"
+                ],
+                "pagination" => [
+                    "page_size"    => 1,
+                    "page_number"  => 1
+                ],
+                "search" => [
+                    "order_ids" => [(int) $orderId]
+                ],
+                "language" => "en"
+            ]);
+
+        $json = $response->json();
+
+        if ($json['status'] === 'ok' && isset($json['data']['orders'][0])) {
+            return view('Hotel::admin.details', [
+                'booking' => $json['data']['orders'][0]
+            ]);
+        }
+
+        return redirect()->back()->with('error', $json['error'] ?? 'Unable to fetch booking details.');
+    }
+
+    //cancel
+    public function cancelBooking(Request $request, $partnerOrderId)
+    {
+        $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/cancel/', [
+                'partner_order_id' => $partnerOrderId
+            ]);
+
+        $json = $response->json();
+
+        if ($json['status'] === 'ok') {
+            return redirect()->back()->with('success', 'Booking cancelled successfully.');
+        }
+
+        return redirect()->back()->with('error', $json['error'] ?? 'Failed to cancel booking.');
     }
 
 

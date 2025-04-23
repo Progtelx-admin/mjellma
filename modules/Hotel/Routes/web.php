@@ -23,7 +23,10 @@ Route::get('/hotel/payment/success', function () {
     return view('Hotel::frontend.payment-success');
 })->name('hotel.payment.success');
 
+Route::get('/booking', 'HotelHController@index')->name('hotel.admin.booking.index');
 
+Route::get('/bookings/{orderId}/details', 'HotelHController@showBookingDetails')->name('booking.admin.details');
+Route::post('/bookings/{partnerOrderId}/cancel', 'HotelHController@cancelBooking')->name('booking.admin.cancel');
 
 
 Route::group(['prefix' => 'user/' . config('hotel.hotel_route_prefix'), 'middleware' => ['auth', 'verified']], function () {

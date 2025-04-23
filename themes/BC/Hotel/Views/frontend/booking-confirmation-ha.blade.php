@@ -5,22 +5,24 @@
         use Illuminate\Support\Str;
 
         $user = Auth::user();
+        $isAdmin = $user && $user->role_id === 1;
 
-        // Retrieve dynamic booking data passed from the controller.
-        // If not available in the current view, fallback to session/default values.
         $bookingData = $bookingData ?? [];
         $partnerOrderId = $bookingData['partner_order_id'] ?? session('partner_order_id', Str::uuid());
         $orderId = $bookingData['order_id'] ?? session('order_id', rand(100000000, 999999999));
         $language = $bookingData['language'] ?? 'en';
         $bookHash = $bookingData['book_hash'] ?? ($selectedRate['book_hash'] ?? '');
         $itemId = $bookingData['item_id'] ?? '';
+
+        $defaultNameParts = explode(' ', $user->name ?? '');
+        $defaultFirstName = $defaultNameParts[0] ?? '';
+        $defaultLastName = $defaultNameParts[1] ?? '';
     @endphp
 
     <div class="container mt-5 mb-5">
         <h1 class="fw-bold text-center">Complete Your Booking</h1>
         <hr class="w-50 mx-auto mb-4">
 
-        <!-- Error and Success Messages -->
         @if ($errors->any())
             <div class="alert alert-danger">
                 <ul class="mb-0">
@@ -37,11 +39,10 @@
             </div>
         @endif
 
-        <!-- Booking Form -->
         <form action="{{ route('hotel.booking.handle') }}" method="POST" id="bookingForm" class="card shadow-sm p-4">
             @csrf
 
-            <!-- Dynamic Hidden Inputs -->
+            <!-- Hidden Fields -->
             <input type="hidden" name="partner_order_id" value="{{ $partnerOrderId }}">
             <input type="hidden" name="order_id" value="{{ $orderId }}">
             <input type="hidden" name="return_path" value="{{ route('hotel.payment.success') }}">
@@ -49,45 +50,49 @@
             <input type="hidden" name="book_hash" value="{{ $bookHash }}">
             <input type="hidden" name="item_id" value="{{ $itemId }}">
 
-            <!-- User Information -->
-            @if ($user)
+            <!-- Admin Dropdown for Agent Booking -->
+            @if ($isAdmin)
                 <div class="mb-3">
-                    <label class="form-label">Name</label>
-                    <input type="text" class="form-control" name="user[name]" value="{{ $user->name }}" readonly>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-control" name="user[email]" value="{{ $user->email }}" readonly>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input type="text" class="form-control" name="user[phone]" value="{{ $user->phone }}" readonly>
-                </div>
-            @else
-                <div class="mb-3">
-                    <label class="form-label">Your Name</label>
-                    <input type="text" class="form-control" name="user[name]" value="{{ old('user.name') }}" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-control" name="user[email]" value="{{ old('user.email') }}" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <!-- Provide a default value so that the phone number meets the minimum length requirement -->
-                    <input type="text" class="form-control" name="user[phone]"
-                        value="{{ old('user.phone', '+0000000000') }}" required>
+                    <label class="form-label">Book on behalf of Agent</label>
+                    <select class="form-select" name="agent_id" id="agent_id">
+                        <option value="">Select an Agent</option>
+                        @foreach ($vendors as $vendor)
+                            <option value="{{ $vendor->id }}" data-name="{{ $vendor->name }}"
+                                data-email="{{ $vendor->email }}" data-phone="{{ $vendor->phone }}">
+                                {{ $vendor->name }} ({{ $vendor->email }})
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
             @endif
 
-            <!-- Supplier Information (hidden) -->
-            <div style="display: none;">
-                <input type="hidden" name="supplier_data[first_name_original]" value="Mjellma Travel">
-                <input type="hidden" name="supplier_data[last_name_original]" value="Mjellma Travel">
-                <input type="hidden" name="supplier_data[email]" value="mjellmatravel@hotmail.com">
-                <!-- Random phone number is generated if needed -->
-                <input type="hidden" name="supplier_data[phone]" value="{{ rand(1000000000, 9999999999) }}">
+            <!-- User Info -->
+            <div class="mb-3">
+                <label class="form-label">Your First Name</label>
+                <input type="text" id="first_name" name="first_name" class="form-control"
+                    value="{{ old('first_name', $defaultFirstName) }}" required>
             </div>
+            <div class="mb-3">
+                <label class="form-label">Your Last Name</label>
+                <input type="text" id="last_name" name="last_name" class="form-control"
+                    value="{{ old('last_name', $defaultLastName) }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" id="email" name="email" class="form-control"
+                    value="{{ old('email', $user->email ?? '') }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Phone</label>
+                <input type="text" id="phone" name="phone" class="form-control"
+                    value="{{ old('phone', $user->phone ?? '+0000000000') }}" required>
+            </div>
+
+            <!-- Supplier Info (hidden) -->
+            <input type="hidden" name="supplier_data[first_name_original]" value="Mjellma Travel">
+            <input type="hidden" name="supplier_data[last_name_original]" value="Mjellma Travel">
+            <input type="hidden" name="supplier_data[email]" value="mjellmatravel@hotmail.com">
+            <input type="hidden" name="supplier_data[phone]" value="{{ rand(1000000000, 9999999999) }}">
 
             <!-- Guests Section -->
             <h3 class="fw-bold">Guests</h3>
@@ -126,7 +131,6 @@
                 </select>
             </div>
 
-            <!-- Hidden Payment Fields -->
             <input type="hidden" id="payment_type_amount" name="payment_type[amount]">
             <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
             <input type="hidden" id="payment_type_type" name="payment_type[type]">
@@ -137,6 +141,7 @@
         </form>
     </div>
 
+    <!-- Scripts -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const paymentTypeSelect = document.getElementById('payment_type');
@@ -146,40 +151,74 @@
             const creditCardRequiredInput = document.getElementById('payment_type_is_need_credit_card_data');
             const guestsContainer = document.getElementById('guests-container');
 
-            // Function to update hidden payment fields based on selected option
+            // Admin autofill logic
+            const agentSelect = document.getElementById('agent_id');
+            const firstNameInput = document.getElementById('first_name');
+            const lastNameInput = document.getElementById('last_name');
+            const emailInput = document.getElementById('email');
+            const phoneInput = document.getElementById('phone');
+
+            const defaultFirstName = firstNameInput.value;
+            const defaultLastName = lastNameInput.value;
+            const defaultEmail = emailInput.value;
+            const defaultPhone = phoneInput.value;
+
+            if (agentSelect) {
+                agentSelect.addEventListener('change', function() {
+                    const selected = agentSelect.options[agentSelect.selectedIndex];
+
+                    if (!selected.value) {
+                        // Reset to default user data
+                        firstNameInput.value = defaultFirstName;
+                        lastNameInput.value = defaultLastName;
+                        emailInput.value = defaultEmail;
+                        phoneInput.value = defaultPhone;
+                        return;
+                    }
+
+                    const fullName = selected.dataset.name || '';
+                    const email = selected.dataset.email || '';
+                    const phone = selected.dataset.phone || '';
+                    const nameParts = fullName.trim().split(' ');
+                    const firstName = nameParts[0] || '';
+                    const lastName = nameParts.slice(1).join(' ') || '';
+
+                    firstNameInput.value = firstName;
+                    lastNameInput.value = lastName;
+                    emailInput.value = email;
+                    phoneInput.value = phone;
+                });
+            }
+
+            // Payment field sync
             function updatePaymentFields() {
                 const selected = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
-                const type = selected.dataset.type;
-                const currency = selected.dataset.currency;
-                const amount = selected.dataset.amount;
-                const needCard = selected.dataset.needCard === '1';
-
-                paymentAmountInput.value = amount;
-                paymentCurrencyInput.value = currency;
-                paymentTypeHiddenInput.value = type;
-                creditCardRequiredInput.value = needCard ? '1' : '0';
+                paymentAmountInput.value = selected.dataset.amount;
+                paymentCurrencyInput.value = selected.dataset.currency;
+                paymentTypeHiddenInput.value = selected.dataset.type;
+                creditCardRequiredInput.value = selected.dataset.needCard === '1' ? '1' : '0';
             }
 
             paymentTypeSelect.addEventListener('change', updatePaymentFields);
             updatePaymentFields();
 
-            // Dynamically add additional guest fields
+            // Add guest dynamically
             let guestIndex = 1;
             document.getElementById('addGuest').addEventListener('click', function() {
                 const guestDiv = document.createElement('div');
                 guestDiv.classList.add('guest', 'mb-4');
                 guestDiv.innerHTML = `
-                    <div class="row">
-                        <div class="col-md-6">
-                            <label class="form-label">Guest First Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Guest Last Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required>
-                        </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Guest First Name</label>
+                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required>
                     </div>
-                `;
+                    <div class="col-md-6">
+                        <label class="form-label">Guest Last Name</label>
+                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required>
+                    </div>
+                </div>
+            `;
                 guestsContainer.appendChild(guestDiv);
                 guestIndex++;
             });
