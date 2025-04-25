@@ -13,6 +13,8 @@ use DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use App\Mail\BookingConfirmationEmail;
+use Illuminate\Support\Facades\Mail;
 
 class HotelHController extends Controller
 {
@@ -1114,44 +1116,62 @@ class HotelHController extends Controller
             return response()->json(['error' => 'Missing order_id'], 422);
         }
 
-        // Handle user email/phone fallback
-        $userEmail = isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)
-            ? trim($data['email']) : 'guest@example.com';
+        $userFirstName = isset($data['first_name']) ? trim($data['first_name']) : '';
+        $userLastName  = isset($data['last_name']) ? trim($data['last_name']) : '';
+        $userEmail     = (isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL))
+                            ? trim($data['email'])
+                            : 'guest@example.com';
+        $userPhone     = isset($data['phone']) ? trim($data['phone']) : '';
+        if (strlen($userPhone) < 5) {
+            $userPhone = '+0000000000';
+        }
 
-        $userPhone = isset($data['phone']) ? trim($data['phone']) : '+0000000000';
-        if (strlen($userPhone) < 5) $userPhone = '+0000000000';
-
-        // Determine who booked
+        $user = auth()->user();
         $bookedBy = 'guest';
         $adminId = null;
-        $agentId = null;
+        $agentId = $data['agent_id'] ?? null;
         $userId = null;
 
-        if (auth()->check()) {
-            switch (auth()->user()->role_id) {
-                case 1:
-                    $bookedBy = 'admin';
-                    $adminId = auth()->id();
-                    $agentId = $data['agent_id'] ?? null;
-                    break;
-                case 2:
-                    $bookedBy = 'agent';
-                    $agentId = auth()->id();
-                    break;
-                case 3:
-                    $bookedBy = 'user';
-                    $userId = auth()->id();
-                    break;
+        if ($user) {
+            $roleId = $user->role_id;
+            $bookedBy = match ($roleId) {
+                1 => 'admin',
+                2 => 'agent',
+                3 => 'user',
+                default => 'guest',
+            };
+
+            if ($roleId === 1 && !empty($data['agent_id'])) {
+                $agent = User::find($data['agent_id']);
+                if ($agent) {
+                    $userFirstName = $agent->name;
+                    $userLastName = '';
+                    $userEmail = $agent->email ?? $userEmail;
+                    $userPhone = $agent->phone ?? $userPhone;
+                    $agentId = $agent->id;
+
+                    \Log::info('Booking made by admin for agent', [
+                        'admin_id' => $user->id,
+                        'agent_id' => $agent->id,
+                        'agent_email' => $agent->email
+                    ]);
+                }
+                $adminId = $user->id;
+            } elseif ($roleId === 2) {
+                $agentId = $user->id;
+            } elseif ($roleId === 3) {
+                $userId = $user->id;
             }
         }
 
-        $finalPaymentType = $data['payment_type']['type'] ?? 'deposit';
+        $originalPaymentType = $data['payment_type']['type'] ?? 'deposit';
+        $finalPaymentType = ($originalPaymentType === 'now') ? 'now' : 'deposit';
 
         $payload = [
             'user' => [
-                'first_name' => $data['first_name'] ?? '',
-                'last_name'  => $data['last_name'] ?? '',
-                'email'      => $userEmail,
+                'first_name' => $userFirstName,
+                'last_name'  => $userLastName,
+                'email'      => 'lindor.morina@progtelx.com', // ✅ RateHawk email fixed
                 'phone'      => $userPhone,
             ],
             'supplier_data' => [
@@ -1164,11 +1184,12 @@ class HotelHController extends Controller
                 'partner_order_id'  => $data['partner_order_id'] ?? '',
                 'comment'           => $data['partner_comment'] ?? '',
                 'amount_sell_b2b2c' => isset($data['amount_sell_b2b2c']) && is_numeric($data['amount_sell_b2b2c'])
-                    ? number_format($data['amount_sell_b2b2c'], 2, '.', '') : '0.00',
+                                        ? number_format($data['amount_sell_b2b2c'], 2, '.', '')
+                                        : '0.00',
             ],
-            'order_id' => $data['order_id'],
-            'language' => $data['language'] ?? 'en',
-            'rooms'    => $data['rooms'] ?? [],
+            'order_id'     => $data['order_id'],
+            'language'     => $data['language'] ?? 'en',
+            'rooms'        => $data['rooms'] ?? [],
             'payment_type' => [
                 'type'          => $finalPaymentType,
                 'amount'        => $data['payment_type']['amount'] ?? '',
@@ -1180,7 +1201,7 @@ class HotelHController extends Controller
 
         \Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
 
-        $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+        $response = Http::withBasicAuth($this->username, $this->password)
             ->withHeaders(['Content-Type' => 'application/json'])
             ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
 
@@ -1188,13 +1209,13 @@ class HotelHController extends Controller
 
         $json = $response->json();
 
-        // Simulate success for testing
         if (isset($json['error']) && $json['error'] === 'insufficient_b2b_balance') {
             \Log::warning('Simulating booking success due to insufficient_b2b_balance for testing.');
             $json = [
                 'status' => 'ok',
                 'data'   => [
                     'order_id' => $payload['order_id'],
+                    'item_id'  => 'simulated_guest_' . rand(1000, 9999),
                     'status'   => 'Simulated'
                 ],
             ];
@@ -1210,7 +1231,7 @@ class HotelHController extends Controller
                 'admin_id'         => $adminId,
                 'agent_id'         => $agentId,
                 'user_id'          => $userId,
-                'user_email'       => $userEmail,
+                'user_email'       => $userEmail, // ✅ Real user email stored in DB
                 'user_phone'       => $userPhone,
                 'payment_type'     => $finalPaymentType,
                 'payment_amount'   => $data['payment_type']['amount'] ?? null,
@@ -1221,7 +1242,7 @@ class HotelHController extends Controller
             ]);
 
             return view('Hotel::frontend.payment-success', [
-                'order_id' => $data['order_id'],
+                'order_id' => $payload['order_id'],
                 'partner_order_id' => $data['partner_order_id'] ?? null,
             ]);
         }
@@ -1286,7 +1307,7 @@ class HotelHController extends Controller
     //see details
     public function showBookingDetails(Request $request, $orderId)
     {
-        $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+        $response = Http::withBasicAuth($this->username, $this->password)
             ->withHeaders(['Content-Type' => 'application/json'])
             ->post($this->apiUrl . 'hotel/order/info/', [
                 "ordering" => [
@@ -1315,12 +1336,33 @@ class HotelHController extends Controller
     }
 
     //cancel
+    // public function cancelBooking(Request $request, $partnerOrderId)
+    // {
+    //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+    //         ->withHeaders(['Content-Type' => 'application/json'])
+    //         ->post($this->apiUrl . 'hotel/order/cancel/', [
+    //             'partner_order_id' => $partnerOrderId
+    //         ]);
+
+    //     $json = $response->json();
+
+    //     if ($json['status'] === 'ok') {
+    //         return redirect()->back()->with('success', 'Booking cancelled successfully.');
+    //     }
+
+    //     return redirect()->back()->with('error', $json['error'] ?? 'Failed to cancel booking.');
+    // }
+
+
     public function cancelBooking(Request $request, $partnerOrderId)
     {
-        $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
+        $response = Http::withBasicAuth($this->username, $this->password)
             ->withHeaders(['Content-Type' => 'application/json'])
             ->post($this->apiUrl . 'hotel/order/cancel/', [
-                'partner_order_id' => $partnerOrderId
+                'partner_order_id' => $partnerOrderId,
+                'user' => [
+                    'email' => 'lindor.morina@progtelx.com' // ✅ only your email, no DB email
+                ]
             ]);
 
         $json = $response->json();
@@ -1332,7 +1374,51 @@ class HotelHController extends Controller
         return redirect()->back()->with('error', $json['error'] ?? 'Failed to cancel booking.');
     }
 
+    public function sendEmailFromPartnerOrder($partnerOrderId)
+    {
+        // 1. Get the booking from your local DB
+        $storedBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
 
+        if (!$storedBooking || !filter_var($storedBooking->user_email, FILTER_VALIDATE_EMAIL)) {
+            Log::warning("❌ Invalid or missing user_email for partner_order_id: $partnerOrderId");
+            return false;
+        }
 
+        // 2. Fetch booking info from RateHawk API
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/info/', [
+                "ordering" => [
+                    "ordering_type" => "desc",
+                    "ordering_by" => "created_at"
+                ],
+                "pagination" => [
+                    "page_size" => 1,
+                    "page_number" => 1
+                ],
+                "search" => [
+                    "partner_order_ids" => [$partnerOrderId] // ← Using partner_order_id instead of order_ids
+                ],
+                "language" => "en"
+            ]);
 
+        $json = $response->json();
+
+        if ($json['status'] !== 'ok' || empty($json['data']['orders'][0])) {
+            Log::error("❌ Could not fetch booking from RateHawk for partner_order_id: $partnerOrderId", [
+                'response' => $json
+            ]);
+            return false;
+        }
+
+        $bookingData = $json['data']['orders'][0];
+
+        // 3. Send the email
+        Mail::to($storedBooking->user_email)
+            ->send(new BookingConfirmationEmail($bookingData));
+
+        Log::info("📧 Booking confirmation email sent to {$storedBooking->user_email} for partner_order_id: $partnerOrderId");
+
+        return true;
+    }
 }

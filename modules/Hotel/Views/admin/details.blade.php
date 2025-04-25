@@ -95,14 +95,17 @@
                     </div>
                 @endforeach
 
-                <div class="mt-4">
-                    <form method="POST"
-                        action="{{ route('booking.admin.cancel', ['partnerOrderId' => $booking['partner_data']['order_id']]) }}"
-                        onsubmit="return confirm('{{ __('Are you sure to cancel this booking?') }}');">
-                        @csrf
-                        <button class="btn btn-danger">{{ __('Cancel Booking') }}</button>
-                    </form>
-                </div>
+                @if (strtolower($booking['status']) !== 'cancelled' && !empty($booking['partner_data']['order_id']))
+                    <div class="mt-4">
+                        <form method="POST"
+                            action="{{ route('booking.admin.cancel', ['partnerOrderId' => $booking['partner_data']['order_id']]) }}"
+                            onsubmit="return confirm('{{ __('Are you sure to cancel this booking?') }}');">
+                            @csrf
+                            <button class="btn btn-danger">{{ __('Cancel Booking') }}</button>
+                        </form>
+                    </div>
+                @endif
+
             </div>
         </div>
     </div>
