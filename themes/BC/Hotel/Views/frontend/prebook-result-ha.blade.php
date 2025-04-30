@@ -43,10 +43,21 @@
                         <p><strong>Check-in:</strong> {{ $checkin ?? 'N/A' }}</p>
                         <p><strong>Check-out:</strong> {{ $checkout ?? 'N/A' }}</p>
 
+                        <p><strong>Adults:</strong> {{ session('adults', 1) }}</p>
+
+                        @php
+                            $childrenArray = session('children', []);
+                            $childrenCount = is_array($childrenArray) ? count($childrenArray) : 0;
+                        @endphp
+
+                        <p><strong>Children:</strong> {{ $childrenCount }}</p>
+
+
                         @if ($rate)
                             <p><strong>Room Type:</strong> {{ $rate['room_name'] ?? 'N/A' }}</p>
                             <p><strong>Meal Plan:</strong> {{ ucfirst($rate['meal'] ?? 'N/A') }}</p>
-                            <p><strong>Breakfast Included:</strong> {{ $rate['meal_data']['has_breakfast'] ? 'Yes' : 'No' }}
+                            <p><strong>Breakfast Included:</strong>
+                                {{ $rate['meal_data']['has_breakfast'] ? 'Yes' : 'No' }}
                             </p>
                             <h4 class="fw-bold text-success">Total Price:
                                 {{ $rate['payment_options']['payment_types'][0]['amount'] ?? 'N/A' }}
@@ -66,6 +77,9 @@
                                 <input type="hidden" name="checkout" value="{{ $checkout }}">
                                 <input type="hidden" name="room_code" value="{{ $rate['room_code'] ?? '' }}">
                                 <input type="hidden" name="meal_plan" value="{{ $rate['meal'] ?? 'N/A' }}">
+                                <input type="hidden" name="adults" value="{{ session('adults', 1) }}">
+                                <input type="hidden" name="children" value="{{ json_encode(session('children', [])) }}">
+
 
                                 <button type="submit" class="btn btn-primary w-100 py-2 mt-3">Confirm Booking</button>
                             </form>

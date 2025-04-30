@@ -137,13 +137,14 @@
                                 <!-- Children -->
                                 <div class="col-6 col-md-2">
                                     <label for="children" class="form-label">Children</label>
-                                    <input type="number" id="children" name="children[]"
-                                        class="form-control @error('children.0') is-invalid @enderror"
-                                        value="{{ old('children.0', 0) }}" min="0">
-                                    @error('children.0')
+                                    <input type="number" id="children" name="children"
+                                        class="form-control @error('children') is-invalid @enderror"
+                                        value="{{ old('children', 0) }}" min="0">
+                                    @error('children')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
+
 
                                 <!-- Rooms -->
                                 <div class="col-6 col-md-2">

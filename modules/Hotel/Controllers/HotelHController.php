@@ -33,7 +33,6 @@ class HotelHController extends Controller
     public function searchHotels(Request $request)
     {
         try {
-            // Validate input request parameters
             $request->validate([
                 'hotel_name'         => 'nullable|string',
                 'location'           => 'nullable|string',
@@ -44,8 +43,7 @@ class HotelHController extends Controller
                 'checkout'           => 'required|date|after:checkin',
                 'rooms'              => 'required|integer|min:1',
                 'adults'             => 'required|integer|min:1',
-                'children'           => 'nullable|array',
-                'children.*'         => 'integer|min:0',
+                'children'           => 'nullable|integer|min:0',
                 'min_price'          => 'nullable|numeric|min:0',
                 'max_price'          => 'nullable|numeric|min:0',
                 'star_rating'        => 'nullable|array',
@@ -53,19 +51,17 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
             ]);
 
-            // Basic DB query only for hotels
             $hotelQuery = DB::table('hotels')
                 ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
 
-            // Apply filters like hotel name, star rating, location
             if ($request->filled('hotel_name')) {
                 $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
             }
+
             if ($request->filled('star_rating')) {
                 $hotelQuery->whereIn('star_rating', $request->star_rating);
             }
 
-            // Geolocation filter if latitude and longitude are provided
             if ($request->filled('latitude') && $request->filled('longitude')) {
                 $latitude  = $request->latitude;
                 $longitude = $request->longitude;
@@ -84,41 +80,38 @@ class HotelHController extends Controller
                            ->whereBetween('longitude', $lngRange);
             }
 
-            // Fetch hotels (limit 30 results for now)
             $hotels = $hotelQuery->limit(30)->get();
 
-            // Fetch images for hotels
             $hotelIds = $hotels->pluck('hotel_id')->toArray();
             $hotelImages = DB::table('hotel_images')
                 ->whereIn('hotel_id', $hotelIds)
                 ->groupBy('hotel_id')
                 ->pluck('image_url', 'hotel_id');
 
-            // Attach images and initialize price & breakfast data for each hotel
             foreach ($hotels as $hotel) {
                 $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
-                $hotel->daily_price = null;  // Default daily price
-                $hotel->has_breakfast = false;  // Default breakfast info
+                $hotel->daily_price = null;
+                $hotel->has_breakfast = false;
             }
 
-            // Fetch pricing information for the hotels from the external API
+            $childrenCount = (int) $request->input('children', 0);
+            $guests = [[
+                'adults'   => (int)$request->adults,
+                'children' => array_fill(0, $childrenCount, 0),
+            ]];
+
             $cacheKey = 'hotel_prices_' . implode('_', $hotelIds) . '_' . $request->checkin . '_' . $request->checkout;
-            $apiData = Cache::remember($cacheKey, 300, function () use ($request, $hotelIds) {
-                // Prepare the API request data
+            $apiData = Cache::remember($cacheKey, 300, function () use ($request, $hotelIds, $guests) {
                 $apiBody = [
                     'checkin'   => $request->checkin,
                     'checkout'  => $request->checkout,
                     'residency' => 'gb',
                     'language'  => 'en',
-                    'guests'    => [[
-                        'adults'   => (int)$request->adults,
-                        'children' => array_map('intval', $request->children ?? []),
-                    ]],
+                    'guests'    => $guests,
                     'ids'       => $hotelIds,
                     'currency'  => 'EUR',
                 ];
 
-                // Call the external API and fetch hotel pricing
                 $response = Http::withBasicAuth($this->username, $this->password)
                                 ->withHeaders(['Content-Type' => 'application/json'])
                                 ->post($this->apiUrl . 'search/serp/hotels', $apiBody);
@@ -126,25 +119,17 @@ class HotelHController extends Controller
                 return $response->json()['data']['hotels'] ?? [];
             });
 
-            // Create an associative array for hotel_id => pricing data
             $pricesResult = [];
-            $minPrice = PHP_INT_MAX; // Initialize with a very high number
-            $maxPrice = PHP_INT_MIN; // Initialize with a very low number
+            $minPrice = PHP_INT_MAX;
+            $maxPrice = PHP_INT_MIN;
 
             foreach ($apiData as $apiHotel) {
                 $hotelId = $apiHotel['id'] ?? null;
-                if (!$hotelId) {
-                    continue;
-                }
+                if (!$hotelId) continue;
 
-                // Get the first daily price from the API response (if available)
                 $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                if (!$dailyPrice) {
-                    $dailyPrice = null;  // Default if no price is available
-                }
-
-                // Check for breakfast inclusion
                 $hasBreakfast = false;
+
                 if (!empty($apiHotel['rates'])) {
                     foreach ($apiHotel['rates'] as $rate) {
                         if (!empty($rate['meal_data']['has_breakfast'])) {
@@ -154,37 +139,32 @@ class HotelHController extends Controller
                     }
                 }
 
-                // Store pricing data
                 $pricesResult[$hotelId] = [
                     'daily_price'   => $dailyPrice,
                     'has_breakfast' => $hasBreakfast,
                 ];
 
-                // Track min and max price
                 if ($dailyPrice !== null) {
                     $minPrice = min($minPrice, $dailyPrice);
                     $maxPrice = max($maxPrice, $dailyPrice);
                 }
             }
 
-            // Merge the pricing data into each hotel
             foreach ($hotels as $hotel) {
-                $hotelId = $hotel->hotel_id;
-                if (isset($pricesResult[$hotelId])) {
-                    $hotel->daily_price = $pricesResult[$hotelId]['daily_price'];
-                    $hotel->has_breakfast = $pricesResult[$hotelId]['has_breakfast'];
+                if (isset($pricesResult[$hotel->hotel_id])) {
+                    $hotel->daily_price = $pricesResult[$hotel->hotel_id]['daily_price'];
+                    $hotel->has_breakfast = $pricesResult[$hotel->hotel_id]['has_breakfast'];
                 }
             }
 
-            // Return the results to the view
             return view('Hotel::frontend.results-ha', [
                 'hotels'   => $hotels,
                 'checkin'  => $request->checkin,
                 'checkout' => $request->checkout,
                 'adults'   => $request->adults,
-                'children' => $request->children ?? [],
-                'minPrice' => $minPrice === PHP_INT_MAX ? 0 : $minPrice,  // If no price found, set minPrice to 0
-                'maxPrice' => $maxPrice === PHP_INT_MIN ? 999 : $maxPrice, // If no price found, set maxPrice to 999
+                'children' => $childrenCount,
+                'minPrice' => $minPrice === PHP_INT_MAX ? 0 : $minPrice,
+                'maxPrice' => $maxPrice === PHP_INT_MIN ? 999 : $maxPrice,
             ]);
 
         } catch (\Exception $e) {
@@ -192,6 +172,7 @@ class HotelHController extends Controller
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
+
 
 
     private function fetchApiData($checkin, $checkout, $adults, $children, $hotelIds, $hotelHids)
@@ -251,99 +232,89 @@ class HotelHController extends Controller
         Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
 
         try {
-            // Retrieve parameters from the request URL
             $checkin = $request->query('checkin', now()->format('Y-m-d'));
             $checkout = $request->query('checkout', now()->addDay()->format('Y-m-d'));
             $residency = $request->query('residency', 'gb');
             $language = $request->query('language', 'en');
-            $adults = (int) $request->query('adults', 2);
-            $children = $request->query('children', []); // Default empty array for children
             $currency = $request->query('currency', 'EUR');
+            $adults = (int) $request->query('adults', 1);
 
-            // Fetch hotel data from the database
+            // Handle children properly
+            $childrenParam = $request->query('children', []);
+            if (is_string($childrenParam)) {
+                $children = array_filter(array_map('intval', explode(',', $childrenParam)));
+            } elseif (is_array($childrenParam)) {
+                $children = array_map('intval', $childrenParam);
+            } else {
+                $children = [];
+            }
+
+            // Fetch hotel from DB
             $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
-
             if (!$dbHotel) {
-                Log::error('Hotel not found in database', ['hotel_id' => $id]);
+                Log::error('Hotel not found in DB', ['hotel_id' => $id]);
                 return redirect()->back()->withErrors(['error' => 'Hotel not found']);
             }
 
-            // Fetch hotel images from the database
             $hotelImages = DB::table('hotel_images')
                 ->where('hotel_id', $id)
                 ->pluck('image_url')
                 ->toArray();
 
-            // Prepare API payload
+            // Build API request
             $apiBody = [
                 'checkin' => $checkin,
                 'checkout' => $checkout,
                 'residency' => $residency,
                 'language' => $language,
-                'guests' => [
-                    [
-                        'adults' => $adults,
-                        'children' => array_map('intval', $children), // Ensure children are integers
-                    ],
-                ],
-                'id' => $id,
                 'currency' => $currency,
+                'id' => $id,
+                'guests' => [[
+                    'adults' => $adults,
+                    'children' => $children,
+                ]]
             ];
 
-            Log::info('Requesting hotel info with API payload', ['payload' => $apiBody]);
-
-            // Make the API call
             $response = Http::withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->apiUrl . 'search/hp/', $apiBody);
 
-            Log::info('Hotel Info API Response', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
             if ($response->failed()) {
-                Log::error('Hotel API Request Failed', [
-                    'status' => $response->status(),
-                    'response_body' => $response->body(),
-                ]);
-                throw new \Exception('Failed to fetch hotel info');
+                Log::error('API call failed', ['response' => $response->body()]);
+                throw new \Exception('Failed to fetch hotel details');
             }
 
-            // Parse the response data
             $apiData = $response->json()['data']['hotels'][0] ?? null;
-
             if (!$apiData) {
-                Log::error('Hotel details not found in API response', ['hotel_id' => $id]);
-                return redirect()->back()->withErrors(['error' => 'Failed to fetch hotel details from API']);
+                return redirect()->back()->withErrors(['error' => 'Hotel not found in API']);
             }
 
-            // Merge database and API data
             $hotel = [
-                'id' => $apiData['id'] ?? $dbHotel->hotel_id ?? null,
+                'id' => $apiData['id'] ?? $dbHotel->hotel_id,
                 'name' => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
                 'address' => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
                 'star_rating' => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
                 'check_in_time' => $apiData['check_in_time'] ?? 'N/A',
                 'check_out_time' => $apiData['check_out_time'] ?? 'N/A',
-                'images_ext' => $hotelImages, // Use images from the database
-                'price_per_night' => $apiData['rates'][0]['daily_prices'][0] ?? 'N/A', // First rate's daily price
+                'images_ext' => $hotelImages,
+                'price_per_night' => $apiData['rates'][0]['daily_prices'][0] ?? 'N/A',
             ];
 
-            // Extract room rates
             $roomRates = $apiData['rates'] ?? [];
             $hasRoomRates = count($roomRates) > 0;
 
-            // Return the view with the extracted data
-            return view('Hotel::frontend.info-ha', compact('hotel', 'roomRates', 'hasRoomRates', 'checkin', 'checkout', 'residency', 'language', 'adults', 'children', 'currency'));
+            return view('Hotel::frontend.info-ha', compact(
+                'hotel', 'roomRates', 'hasRoomRates',
+                'checkin', 'checkout', 'residency', 'language',
+                'adults', 'children', 'currency'
+            ));
 
         } catch (\Exception $e) {
-            // Log and return an error response
-            Log::error('Error fetching hotel details', [
+            Log::error('Error fetching hotel info', [
                 'hotel_id' => $id,
-                'error_message' => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
-            return redirect()->back()->withErrors(['error' => 'An error occurred while fetching hotel details.']);
+            return redirect()->back()->withErrors(['error' => 'Could not load hotel information.']);
         }
     }
 
@@ -400,6 +371,8 @@ class HotelHController extends Controller
                 'roomName' => $roomName,
                 'checkin' => $request->checkin,
                 'checkout' => $request->checkout,
+                'adults' => (int) $request->input('adults', 1),
+                'children' => json_decode($request->input('children', '[]'), true),
             ]);
 
             // Redirect to the result page with prebooking data
@@ -416,6 +389,9 @@ class HotelHController extends Controller
         $roomName = session('roomName');
         $checkin = session('checkin', now()->format('Y-m-d'));
         $checkout = session('checkout', now()->addDay()->format('Y-m-d'));
+        $adults = session('adults', 1);
+        $children = session('children', []);
+
 
         if (!$prebookData) {
             return redirect()->route('hotel.info')->withErrors(['error' => 'No prebooking data found.']);
@@ -477,6 +453,8 @@ class HotelHController extends Controller
                 'booking.checkin' => $request->input('checkin'),
                 'booking.checkout' => $request->input('checkout'),
                 'booking.meal_plan' => $request->input('meal_plan'),
+                'booking.adults' => $request->input('adults', 1),
+                'booking.children' => json_decode($request->input('children', '[]'), true),
             ]);
 
             $apiBody = [

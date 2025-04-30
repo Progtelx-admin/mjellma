@@ -1,3 +1,4 @@
+<!-- Updated Blade Template -->
 @extends('layouts.app')
 
 @section('content')
@@ -26,9 +27,8 @@
                     <input type="hidden" name="rooms" value="{{ request('rooms') }}">
                     <input type="hidden" name="latitude" value="{{ request('latitude') }}">
                     <input type="hidden" name="longitude" value="{{ request('longitude') }}">
-                    @foreach (request('children', []) as $index => $child)
-                        <input type="hidden" name="children[]" value="{{ $child }}">
-                    @endforeach
+                    <input type="hidden" name="children"
+                        value="{{ is_array(request('children')) ? count(request('children')) : request('children', 0) }}">
 
                     <!-- Price Filter -->
                     <div class="mb-4">
@@ -89,9 +89,7 @@
             <div class="col-md-9">
                 <!-- Toggle Buttons for List/Grid Views -->
                 <div class="view-toggle mb-3 text-end">
-                    <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"
-                            aria-hidden="true"></i>
-                    </button>
+                    <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"></i></button>
                     <button id="grid-view-btn" class="btn btn-outline-secondary"><i class="fa fa-th"></i></button>
                 </div>
 
@@ -104,7 +102,13 @@
                                     <!-- Hotel Image -->
                                     <div class="col-md-4">
                                         <a
-                                            href="{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}">
+                                            href="{{ route('hotel.info', [
+                                                'id' => $hotel->hotel_id,
+                                                'checkin' => $checkin,
+                                                'checkout' => $checkout,
+                                                'adults' => request('adults'),
+                                                'children' => is_array(request('children')) ? count(request('children')) : request('children', 0),
+                                            ]) }}">
                                             <div class="hotel-image">
                                                 @if (!empty($hotel->image_url))
                                                     <img src="{{ $hotel->image_url }}"
@@ -121,7 +125,13 @@
                                     <div class="col-md-8">
                                         <div class="card-body d-flex flex-column justify-content-between h-100">
                                             <h5 class="fw-bold text-primary">
-                                                <a href="{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}"
+                                                <a href="{{ route('hotel.info', [
+                                                    'id' => $hotel->hotel_id,
+                                                    'checkin' => $checkin,
+                                                    'checkout' => $checkout,
+                                                    'adults' => request('adults'),
+                                                    'children' => is_array(request('children')) ? count(request('children')) : request('children', 0),
+                                                ]) }}"
                                                     class="text-decoration-none">
                                                     {{ $hotel->name ?? 'No name available' }}
                                                 </a>
@@ -151,12 +161,12 @@
                         @endforeach
                     </div>
 
-                    <!-- Loading Spinner (hidden by default) -->
+                    <!-- Loading Spinner -->
                     <div id="loading-spinner" class="my-3 text-center" style="display: none;">
                         <div class="spinner-border" role="status"></div>
                     </div>
 
-                    <!-- Sentinel element for infinite scroll -->
+                    <!-- Infinite Scroll Sentinel -->
                     <div id="infinite-scroll-sentinel"></div>
                 @else
                     <div class="col-12 text-center">
@@ -166,419 +176,4 @@
             </div>
         </div>
     </div>
-
-    <!-- Bootstrap Modal for Map -->
-    <div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="mapModalLabel">Hotel Map</h5>
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" aria-label="Close">
-                        <i class="fa fa-close"></i>
-                    </button>
-                </div>
-                <div class="modal-body p-0">
-                    <div id="hotelMap" style="height: 600px; width: 100%;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Leaflet.js Map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Bootstrap JS + Popper.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
-
-    <script>
-        /* -------------------------
-         *  Map Modal Initialization
-         * ------------------------- */
-        let mapInitialized = false;
-
-        document.addEventListener("DOMContentLoaded", function() {
-            var mapModal = document.getElementById('mapModal');
-            mapModal.addEventListener('shown.bs.modal', function() {
-                if (!mapInitialized) {
-                    initializeMap();
-                    mapInitialized = true;
-                }
-            });
-        });
-
-        function initializeMap() {
-            var map = L.map('hotelMap');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-
-            var markers = [];
-            var bounds = L.latLngBounds();
-
-            @if ($hotels && $hotels->count() > 0)
-                @foreach ($hotels as $hotel)
-                    @if (!empty($hotel->latitude) && !empty($hotel->longitude))
-                        var hotelUrl =
-                            "{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}";
-                        var imageUrl = "{{ $hotel->image_url }}";
-                        var defaultImage = "{{ asset('images/default-image.jpg') }}";
-
-                        var popupContent = `
-                            <div style="width: 200px; font-family: Arial, sans-serif; text-align: center;">
-                                <img src="${imageUrl}" onerror="this.src='${defaultImage}'"
-                                    style="width: 100%; height: 80px; object-fit: cover; border-radius: 5px;" />
-                                <h6 style="margin: 5px 0;">
-                                    <a href="${hotelUrl}" target="_blank" style="color: #007bff; font-weight: bold; text-decoration: none;">
-                                        {{ $hotel->name }}
-                                    </a>
-                                </h6>
-                                <p style="margin: 2px 0; font-size: 12px; color: #ffa500;">
-                                    @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
-                                        <i class="fa fa-star" aria-hidden="true" style="color: #FCC737"></i>
-                                    @endfor
-                                </p>
-                                <p style="margin: 2px 0; font-size: 13px; color: #28a745;">
-                                    {{ $hotel->daily_price ?? 'N/A' }} EUR
-                                </p>
-                            </div>
-                        `;
-
-                        var marker = L.marker([{{ $hotel->latitude }}, {{ $hotel->longitude }}])
-                            .addTo(map)
-                            .bindPopup(popupContent);
-
-                        markers.push(marker);
-                        bounds.extend(marker.getLatLng());
-                    @endif
-                @endforeach
-
-                if (markers.length > 0) {
-                    map.fitBounds(bounds, {
-                        padding: [40, 40]
-                    });
-                } else {
-                    map.setView([42.6629, 21.1655], 13);
-                }
-
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 500);
-            @endif
-        }
-
-        /* -------------------------
-         *   Infinite Scrolling
-         * ------------------------- */
-        let currentPage = 1;
-        let isLoading = false;
-        let hasMore = true;
-
-        const observerOptions = {
-            root: null,
-            rootMargin: "0px",
-            threshold: 0.1
-        };
-
-        const observerCallback = (entries) => {
-            const sentinel = entries[0];
-            if (sentinel.isIntersecting && !isLoading && hasMore) {
-                loadMoreHotels();
-            }
-        };
-
-        document.addEventListener('DOMContentLoaded', function() {
-            const sentinelElement = document.getElementById('infinite-scroll-sentinel');
-            if (sentinelElement) {
-                const observer = new IntersectionObserver(observerCallback, observerOptions);
-                observer.observe(sentinelElement);
-            }
-        });
-
-        function loadMoreHotels() {
-            isLoading = true;
-            currentPage++;
-            document.getElementById('loading-spinner').style.display = 'block';
-
-            const params = new URLSearchParams(window.location.search);
-            params.set('page', currentPage);
-
-            fetch("{{ route('hotel.search') }}?" + params.toString(), {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('loading-spinner').style.display = 'none';
-                    isLoading = false;
-                    if (data.hotels && data.hotels.length > 0) {
-                        appendHotels(data.hotels);
-                    } else {
-                        hasMore = false;
-                    }
-                })
-                .catch(error => {
-                    console.error("Error loading more hotels:", error);
-                    document.getElementById('loading-spinner').style.display = 'none';
-                    hasMore = false;
-                    isLoading = false;
-                });
-        }
-
-        function appendHotels(hotels) {
-            const hotelList = document.getElementById('hotel-list');
-            hotels.forEach(hotel => {
-                const cardWrapper = document.createElement('div');
-                cardWrapper.classList.add('card', 'mb-4', 'hotel-list-item', 'border-0', 'shadow-sm');
-
-                cardWrapper.innerHTML = `
-                    <div class="row g-0">
-                        <div class="col-md-4">
-                            <a href="{{ route('hotel.info', ['id' => '__ID__', 'checkin' => $checkin, 'checkout' => $checkout]) }}">
-                                <div class="hotel-image">
-                                    ${hotel.image_url ? `
-                                                                                <img src="${hotel.image_url}" alt="${hotel.name || 'No name'}" class="img-fluid"
-                                                                                     onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
-                                                                            ` : `
-                                                                                <div class="no-image-placeholder">No Image Available</div>
-                                                                            `}
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-8">
-                            <div class="card-body d-flex flex-column justify-content-between h-100">
-                                <h5 class="fw-bold text-primary">
-                                    <a href="{{ route('hotel.info', ['id' => '__ID__', 'checkin' => $checkin, 'checkout' => $checkout]) }}"
-                                       class="text-decoration-none">
-                                        ${hotel.name || 'No name available'}
-                                    </a>
-                                </h5>
-                                <p class="text-warning mb-2">
-                                    ${renderStars(hotel.star_rating)}
-                                </p>
-                                <p class="text-muted">
-                                    ${hotel.address ? hotel.address : 'Address not available'}
-                                </p>
-                                <p class="text-primary fw-semibold fs-5">
-                                    Starting from <span class="font-weight-bold">${hotel.daily_price || 'Price not available'}</span> / per night
-                                </p>
-                                <p class="text-success">
-                                    Breakfast Included: ${hotel.has_breakfast ? 'Yes' : 'No'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                cardWrapper.innerHTML = cardWrapper.innerHTML.replaceAll('__ID__', hotel.hotel_id);
-                hotelList.appendChild(cardWrapper);
-            });
-        }
-
-        function renderStars(starRating) {
-            let rating = starRating || 0;
-            let stars = '';
-            for (let i = 0; i < rating; i++) {
-                stars += '<i class="fa fa-star" aria-hidden="true" style="color: #FCC737"></i>';
-            }
-            return stars;
-        }
-
-        // Grid/List View Toggle Logic
-        document.getElementById('list-view-btn').addEventListener('click', function() {
-            document.getElementById('hotel-list').classList.remove('grid-view');
-            this.classList.add('active');
-            document.getElementById('grid-view-btn').classList.remove('active');
-        });
-
-        document.getElementById('grid-view-btn').addEventListener('click', function() {
-            document.getElementById('hotel-list').classList.add('grid-view');
-            this.classList.add('active');
-            document.getElementById('list-view-btn').classList.remove('active');
-        });
-    </script>
-
-    <style>
-        /*-------------------------------
-                                                Default List View Styles
-                                            -------------------------------*/
-        .hotel-list-item {
-            display: flex;
-            border-radius: 8px;
-        }
-
-        .hotel-image {
-            height: 200px;
-            background-color: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .hotel-image img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
-        }
-
-        .no-image-placeholder {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: #6c757d;
-            background-color: #e9ecef;
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
-        }
-
-        /*-------------------------------
-                                                Updated Grid View Styles
-                                            -------------------------------*/
-        #hotel-list.grid-view {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-
-        #hotel-list.grid-view .hotel-list-item {
-            flex-direction: column;
-            flex: 0 0 calc(33.3333% - 20px);
-            max-width: calc(33.3333% - 20px);
-            margin: 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #hotel-list.grid-view .row.g-0 {
-            display: flex;
-            flex-direction: column;
-            margin: 0;
-        }
-
-        #hotel-list.grid-view .col-md-4,
-        #hotel-list.grid-view .col-md-8 {
-            width: 100%;
-            max-width: 100%;
-            flex: none;
-        }
-
-        #hotel-list.grid-view .hotel-image {
-            height: 200px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        #hotel-list.grid-view .card-body {
-            padding: 15px;
-            border-top: none;
-            background-color: #fff;
-        }
-
-        /* Responsive: For tablets (2 columns) */
-        @media (max-width: 992px) {
-            #hotel-list.grid-view .hotel-list-item {
-                flex: 0 0 calc(50% - 20px);
-                max-width: calc(50% - 20px);
-            }
-        }
-
-        /* Responsive: For mobile devices (1 column) */
-        @media (max-width: 576px) {
-            #hotel-list.grid-view .hotel-list-item {
-                flex: 0 0 100%;
-                max-width: 100%;
-            }
-        }
-
-        /*-------------------------------
-                                                Filter Section Styles
-                                            -------------------------------*/
-        .filter-section .custom-checkbox {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-size: 1rem;
-            margin-bottom: 10px;
-            user-select: none;
-            position: relative;
-        }
-
-        .filter-section .custom-checkbox input {
-            position: absolute;
-            opacity: 0;
-            cursor: pointer;
-            height: 0;
-            width: 0;
-        }
-
-        .filter-section .checkmark {
-            height: 18px;
-            width: 18px;
-            background-color: #f0f0f0;
-            border: 2px solid #ccc;
-            border-radius: 4px;
-            margin-right: 10px;
-            position: relative;
-            transition: all 0.2s ease;
-        }
-
-        .filter-section .custom-checkbox:hover .checkmark {
-            background-color: #e6e6e6;
-        }
-
-        .filter-section .custom-checkbox input:checked~.checkmark {
-            background-color: #007bff;
-            border-color: #007bff;
-        }
-
-        .filter-section .checkmark::after {
-            content: "";
-            position: absolute;
-            display: none;
-            left: 5px;
-            top: 1px;
-            width: 5px;
-            height: 10px;
-            border: solid white;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-        }
-
-        .filter-section .custom-checkbox input:checked~.checkmark::after {
-            display: block;
-        }
-
-        .filter-section .star-icons {
-            margin-left: 5px;
-            display: flex;
-        }
-
-        .filter-section .form-control {
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
-
-        .filter-section .btn-primary {
-            background-color: #0056b3;
-            border: none;
-        }
-
-        .filter-section .btn-primary:hover {
-            background-color: #004494;
-        }
-
-        @media (max-width: 768px) {
-            .hotel-image {
-                height: 150px;
-            }
-        }
-    </style>
 @endsection
