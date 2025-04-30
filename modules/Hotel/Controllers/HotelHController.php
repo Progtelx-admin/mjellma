@@ -15,6 +15,8 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use App\Mail\BookingConfirmationEmail;
 use Illuminate\Support\Facades\Mail;
+use Modules\Hotel\Events\MjellmaBookingCreatedEvent;
+
 
 class HotelHController extends Controller
 {
@@ -1224,14 +1226,14 @@ class HotelHController extends Controller
         if (isset($json['status']) && $json['status'] === 'ok') {
             \Log::info('Booking success', ['response' => $json]);
 
-            MjellmaBooking::create([
+            $booking = MjellmaBooking::create([
                 'order_id'         => $data['order_id'],
                 'partner_order_id' => $data['partner_order_id'] ?? null,
                 'booked_by'        => $bookedBy,
                 'admin_id'         => $adminId,
                 'agent_id'         => $agentId,
                 'user_id'          => $userId,
-                'user_email'       => $userEmail, // ✅ Real user email stored in DB
+                'user_email'       => $userEmail,
                 'user_phone'       => $userPhone,
                 'payment_type'     => $finalPaymentType,
                 'payment_amount'   => $data['payment_type']['amount'] ?? null,
@@ -1241,11 +1243,21 @@ class HotelHController extends Controller
                 'api_error'        => $json['error'] ?? null,
             ]);
 
+            event(new MjellmaBookingCreatedEvent($booking));
+
+            // 📝 Log notification firing
+            \Log::info('🔔 MjellmaBookingCreatedEvent triggered', [
+                'order_id' => $booking->order_id,
+                'partner_order_id' => $booking->partner_order_id,
+                'user_email' => $booking->user_email,
+            ]);
+
             return view('Hotel::frontend.payment-success', [
                 'order_id' => $payload['order_id'],
                 'partner_order_id' => $data['partner_order_id'] ?? null,
             ]);
         }
+
 
         \Log::error('Booking failed', [
             'payload_sent'  => $payload,
@@ -1421,4 +1433,106 @@ class HotelHController extends Controller
 
         return true;
     }
+
+    //user agent
+    public function bookingHistory(Request $request)
+    {
+        $user = auth()->user();
+
+        // Make sure we are querying correctly
+        $query = MjellmaBooking::query();
+
+        $query->where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+              ->orWhere('agent_id', $user->id);
+        });
+
+        if ($status = $request->input('status')) {
+            $query->where('pcb_status', $status);
+        }
+
+        $bookings = $query->orderBy('created_at', 'desc')->paginate(20);
+
+        // If you also want to get live statuses from API
+        $orderIds = $bookings->pluck('order_id')->filter()->values()->map(function ($id) {
+            return (int) $id;
+        })->toArray();
+
+        $statuses = [];
+
+        if (!empty($orderIds)) {
+            $response = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->apiUrl . 'hotel/order/info/', [
+                    'ordering' => [
+                        'ordering_type' => 'desc',
+                        'ordering_by' => 'created_at'
+                    ],
+                    'pagination' => [
+                        'page_size' => count($orderIds),
+                        'page_number' => 1
+                    ],
+                    'search' => [
+                        'order_ids' => $orderIds
+                    ],
+                    'language' => 'en'
+                ]);
+
+            $data = $response->json();
+            if (isset($data['data']['orders'])) {
+                foreach ($data['data']['orders'] as $order) {
+                    $statuses[$order['order_id']] = $order['status'];
+                }
+            }
+        }
+
+        return view('User::frontend.bookingHistory', [
+            'bookings' => $bookings,
+            'statuses' => $statuses,
+            'statues' => config('booking.statuses'), // Typo kept if your blade still expects 'statues'
+        ]);
+    }
+
+    public function showBookingInvoice(Request $request, $orderId)
+    {
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->post($this->apiUrl . 'hotel/order/info/', [
+                "ordering" => [
+                    "ordering_type" => "desc",
+                    "ordering_by" => "created_at"
+                ],
+                "pagination" => [
+                    "page_size" => 1,
+                    "page_number" => 1
+                ],
+                "search" => [
+                    "order_ids" => [(int) $orderId]
+                ],
+                "language" => "en"
+            ]);
+
+        $json = $response->json();
+
+        if ($json['status'] === 'ok' && isset($json['data']['orders'][0])) {
+            $booking = json_decode(json_encode($json['data']['orders'][0]), true); // force array
+            $service = null;
+
+            if (!empty($booking['object_model']) && !empty($booking['object_id'])) {
+                $serviceModel = get_bookable_service_by_model($booking['object_model']);
+                if ($serviceModel && $modelInstance = $serviceModel::find($booking['object_id'])) {
+                    $service = $modelInstance;
+                }
+            }
+
+            return view('Hotel::admin.invoice', [
+                'booking' => $booking,
+                'service' => $service
+            ]);
+        }
+
+        return redirect()->back()->with('error', $json['error'] ?? 'Unable to fetch invoice.');
+    }
+
+
 }

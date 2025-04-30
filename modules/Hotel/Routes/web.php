@@ -24,6 +24,8 @@ Route::get('/hotel/payment/success', function () {
 })->name('hotel.payment.success');
 
 Route::get('/booking', 'HotelHController@index')->name('hotel.admin.booking.index');
+Route::get('/booking-history', 'HotelHController@bookingHistory')->name('hotel.booking.index');
+Route::get('/booking/{orderId}/invoice', 'HotelHController@showBookingInvoice')->name('hotel.booking.invoice');
 
 Route::get('/bookings/{orderId}/details', 'HotelHController@showBookingDetails')->name('booking.admin.details');
 Route::post('/bookings/{partnerOrderId}/cancel', 'HotelHController@cancelBooking')->name('booking.admin.cancel');

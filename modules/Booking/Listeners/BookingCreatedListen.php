@@ -1,56 +1,40 @@
 <?php
 
-    namespace Modules\Booking\Listeners;
+namespace Modules\Hotel\Listeners;
 
-    use App\Notifications\AdminChannelServices;
-    use App\Notifications\PrivateChannelServices;
-    use App\User;
-    use Illuminate\Support\Facades\Auth;
-    use Modules\Booking\Events\BookingCreatedEvent;
+use Modules\Hotel\Events\MjellmaBookingCreatedEvent;
+use App\Models\User;
+use App\Notifications\AdminChannelServices;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
-    class BookingCreatedListen
+class MjellmaBookingCreatedListen
+{
+    public function handle(MjellmaBookingCreatedEvent $event)
     {
-        public function handle(BookingCreatedEvent $event)
-        {
-            $booking = $event->booking;
-            $booking->sendNewBookingEmails();
+        $booking = $event->booking;
 
-            //case guest checkout
-            if(!Auth::id()){
-                $name = 'Guests';
-                $avatar = '';
-            }else{
-                $name = Auth::user()->display_name;
-                $avatar = Auth::user()->avatar_url;
-            }
+        $name = Auth::check() ? (Auth::user()->name ?? Auth::user()->first_name ?? 'User') : 'Guest';
+        $avatar = Auth::check() ? (Auth::user()->avatar_url ?? '') : '';
 
-            $data = [
-                'id'      => $booking->id,
-                'event'   => 'BookingCreatedEvent',
-                'to'      => 'admin',
-                'name'    => $name,
-                'avatar'  => $avatar,
-                'link'    => route('report.admin.booking'),
-                'type'    => $booking->object_model,
-                'message' => __(':name has created new Booking', ['name' => $name])
-            ];
+        $data = [
+            'id'      => $booking->id,
+            'event'   => 'MjellmaBookingCreatedEvent',
+            'to'      => 'admin',
+            'name'    => $name,
+            'avatar'  => $avatar,
+            'link'    => url('/admin/module/hotel/booking'),
+            'type'    => 'hotel_booking',
+            'message' => __(":name has created a new Hotel Booking", ['name' => $name]),
+        ];
 
-            $vendor = $booking->vendor()->where('status', 'publish')->first();
-            //to Admin
-            if(!Auth::id()){
-                // case guest checkout use vendor object to push notify
-                if($vendor) {
-                    $vendor->notify(new AdminChannelServices($data));
-                }
-            }else{
-                Auth::user()->notify(new AdminChannelServices($data));
-            }
+        $adminUser = User::where('role_id', 1)->first();
 
-            //to Vendor
-            if (!empty($vendor) and !$vendor->hasPermission('dashboard_access')) {
-                $data['link'] = route('vendor.bookingReport');
-                $data['to'] = 'vendor';
-                $vendor->notify(new PrivateChannelServices($data));
-            }
+        if ($adminUser) {
+            $adminUser->notify(new AdminChannelServices($data));
+            Log::info('📬 Sent Hotel Booking Notification to Admin', ['admin_id' => $adminUser->id]);
+        } else {
+            Log::warning('⚠️ No Admin user found for Hotel Booking notification.');
         }
     }
+}

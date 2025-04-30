@@ -74,11 +74,6 @@
                         <td>{{ $booking['amount_refunded']['amount'] }} {{ $booking['amount_refunded']['currency_code'] }}
                         </td>
                     </tr>
-                    <tr>
-                        <th>{{ __('Total Sell (B2B2C)') }}</th>
-                        <td>{{ $booking['amount_sell_b2b2c']['amount'] }}
-                            {{ $booking['amount_sell_b2b2c']['currency_code'] }}</td>
-                    </tr>
                 </table>
 
                 <h4 class="mt-4">{{ __('Cancellation Policy') }}</h4>

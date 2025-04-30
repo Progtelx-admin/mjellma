@@ -24,6 +24,7 @@ use Modules\Booking\Models\Booking;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
 use Modules\Booking\Models\Enquiry;
 use Illuminate\Support\Str;
+use Modules\Hotel\Models\MjellmaBooking;
 
 class UserController extends FrontendController
 {
@@ -128,22 +129,7 @@ class UserController extends FrontendController
         return redirect()->back()->with('success', __('Update successfully'));
     }
 
-    public function bookingHistory(Request $request)
-    {
-        $user_id = Auth::id();
-        $data = [
-            'bookings' => $this->booking->getBookingHistory($request->input('status'), $user_id),
-            'statues'     => config('booking.statuses'),
-            'breadcrumbs' => [
-                [
-                    'name'  => __('Booking History'),
-                    'class' => 'active'
-                ]
-            ],
-            'page_title'  => __("Booking History"),
-        ];
-        return view('User::frontend.bookingHistory', $data);
-    }
+
 
     public function subscribe(Request $request)
     {

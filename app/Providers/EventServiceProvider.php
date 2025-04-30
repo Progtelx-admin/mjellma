@@ -54,7 +54,11 @@ class EventServiceProvider extends ServiceProvider
         EnquirySendEvent::class=>[
             EnquirySendListen::class,
             EnquiryNotifyListen::class
-        ]
+        ],
+        \Modules\Hotel\Events\MjellmaBookingCreatedEvent::class => [
+            \Modules\Hotel\Listeners\MjellmaBookingCreatedListen::class,
+        ],
+
     ];
 
     /**
