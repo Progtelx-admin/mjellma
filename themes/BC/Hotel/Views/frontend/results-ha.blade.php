@@ -12,7 +12,6 @@
         <hr class="w-25 mx-auto mb-4">
 
         <div class="row mt-4">
-            <!-- Sidebar Filters -->
             <div class="col-md-3 mb-5 filter-section sticky-top" style="top: 1rem;">
                 <h5 class="fw-bold">Filters</h5>
                 <hr>
@@ -77,6 +76,9 @@
                     <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
                 </form>
 
+
+
+                <!-- Button to Open Map Modal -->
                 <button type="button" class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#mapModal">
                     Show on the Map
                 </button>
@@ -96,13 +98,7 @@
                                 <div class="row g-0">
                                     <div class="col-md-4">
                                         <a
-                                            href="{{ route('hotel.info', [
-                                                'id' => $hotel->hotel_id,
-                                                'checkin' => $checkin,
-                                                'checkout' => $checkout,
-                                                'adults' => request('adults'),
-                                                'children' => is_array(request('children')) ? count(request('children')) : request('children', 0),
-                                            ]) }}">
+                                            href="{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}">
                                             <div class="hotel-image">
                                                 <img src="{{ $hotel->image_url }}"
                                                     alt="{{ $hotel->name ?? 'No name provided' }}" class="img-fluid"
@@ -113,13 +109,7 @@
                                     <div class="col-md-8">
                                         <div class="card-body d-flex flex-column justify-content-between h-100">
                                             <h5 class="fw-bold text-primary">
-                                                <a href="{{ route('hotel.info', [
-                                                    'id' => $hotel->hotel_id,
-                                                    'checkin' => $checkin,
-                                                    'checkout' => $checkout,
-                                                    'adults' => request('adults'),
-                                                    'children' => is_array(request('children')) ? count(request('children')) : request('children', 0),
-                                                ]) }}"
+                                                <a href="{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}"
                                                     class="text-decoration-none">
                                                     {{ $hotel->name ?? 'No name available' }}
                                                 </a>
@@ -131,13 +121,12 @@
                                             </p>
                                             <p class="text-muted">{{ $hotel->address ?? 'Address not available' }}</p>
                                             <p class="text-primary fw-semibold fs-5">
-                                                Starting from <span class="font-weight-bold">
-                                                    {{ $hotel->daily_price ?? __('Price not available') }}
-                                                </span> / per night
+                                                Starting from <span
+                                                    class="font-weight-bold">{{ $hotel->daily_price ?? __('Price not available') }}</span>
+                                                / per night
                                             </p>
-                                            <p class="text-success">
-                                                Breakfast Included: {{ $hotel->has_breakfast ? 'Yes' : 'No' }}
-                                            </p>
+                                            <p class="text-success">Breakfast Included:
+                                                {{ $hotel->has_breakfast ? 'Yes' : 'No' }}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -145,12 +134,10 @@
                         @endforeach
                     </div>
 
-                    <!-- Loading Spinner -->
                     <div id="loading-spinner" class="my-3 text-center" style="display: none;">
                         <div class="spinner-border" role="status"></div>
                     </div>
 
-                    <!-- Load More Button -->
                     <div class="text-center mb-5">
                         <button id="load-more-btn" class="btn btn-outline-primary">Load More</button>
                     </div>
@@ -164,6 +151,24 @@
     </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const hotelList = document.getElementById('hotel-list');
+            const listBtn = document.getElementById('list-view-btn');
+            const gridBtn = document.getElementById('grid-view-btn');
+
+            listBtn.addEventListener('click', () => {
+                hotelList.classList.remove('grid-view');
+                listBtn.classList.add('active');
+                gridBtn.classList.remove('active');
+            });
+
+            gridBtn.addEventListener('click', () => {
+                hotelList.classList.add('grid-view');
+                gridBtn.classList.add('active');
+                listBtn.classList.remove('active');
+            });
+        });
+
         let page = 1;
         let loading = false;
         let hasMore = true;
@@ -201,4 +206,79 @@
                 });
         });
     </script>
+
+    <style>
+        .hotel-list-item {
+            display: flex;
+            border-radius: 8px;
+        }
+
+        .hotel-image {
+            height: 200px;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hotel-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        #hotel-list.grid-view {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        #hotel-list.grid-view .hotel-list-item {
+            flex-direction: column;
+            flex: 0 0 calc(33.3333% - 20px);
+            max-width: calc(33.3333% - 20px);
+            margin: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        #hotel-list.grid-view .row.g-0 {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+        }
+
+        #hotel-list.grid-view .col-md-4,
+        #hotel-list.grid-view .col-md-8 {
+            width: 100%;
+            max-width: 100%;
+            flex: none;
+        }
+
+        #hotel-list.grid-view .hotel-image {
+            height: 200px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        #hotel-list.grid-view .card-body {
+            padding: 15px;
+            background-color: #fff;
+        }
+
+        @media (max-width: 992px) {
+            #hotel-list.grid-view .hotel-list-item {
+                flex: 0 0 calc(50% - 20px);
+                max-width: calc(50% - 20px);
+            }
+        }
+
+        @media (max-width: 576px) {
+            #hotel-list.grid-view .hotel-list-item {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
 @endsection
