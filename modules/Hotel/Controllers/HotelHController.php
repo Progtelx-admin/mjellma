@@ -51,48 +51,24 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
             ]);
 
-            $hotelQuery = DB::table('hotels')
-                ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
-
-            if ($request->filled('hotel_name')) {
-                $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
-            }
-
-            if ($request->filled('star_rating')) {
-                $hotelQuery->whereIn('star_rating', $request->star_rating);
-            }
-
-            if ($request->filled('latitude') && $request->filled('longitude')) {
-                $latitude  = $request->latitude;
-                $longitude = $request->longitude;
-                $radius    = $request->radius ?? 10;
-
-                $latRange = [
-                    $latitude - ($radius / 111),
-                    $latitude + ($radius / 111),
-                ];
-                $lngRange = [
-                    $longitude - ($radius / (111 * cos(deg2rad($latitude)))),
-                    $longitude + ($radius / (111 * cos(deg2rad($latitude)))),
-                ];
-
-                $hotelQuery->whereBetween('latitude', $latRange)
-                           ->whereBetween('longitude', $lngRange);
-            }
-
-            $hotels = $hotelQuery->limit(30)->get();
-
-            $hotelIds = $hotels->pluck('hotel_id')->toArray();
-            $hotelImages = DB::table('hotel_images')
-                ->whereIn('hotel_id', $hotelIds)
-                ->groupBy('hotel_id')
-                ->pluck('image_url', 'hotel_id');
-
-            foreach ($hotels as $hotel) {
-                $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
-                $hotel->daily_price = null;
-                $hotel->has_breakfast = false;
-            }
+            // Generate a unique cache key per search
+            $searchHash = md5(json_encode([
+                $request->hotel_name,
+                $request->location,
+                $request->latitude,
+                $request->longitude,
+                $request->radius,
+                $request->checkin,
+                $request->checkout,
+                $request->rooms,
+                $request->adults,
+                $request->children,
+                $request->min_price,
+                $request->max_price,
+                $request->star_rating,
+                $request->breakfast_included
+            ]));
+            $cacheKey = "search_results_{$searchHash}";
 
             $childrenCount = (int) $request->input('children', 0);
             $guests = [[
@@ -100,8 +76,44 @@ class HotelHController extends Controller
                 'children' => array_fill(0, $childrenCount, 0),
             ]];
 
-            $cacheKey = 'hotel_prices_' . implode('_', $hotelIds) . '_' . $request->checkin . '_' . $request->checkout;
-            $apiData = Cache::remember($cacheKey, 300, function () use ($request, $hotelIds, $guests) {
+            if (!Cache::has($cacheKey)) {
+                $hotelQuery = DB::table('hotels')
+                    ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
+
+                if ($request->filled('hotel_name')) {
+                    $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
+                }
+
+                if ($request->filled('star_rating')) {
+                    $hotelQuery->whereIn('star_rating', $request->star_rating);
+                }
+
+                if ($request->filled('latitude') && $request->filled('longitude')) {
+                    $lat = $request->latitude;
+                    $lng = $request->longitude;
+                    $radius = $request->radius ?? 10;
+
+                    $latRange = [$lat - ($radius / 111), $lat + ($radius / 111)];
+                    $lngRange = [$lng - ($radius / (111 * cos(deg2rad($lat)))), $lng + ($radius / (111 * cos(deg2rad($lat))))];
+
+                    $hotelQuery->whereBetween('latitude', $latRange)
+                        ->whereBetween('longitude', $lngRange);
+                }
+
+                $hotels = $hotelQuery->get();
+                $hotelIds = $hotels->pluck('hotel_id')->toArray();
+
+                $hotelImages = DB::table('hotel_images')
+                    ->whereIn('hotel_id', $hotelIds)
+                    ->groupBy('hotel_id')
+                    ->pluck('image_url', 'hotel_id');
+
+                foreach ($hotels as $hotel) {
+                    $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
+                    $hotel->daily_price = null;
+                    $hotel->has_breakfast = false;
+                }
+
                 $apiBody = [
                     'checkin'   => $request->checkin,
                     'checkout'  => $request->checkout,
@@ -112,67 +124,99 @@ class HotelHController extends Controller
                     'currency'  => 'EUR',
                 ];
 
-                $response = Http::withBasicAuth($this->username, $this->password)
-                                ->withHeaders(['Content-Type' => 'application/json'])
-                                ->post($this->apiUrl . 'search/serp/hotels', $apiBody);
+                $apiData = Http::withBasicAuth($this->username, $this->password)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
+                    ->json()['data']['hotels'] ?? [];
 
-                return $response->json()['data']['hotels'] ?? [];
-            });
+                $pricesResult = [];
+                foreach ($apiData as $apiHotel) {
+                    $hotelId = $apiHotel['id'] ?? null;
+                    if (!$hotelId) continue;
 
-            $pricesResult = [];
-            $minPrice = PHP_INT_MAX;
-            $maxPrice = PHP_INT_MIN;
+                    $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
+                    $hasBreakfast = false;
 
-            foreach ($apiData as $apiHotel) {
-                $hotelId = $apiHotel['id'] ?? null;
-                if (!$hotelId) continue;
-
-                $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                $hasBreakfast = false;
-
-                if (!empty($apiHotel['rates'])) {
-                    foreach ($apiHotel['rates'] as $rate) {
+                    foreach ($apiHotel['rates'] ?? [] as $rate) {
                         if (!empty($rate['meal_data']['has_breakfast'])) {
                             $hasBreakfast = true;
                             break;
                         }
                     }
+
+                    $pricesResult[$hotelId] = [
+                        'daily_price'   => $dailyPrice,
+                        'has_breakfast' => $hasBreakfast,
+                    ];
                 }
 
-                $pricesResult[$hotelId] = [
-                    'daily_price'   => $dailyPrice,
-                    'has_breakfast' => $hasBreakfast,
-                ];
-
-                if ($dailyPrice !== null) {
-                    $minPrice = min($minPrice, $dailyPrice);
-                    $maxPrice = max($maxPrice, $dailyPrice);
+                foreach ($hotels as $hotel) {
+                    $hotel->daily_price = $pricesResult[$hotel->hotel_id]['daily_price'] ?? null;
+                    $hotel->has_breakfast = $pricesResult[$hotel->hotel_id]['has_breakfast'] ?? false;
                 }
+
+                // Cache the enriched result set
+                Cache::put($cacheKey, $hotels->toArray(), now()->addMinutes(15));
             }
 
-            foreach ($hotels as $hotel) {
-                if (isset($pricesResult[$hotel->hotel_id])) {
-                    $hotel->daily_price = $pricesResult[$hotel->hotel_id]['daily_price'];
-                    $hotel->has_breakfast = $pricesResult[$hotel->hotel_id]['has_breakfast'];
+            // Use cached data
+            $allHotels = collect(Cache::get($cacheKey, []))->map(function ($hotel) {
+                return (object) $hotel; // Cast to object for -> access
+            });
+
+            $page = (int) $request->input('page', 1);
+            $perPage = 10;
+            $pagedHotels = $allHotels->slice(($page - 1) * $perPage, $perPage)->values();
+
+            $minPrice = $allHotels->pluck('daily_price')->filter()->min() ?? 0;
+            $maxPrice = $allHotels->pluck('daily_price')->filter()->max() ?? 999;
+
+            // ✅ AJAX Load More
+            if ($request->ajax()) {
+                $html = '';
+                foreach ($pagedHotels as $hotel) {
+                    $html .= '
+                        <div class="card mb-4 hotel-list-item border-0 shadow-sm">
+                            <div class="row g-0">
+                                <div class="col-md-4">
+                                    <img src="' . e($hotel->image_url) . '" alt="' . e($hotel->name) . '" class="img-fluid"
+                                         onerror="this.onerror=null;this.src=\'' . asset('images/default-image.jpg') . '\';">
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="card-body d-flex flex-column justify-content-between h-100">
+                                        <h5 class="fw-bold text-primary">' . e($hotel->name) . '</h5>
+                                        <p class="text-warning mb-2">' . str_repeat('<i class="fa fa-star" style="color: #FCC737"></i>', (int) $hotel->star_rating) . '</p>
+                                        <p class="text-muted">' . e($hotel->address) . '</p>
+                                        <p class="text-primary fw-semibold fs-5">Starting from <span class="font-weight-bold">'
+                                            . ($hotel->daily_price ?? 'N/A') . '</span> / per night</p>
+                                        <p class="text-success">Breakfast Included: ' . ($hotel->has_breakfast ? 'Yes' : 'No') . '</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>';
                 }
+
+                return response()->json([
+                    'html'    => $html,
+                    'hasMore' => ($page * $perPage) < $allHotels->count()
+                ]);
             }
 
+            // ✅ First page full load
             return view('Hotel::frontend.results-ha', [
-                'hotels'   => $hotels,
+                'hotels'   => $pagedHotels,
                 'checkin'  => $request->checkin,
                 'checkout' => $request->checkout,
                 'adults'   => $request->adults,
                 'children' => $childrenCount,
-                'minPrice' => $minPrice === PHP_INT_MAX ? 0 : $minPrice,
-                'maxPrice' => $maxPrice === PHP_INT_MIN ? 999 : $maxPrice,
+                'minPrice' => $minPrice,
+                'maxPrice' => $maxPrice,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Error searching hotels', ['message' => $e->getMessage()]);
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
-
 
 
     private function fetchApiData($checkin, $checkout, $adults, $children, $hotelIds, $hotelHids)

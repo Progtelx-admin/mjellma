@@ -1,4 +1,3 @@
-<!-- Updated Blade Template -->
 @extends('layouts.app')
 
 @section('content')
@@ -18,7 +17,6 @@
                 <h5 class="fw-bold">Filters</h5>
                 <hr>
                 <form method="GET" action="{{ route('hotel.search') }}">
-                    <!-- Hidden inputs to preserve search parameters -->
                     <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
                     <input type="hidden" name="location" value="{{ request('location') }}">
                     <input type="hidden" name="checkin" value="{{ request('checkin') }}">
@@ -79,7 +77,6 @@
                     <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
                 </form>
 
-                <!-- Button to Open Map Modal -->
                 <button type="button" class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#mapModal">
                     Show on the Map
                 </button>
@@ -87,19 +84,16 @@
 
             <!-- Hotel List Section -->
             <div class="col-md-9">
-                <!-- Toggle Buttons for List/Grid Views -->
                 <div class="view-toggle mb-3 text-end">
                     <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"></i></button>
                     <button id="grid-view-btn" class="btn btn-outline-secondary"><i class="fa fa-th"></i></button>
                 </div>
 
                 @if ($hotels && $hotels->count() > 0)
-                    <!-- Container where hotels are appended -->
                     <div id="hotel-list">
                         @foreach ($hotels as $hotel)
                             <div class="card mb-4 hotel-list-item border-0 shadow-sm">
                                 <div class="row g-0">
-                                    <!-- Hotel Image -->
                                     <div class="col-md-4">
                                         <a
                                             href="{{ route('hotel.info', [
@@ -110,18 +104,12 @@
                                                 'children' => is_array(request('children')) ? count(request('children')) : request('children', 0),
                                             ]) }}">
                                             <div class="hotel-image">
-                                                @if (!empty($hotel->image_url))
-                                                    <img src="{{ $hotel->image_url }}"
-                                                        alt="{{ $hotel->name ?? 'No name provided' }}" class="img-fluid"
-                                                        onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
-                                                @else
-                                                    <div class="no-image-placeholder">No Image Available</div>
-                                                @endif
+                                                <img src="{{ $hotel->image_url }}"
+                                                    alt="{{ $hotel->name ?? 'No name provided' }}" class="img-fluid"
+                                                    onerror="this.onerror=null;this.src='{{ asset('images/default-image.jpg') }}';">
                                             </div>
                                         </a>
                                     </div>
-
-                                    <!-- Hotel Details -->
                                     <div class="col-md-8">
                                         <div class="card-body d-flex flex-column justify-content-between h-100">
                                             <h5 class="fw-bold text-primary">
@@ -136,21 +124,17 @@
                                                     {{ $hotel->name ?? 'No name available' }}
                                                 </a>
                                             </h5>
-
                                             <p class="text-warning mb-2">
                                                 @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
-                                                    <i class="fa fa-star" aria-hidden="true" style="color: #FCC737"></i>
+                                                    <i class="fa fa-star" style="color: #FCC737"></i>
                                                 @endfor
                                             </p>
-
                                             <p class="text-muted">{{ $hotel->address ?? 'Address not available' }}</p>
-
                                             <p class="text-primary fw-semibold fs-5">
-                                                Starting from <span
-                                                    class="font-weight-bold">{{ $hotel->daily_price ?? __('Price not available') }}</span>
-                                                / per night
+                                                Starting from <span class="font-weight-bold">
+                                                    {{ $hotel->daily_price ?? __('Price not available') }}
+                                                </span> / per night
                                             </p>
-
                                             <p class="text-success">
                                                 Breakfast Included: {{ $hotel->has_breakfast ? 'Yes' : 'No' }}
                                             </p>
@@ -166,8 +150,10 @@
                         <div class="spinner-border" role="status"></div>
                     </div>
 
-                    <!-- Infinite Scroll Sentinel -->
-                    <div id="infinite-scroll-sentinel"></div>
+                    <!-- Load More Button -->
+                    <div class="text-center mb-5">
+                        <button id="load-more-btn" class="btn btn-outline-primary">Load More</button>
+                    </div>
                 @else
                     <div class="col-12 text-center">
                         <p class="text-muted fs-5">{{ __('No hotels found.') }}</p>
@@ -176,4 +162,43 @@
             </div>
         </div>
     </div>
+
+    <script>
+        let page = 1;
+        let loading = false;
+        let hasMore = true;
+
+        document.getElementById('load-more-btn')?.addEventListener('click', function() {
+            if (loading || !hasMore) return;
+            loading = true;
+            page++;
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', page);
+
+            document.getElementById('loading-spinner').style.display = 'block';
+
+            fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.html) {
+                        document.getElementById('hotel-list').insertAdjacentHTML('beforeend', data.html);
+                    }
+                    if (!data.hasMore) {
+                        document.getElementById('load-more-btn')?.remove();
+                    }
+                })
+                .catch(error => console.error('Load More Failed', error))
+                .finally(() => {
+                    loading = false;
+                    document.getElementById('loading-spinner').style.display = 'none';
+                });
+        });
+    </script>
 @endsection
