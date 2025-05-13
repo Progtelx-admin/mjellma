@@ -17,4 +17,4 @@ jobs:
           server: 37.120.176.52
           username: ${{ secrets.ftp_uresname_real }}
           password: ${{ secrets.ftp_password_real }}
-          server-dir: /home/rezervo24/public_html/
+          server-dir: /public_html/
