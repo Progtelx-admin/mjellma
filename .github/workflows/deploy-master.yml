@@ -15,6 +15,6 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: 37.120.176.52
-          username: ${{ secrets.ftp_username_real }}
+          username: ${{ secrets.ftp_uresname_real }}
           password: ${{ secrets.ftp_password_real }}
           server-dir: /home/rezervo24/public_html
