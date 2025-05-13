@@ -47,18 +47,20 @@
                     <div class="mb-4">
                         <h6 class="fw-bold">Hotel Star</h6>
                         @for ($i = 5; $i >= 1; $i--)
-                            <label class="custom-checkbox">
-                                <input type="checkbox" name="star_rating[]" value="{{ $i }}"
+                            <label class="d-flex align-items-center mb-2" for="star_rating_{{ $i }}"
+                                style="cursor: pointer;">
+                                <input type="checkbox" id="star_rating_{{ $i }}" name="star_rating[]"
+                                    value="{{ $i }}" class="me-2"
                                     {{ is_array(request('star_rating')) && in_array($i, request('star_rating')) ? 'checked' : '' }}>
-                                <span class="checkmark"></span>
-                                <span class="star-icons">
-                                    @for ($j = 1; $j <= $i; $j++)
-                                        <i class="fa fa-star text-warning"></i>
-                                    @endfor
-                                </span>
+
+                                @for ($j = 1; $j <= $i; $j++)
+                                    <i class="fa fa-star text-warning me-1"></i>
+                                @endfor
                             </label>
                         @endfor
                     </div>
+
+
                     <hr>
 
                     <!-- Breakfast Included Filter -->
@@ -76,9 +78,6 @@
                     <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
                 </form>
 
-
-
-                <!-- Button to Open Map Modal -->
                 <button type="button" class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#mapModal">
                     Show on the Map
                 </button>
@@ -149,6 +148,110 @@
             </div>
         </div>
     </div>
+
+    <!-- ✅ Bootstrap Modal for Map -->
+    <div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="mapModalLabel">Hotel Map</h5>
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" aria-label="Close">
+                        <i class="fa fa-close"></i>
+                    </button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="hotelMap" style="height: 600px; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet.js Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- ✅ Bootstrap JS + Popper.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+
+    <script>
+        /* -------------------------
+         *  Map Modal Initialization
+         * ------------------------- */
+        let mapInitialized = false;
+
+        document.addEventListener("DOMContentLoaded", function() {
+            var mapModal = document.getElementById('mapModal');
+            mapModal.addEventListener('shown.bs.modal', function() {
+                if (!mapInitialized) {
+                    initializeMap();
+                    mapInitialized = true;
+                }
+            });
+        });
+
+        function initializeMap() {
+            var map = L.map('hotelMap');
+
+            // Load OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            var markers = [];
+            var bounds = L.latLngBounds();
+
+            @if ($hotels && $hotels->count() > 0)
+                @foreach ($hotels as $hotel)
+                    @if (!empty($hotel->latitude) && !empty($hotel->longitude))
+                        var hotelUrl =
+                            "{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}";
+                        var imageUrl = "{{ $hotel->image_url }}";
+                        var defaultImage = "{{ asset('images/default-image.jpg') }}";
+
+                        var popupContent = `
+                                <div style="width: 200px; font-family: Arial, sans-serif; text-align: center;">
+                                    <img src="${imageUrl}" onerror="this.src='${defaultImage}'"
+                                        style="width: 100%; height: 80px; object-fit: cover; border-radius: 5px;" />
+                                    <h6 style="margin: 5px 0;">
+                                        <a href="${hotelUrl}" target="_blank" style="color: #007bff; font-weight: bold; text-decoration: none;">
+                                            {{ $hotel->name }}
+                                        </a>
+                                    </h6>
+                                    <p style="margin: 2px 0; font-size: 12px; color: #ffa500;">
+                                        @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
+                                            <i class="fa fa-star" aria-hidden="true" style="color: #FCC737"></i>
+                                        @endfor
+                                    </p>
+                                    <p style="margin: 2px 0; font-size: 13px; color: #28a745;">
+                                        {{ $hotel->daily_price ?? 'N/A' }} EUR
+                                    </p>
+                                </div>
+                            `;
+
+                        var marker = L.marker([{{ $hotel->latitude }}, {{ $hotel->longitude }}])
+                            .addTo(map)
+                            .bindPopup(popupContent);
+
+                        markers.push(marker);
+                        bounds.extend(marker.getLatLng());
+                    @endif
+                @endforeach
+
+                if (markers.length > 0) {
+                    map.fitBounds(bounds, {
+                        padding: [40, 40]
+                    });
+                } else {
+                    map.setView([42.6629, 21.1655], 13); // Default location if no markers
+                }
+
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 500);
+            @endif
+        }
+    </script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
