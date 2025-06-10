@@ -24,12 +24,10 @@
         </div>
 
         <div class="w-75 position-absolute" style="z-index: 1">
-            <!-- Centered Heading -->
-            <h1 class="text-white fw-bold mb-4 text-center" style="text-shadow: 2px 2px 5px rgba(0,0,0,0.7);">
+            <h1 class="text-white fw-bold mb-4 text-center" style="text-shadow:2px 2px 5px rgba(0,0,0,0.7);">
                 Escape To Paradise, Unwind In Luxury
             </h1>
             <div class="p-4 rounded shadow-sm bg-white">
-                <!-- Tabs for Flights, Hotels, Cars -->
                 <ul class="nav nav-tabs mb-3" id="searchTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <a class="nav-link" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
@@ -44,9 +42,7 @@
                     </li>
                 </ul>
 
-                <!-- Tab Content -->
                 <div class="tab-content">
-                    <!-- Flights Tab Content -->
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <div id="thomalex-widget"
                             data-widget="https://mjellmatravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang="
@@ -54,14 +50,11 @@
                         <script src="https://mjellmatravel.resvoyage.com/scripts/thomalex-integration.js"></script>
                     </div>
 
-                    <!-- Hotels Tab Content -->
                     <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
                         aria-labelledby="hotel-tab">
-                        <!-- Search Form -->
                         <form method="GET" action="{{ route('hotel.search') }}">
                             @csrf
 
-                            <!-- Global Validation Error Messages -->
                             @if ($errors->any())
                                 <div class="alert alert-danger">
                                     <ul class="mb-0">
@@ -72,10 +65,10 @@
                                 </div>
                             @endif
 
-                            <div class="row g-3">
-                                <!-- Hotel Name -->
+                            {{-- Row 1: Hotel Name + Location --}}
+                            <div class="row g-3 mb-3">
                                 <div class="col-md-6 position-relative">
-                                    <label for="hotel_name" class="form-label">Hotel Name:</label>
+                                    <label for="hotel_name" class="form-label">Hotel Name</label>
                                     <input type="text" id="hotel_name" name="hotel_name"
                                         class="form-control @error('hotel_name') is-invalid @enderror"
                                         placeholder="Enter hotel name" value="{{ old('hotel_name') }}">
@@ -83,8 +76,6 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-
-                                <!-- Location -->
                                 <div class="col-md-6 position-relative">
                                     <label for="location" class="form-label">Location</label>
                                     <input type="text" id="location" name="location"
@@ -93,16 +84,14 @@
                                     @error('location')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
-
                                     <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
-                                        style="max-height: 200px; overflow-y: auto; z-index: 1000;"></ul>
+                                        style="max-height:200px;overflow-y:auto;z-index:1000;"></ul>
                                 </div>
                             </div>
 
-                            <!-- Check-in, Check-out, Guests, Rooms -->
-                            <div class="row g-3 mt-3">
-                                <!-- Check-in Date -->
-                                <div class="col-6 col-md-3">
+                            {{-- Row 2: Dates / Guests / Rooms / Children --}}
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-3">
                                     <label for="checkin" class="form-label">Check-in Date</label>
                                     <input type="date" id="checkin" name="checkin"
                                         class="form-control @error('checkin') is-invalid @enderror"
@@ -111,9 +100,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-
-                                <!-- Check-out Date -->
-                                <div class="col-6 col-md-3">
+                                <div class="col-md-3">
                                     <label for="checkout" class="form-label">Check-out Date</label>
                                     <input type="date" id="checkout" name="checkout"
                                         class="form-control @error('checkout') is-invalid @enderror"
@@ -122,9 +109,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-
-                                <!-- Adults -->
-                                <div class="col-6 col-md-2">
+                                <div class="col-md-2">
                                     <label for="adults" class="form-label">Adults</label>
                                     <input type="number" id="adults" name="adults"
                                         class="form-control @error('adults') is-invalid @enderror"
@@ -133,21 +118,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-
-                                <!-- Children -->
-                                <div class="col-6 col-md-2">
-                                    <label for="children" class="form-label">Children</label>
-                                    <input type="number" id="children" name="children"
-                                        class="form-control @error('children') is-invalid @enderror"
-                                        value="{{ old('children', 0) }}" min="0">
-                                    @error('children')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-
-                                <!-- Rooms -->
-                                <div class="col-6 col-md-2">
+                                <div class="col-md-2">
                                     <label for="rooms" class="form-label">Rooms</label>
                                     <input type="number" id="rooms" name="rooms"
                                         class="form-control @error('rooms') is-invalid @enderror"
@@ -156,20 +127,34 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
+
+                                {{-- Children Input --}}
+                                <div class="col-md-2">
+                                    <label for="children_count" class="form-label">Children</label>
+                                    <input type="number" id="children_count" name="children_count"
+                                        class="form-control @error('children_count') is-invalid @enderror"
+                                        value="{{ old('children_count', 0) }}" min="0" max="5" required>
+                                    @error('children_count')
+                                        <div class="text-danger small mt-1">{{ $message }}</div>
+                                    @enderror
+                                </div>
                             </div>
 
-                            <!-- Submit Button -->
-                            <div class="text-center mt-4">
-                                <button type="submit" class="btn btn-primary w-100">Search</button>
+                            {{-- Row 3: Dynamic Child Ages --}}
+                            <div id="children-ages-row" class="row g-3 mt-2" style="display:none;"></div>
+
+                            {{-- Row 4: Full-width Search --}}
+                            <div class="row mt-4">
+                                <div class="col">
+                                    <button type="submit" class="btn btn-primary w-100">Search</button>
+                                </div>
                             </div>
 
-                            <!-- Hidden Latitude and Longitude -->
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
                         </form>
                     </div>
 
-                    <!-- Cars Tab Content -->
                     <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
                         <p>#</p>
                     </div>
@@ -178,124 +163,143 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+    {{-- Bootstrap JS --}}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Initialize Carousel -->
     <script>
+        // Carousel init
         document.addEventListener('DOMContentLoaded', function() {
-            const carouselElement = document.querySelector('#carouselBackground');
-            const carousel = new bootstrap.Carousel(carouselElement, {
+            new bootstrap.Carousel(document.getElementById('carouselBackground'), {
                 interval: 2000,
                 ride: 'carousel',
                 pause: false,
                 wrap: true
             });
         });
-    </script>
 
-    <!-- JavaScript for Location Suggestions -->
-    <script>
+        // Location suggestions
         document.addEventListener("DOMContentLoaded", function() {
             const locationInput = document.getElementById("location");
             const suggestionsList = document.getElementById("suggestions");
-            const latitudeInput = document.getElementById("latitude");
-            const longitudeInput = document.getElementById("longitude");
+            const latInput = document.getElementById("latitude");
+            const lonInput = document.getElementById("longitude");
 
             locationInput.addEventListener("input", function() {
-                const query = this.value;
-                if (query.length < 3) {
+                const q = this.value;
+                if (q.length < 3) {
                     suggestionsList.innerHTML = "";
                     suggestionsList.classList.add("d-none");
                     return;
                 }
-
-                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`)
-                    .then(response => response.json())
-                    .then(data => {
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`)
+                    .then(r => r.json()).then(data => {
                         suggestionsList.innerHTML = "";
                         suggestionsList.classList.toggle("d-none", data.length === 0);
-
-                        data.forEach(location => {
-                            const suggestion = document.createElement("li");
-                            suggestion.classList.add("list-group-item");
-                            suggestion.textContent = location.display_name;
-                            suggestion.style.cursor = "pointer";
-                            suggestion.addEventListener("click", function() {
-                                locationInput.value = location.display_name;
-                                latitudeInput.value = location.lat;
-                                longitudeInput.value = location.lon;
+                        data.forEach(loc => {
+                            const li = document.createElement("li");
+                            li.textContent = loc.display_name;
+                            li.className = "list-group-item";
+                            li.style.cursor = "pointer";
+                            li.onclick = () => {
+                                locationInput.value = loc.display_name;
+                                latInput.value = loc.lat;
+                                lonInput.value = loc.lon;
                                 suggestionsList.innerHTML = "";
                                 suggestionsList.classList.add("d-none");
-                            });
-                            suggestionsList.appendChild(suggestion);
+                            };
+                            suggestionsList.append(li);
                         });
-                    })
-                    .catch(error => console.error("Error fetching location suggestions:", error));
+                    }).catch(console.error);
             });
-
-            document.addEventListener("click", function(e) {
+            document.addEventListener("click", e => {
                 if (!suggestionsList.contains(e.target) && e.target !== locationInput) {
                     suggestionsList.innerHTML = "";
                     suggestionsList.classList.add("d-none");
                 }
             });
         });
+
+        // Children input & dynamic ages
+        document.addEventListener('DOMContentLoaded', function() {
+            const countInput = document.getElementById('children_count');
+            const agesRow = document.getElementById('children-ages-row');
+
+            function renderAges(n) {
+                agesRow.innerHTML = '';
+                if (n < 1) {
+                    agesRow.style.display = 'none';
+                    return;
+                }
+                agesRow.style.display = 'flex';
+                for (let i = 1; i <= n; i++) {
+                    const col = document.createElement('div');
+                    col.className = 'col-md-2';
+                    col.innerHTML = `
+                      <div class="form-floating">
+                        <select name="children[]" id="child_age_${i}"
+                                class="form-select form-select-sm border border-2 border-danger" required>
+                          <option value="" selected>Age needed</option>
+                          ${[...Array(18).keys()].map(a => `<option value="${a}">${a}</option>`).join('')}
+                        </select>
+                        <label for="child_age_${i}" class="small">Child ${i}</label>
+                      </div>`;
+                    agesRow.append(col);
+                }
+            }
+
+            countInput.addEventListener('input', function() {
+                let v = parseInt(this.value);
+                if (isNaN(v) || v < 0) v = 0;
+                if (v > 5) v = 5;
+                this.value = v;
+                renderAges(v);
+            });
+
+            renderAges(parseInt(countInput.value) || 0);
+        });
     </script>
 
     <style>
-        /* Carousel items as background */
         .carousel-item {
             background-size: cover;
-            background-position: center center;
-            background-repeat: no-repeat;
+            background-position: center;
             min-height: 100vh;
-            width: 100%;
         }
 
-        /* Hide img tags if any */
         .carousel-item img {
             display: none;
         }
 
-        /* Style carousel indicators */
         .carousel-indicators button {
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.7);
-            border: none;
-            margin: 0 5px;
-            transition: background-color 0.3s ease;
+            background: rgba(255, 255, 255, 0.7);
         }
 
         .carousel-indicators .active {
-            background-color: #007bff;
+            background: #007bff;
         }
 
-        /* Position carousel indicators at the bottom */
         .carousel-indicators {
             bottom: 20px;
         }
 
-        /* Form background transparency */
         .bg-white {
-            background-color: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.9);
         }
 
-        /* Header Text Shadow */
         h1 {
             text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
         }
 
-        /* Form button styles */
         .btn-primary {
-            background-color: #007bff;
+            background: #007bff;
             border: none;
         }
 
         .btn-primary:hover {
-            background-color: #0056b3;
+            background: #0056b3;
         }
 
         .nav-tabs .nav-link.active {
