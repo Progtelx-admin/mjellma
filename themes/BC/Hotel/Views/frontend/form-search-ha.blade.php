@@ -95,7 +95,7 @@
                                     <label for="checkin" class="form-label">Check-in Date</label>
                                     <input type="date" id="checkin" name="checkin"
                                         class="form-control @error('checkin') is-invalid @enderror"
-                                        value="{{ old('checkin') }}" required>
+                                        value="{{ old('checkin') }}" min="{{ date('Y-m-d') }}" required>
                                     @error('checkin')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -104,7 +104,7 @@
                                     <label for="checkout" class="form-label">Check-out Date</label>
                                     <input type="date" id="checkout" name="checkout"
                                         class="form-control @error('checkout') is-invalid @enderror"
-                                        value="{{ old('checkout') }}" required>
+                                        value="{{ old('checkout') }}" min="{{ date('Y-m-d') }}" required>
                                     @error('checkout')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -257,7 +257,24 @@
 
             renderAges(parseInt(countInput.value) || 0);
         });
+
+        // Prevent past dates and enforce checkout >= checkin
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkinInput = document.getElementById('checkin');
+            const checkoutInput = document.getElementById('checkout');
+            const today = new Date().toISOString().split('T')[0];
+            checkinInput.min = today;
+            checkoutInput.min = today;
+
+            checkinInput.addEventListener('change', function() {
+                checkoutInput.min = this.value;
+                if (checkoutInput.value < this.value) {
+                    checkoutInput.value = this.value;
+                }
+            });
+        });
     </script>
+
 
     <style>
         .carousel-item {
