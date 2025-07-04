@@ -1252,7 +1252,7 @@ class HotelHController extends Controller
             'user'        => [
                 'first_name' => $request->input('first_name'),
                 'last_name'  => $request->input('last_name'),
-                'email'      => $request->input('email'),
+                'email'      => 'blerimmi@hotmail.com',
                 'phone'      => $request->input('phone'),
             ],
             'supplier_data' => $request->input('supplier_data', []),
