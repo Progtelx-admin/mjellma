@@ -33,6 +33,7 @@ class HotelHController extends Controller
     public function searchHotels(Request $request)
     {
         try {
+            // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
                 'hotel_name'         => 'nullable|string',
                 'location'           => 'nullable|string',
@@ -43,7 +44,9 @@ class HotelHController extends Controller
                 'checkout'           => 'required|date|after:checkin',
                 'rooms'              => 'required|integer|min:1',
                 'adults'             => 'required|integer|min:1',
-                'children'           => 'nullable|integer|min:0',
+                'children_count'     => 'required|integer|min:0|max:5',
+                'children'           => 'nullable|array',
+                'children.*'         => 'integer|min:0|max:17',
                 'min_price'          => 'nullable|numeric|min:0',
                 'max_price'          => 'nullable|numeric|min:0',
                 'star_rating'        => 'nullable|array',
@@ -51,7 +54,7 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
             ]);
 
-            // Generate a unique cache key per search
+            // 2) Build cache key including both count and ages
             $searchHash = md5(json_encode([
                 $request->hotel_name,
                 $request->location,
@@ -62,148 +65,125 @@ class HotelHController extends Controller
                 $request->checkout,
                 $request->rooms,
                 $request->adults,
+                $request->children_count,
                 $request->children,
                 $request->min_price,
                 $request->max_price,
                 $request->star_rating,
-                $request->breakfast_included
+                $request->breakfast_included,
             ]));
             $cacheKey = "search_results_{$searchHash}";
 
-            $childrenCount = (int) $request->input('children', 0);
-            $guests = [[
-                'adults'   => (int)$request->adults,
-                'children' => array_fill(0, $childrenCount, 0),
-            ]];
+            // 3) Sanitize child ages (0–17)
+            $childrenCount = (int)$request->input('children_count', 0);
+            $rawAges       = $request->input('children', []);
+            $childAges     = array_values(array_filter(
+                array_map('intval', $rawAges),
+                fn($age) => $age >= 0 && $age <= 17
+            ));
 
+            // 4) Fetch & cache if needed
             if (!Cache::has($cacheKey)) {
+                // — DB query for hotels
                 $hotelQuery = DB::table('hotels')
-                    ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
+                    ->select('hotel_id','name','latitude','longitude','star_rating','address');
 
                 if ($request->filled('hotel_name')) {
-                    $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
+                    $hotelQuery->where('name','like','%'.$request->hotel_name.'%');
                 }
-
                 if ($request->filled('star_rating')) {
-                    $hotelQuery->whereIn('star_rating', $request->star_rating);
+                    $hotelQuery->whereIn('star_rating',$request->star_rating);
                 }
-
                 if ($request->filled('latitude') && $request->filled('longitude')) {
-                    $lat = $request->latitude;
-                    $lng = $request->longitude;
+                    $lat    = $request->latitude;
+                    $lng    = $request->longitude;
                     $radius = $request->radius ?? 10;
-
-                    $latRange = [$lat - ($radius / 111), $lat + ($radius / 111)];
-                    $lngRange = [$lng - ($radius / (111 * cos(deg2rad($lat)))), $lng + ($radius / (111 * cos(deg2rad($lat))))];
-
-                    $hotelQuery->whereBetween('latitude', $latRange)
-                        ->whereBetween('longitude', $lngRange);
+                    $hotelQuery->whereBetween('latitude', [
+                        $lat - ($radius/111), $lat + ($radius/111)
+                    ])->whereBetween('longitude', [
+                        $lng - ($radius/(111*cos(deg2rad($lat)))),
+                        $lng + ($radius/(111*cos(deg2rad($lat))))
+                    ]);
                 }
 
-                $hotels = $hotelQuery->get();
+                $hotels   = $hotelQuery->get();
                 $hotelIds = $hotels->pluck('hotel_id')->toArray();
 
+                // — Attach images
                 $hotelImages = DB::table('hotel_images')
-                    ->whereIn('hotel_id', $hotelIds)
+                    ->whereIn('hotel_id',$hotelIds)
                     ->groupBy('hotel_id')
-                    ->pluck('image_url', 'hotel_id');
+                    ->pluck('image_url','hotel_id');
 
-                foreach ($hotels as $hotel) {
-                    $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
-                    $hotel->daily_price = null;
+                foreach($hotels as $hotel) {
+                    $hotel->image_url     = $hotelImages[$hotel->hotel_id]
+                                            ?? asset('images/default-image.jpg');
+                    $hotel->daily_price   = null;
                     $hotel->has_breakfast = false;
                 }
 
+                // 5) Call ETG API with exact child ages
                 $apiBody = [
                     'checkin'   => $request->checkin,
                     'checkout'  => $request->checkout,
                     'residency' => 'gb',
                     'language'  => 'en',
-                    'guests'    => $guests,
+                    'guests'    => [[
+                        'adults'   => (int)$request->adults,
+                        'children' => $childAges,
+                    ]],
                     'ids'       => $hotelIds,
                     'currency'  => 'EUR',
                 ];
 
                 $apiData = Http::withBasicAuth($this->username, $this->password)
-                    ->withHeaders(['Content-Type' => 'application/json'])
-                    ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
+                    ->withHeaders(['Content-Type'=>'application/json'])
+                    ->post($this->apiUrl.'search/serp/hotels',$apiBody)
                     ->json()['data']['hotels'] ?? [];
 
+                // 6) Map prices & breakfast flags
                 $pricesResult = [];
-                foreach ($apiData as $apiHotel) {
-                    $hotelId = $apiHotel['id'] ?? null;
-                    if (!$hotelId) continue;
-
-                    $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                    $hasBreakfast = false;
-
-                    foreach ($apiHotel['rates'] ?? [] as $rate) {
-                        if (!empty($rate['meal_data']['has_breakfast'])) {
-                            $hasBreakfast = true;
-                            break;
-                        }
-                    }
-
-                    $pricesResult[$hotelId] = [
-                        'daily_price'   => $dailyPrice,
-                        'has_breakfast' => $hasBreakfast,
-                    ];
+                foreach($apiData as $apiHotel){
+                    $hid = $apiHotel['id'] ?? null;
+                    if(!$hid) continue;
+                    $dailyPrice   = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
+                    $hasBreakfast = collect($apiHotel['rates'] ?? [])
+                                        ->contains(fn($r)=> !empty($r['meal_data']['has_breakfast']));
+                    $pricesResult[$hid] = compact('dailyPrice','hasBreakfast');
+                }
+                foreach($hotels as $hotel){
+                    $res = $pricesResult[$hotel->hotel_id] ?? null;
+                    $hotel->daily_price   = $res['dailyPrice']   ?? null;
+                    $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
                 }
 
-                foreach ($hotels as $hotel) {
-                    $hotel->daily_price = $pricesResult[$hotel->hotel_id]['daily_price'] ?? null;
-                    $hotel->has_breakfast = $pricesResult[$hotel->hotel_id]['has_breakfast'] ?? false;
-                }
-
-                // Cache the enriched result set
+                // 7) Cache
                 Cache::put($cacheKey, $hotels->toArray(), now()->addMinutes(15));
             }
 
-            // Use cached data
-            $allHotels = collect(Cache::get($cacheKey, []))->map(function ($hotel) {
-                return (object) $hotel; // Cast to object for -> access
-            });
-
-            $page = (int) $request->input('page', 1);
-            $perPage = 10;
-            $pagedHotels = $allHotels->slice(($page - 1) * $perPage, $perPage)->values();
+            // 8) Retrieve & paginate
+            $allHotels   = collect(Cache::get($cacheKey,[]))->map(fn($h)=>(object)$h);
+            $page        = (int)$request->input('page',1);
+            $perPage     = 10;
+            $pagedHotels = $allHotels->slice(($page-1)*$perPage,$perPage)->values();
 
             $minPrice = $allHotels->pluck('daily_price')->filter()->min() ?? 0;
             $maxPrice = $allHotels->pluck('daily_price')->filter()->max() ?? 999;
 
-            // ✅ AJAX Load More
+            // 9) AJAX load more
             if ($request->ajax()) {
                 $html = '';
                 foreach ($pagedHotels as $hotel) {
-                    $html .= '
-                        <div class="card mb-4 hotel-list-item border-0 shadow-sm">
-                            <div class="row g-0">
-                                <div class="col-md-4">
-                                    <img src="' . e($hotel->image_url) . '" alt="' . e($hotel->name) . '" class="img-fluid"
-                                         onerror="this.onerror=null;this.src=\'' . asset('images/default-image.jpg') . '\';">
-                                </div>
-                                <div class="col-md-8">
-                                    <div class="card-body d-flex flex-column justify-content-between h-100">
-                                        <h5 class="fw-bold text-primary">' . e($hotel->name) . '</h5>
-                                        <p class="text-warning mb-2">' . str_repeat('<i class="fa fa-star" style="color: #FCC737"></i>', (int) $hotel->star_rating) . '</p>
-                                        <p class="text-muted">' . e($hotel->address) . '</p>
-                                        <p class="text-primary fw-semibold fs-5">Starting from <span class="font-weight-bold">'
-                                            . ($hotel->daily_price ?? 'N/A') . '</span> / per night</p>
-                                        <p class="text-success">Breakfast Included: ' . ($hotel->has_breakfast ? 'Yes' : 'No') . '</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>';
+                    $html .= view('Hotel::frontend.partials.hotel-card',compact('hotel'))->render();
                 }
-
                 return response()->json([
                     'html'    => $html,
-                    'hasMore' => ($page * $perPage) < $allHotels->count()
+                    'hasMore' => ($page*$perPage) < $allHotels->count(),
                 ]);
             }
 
-            // ✅ First page full load
-            return view('Hotel::frontend.results-ha', [
+            // 10) Full page response
+            return view('Hotel::frontend.results-ha',[
                 'hotels'   => $pagedHotels,
                 'checkin'  => $request->checkin,
                 'checkout' => $request->checkout,
@@ -212,12 +192,12 @@ class HotelHController extends Controller
                 'minPrice' => $minPrice,
                 'maxPrice' => $maxPrice,
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
-            return back()->with('error', 'An error occurred: ' . $e->getMessage());
+            Log::error('Error searching hotels',['message'=>$e->getMessage()]);
+            return back()->with('error','An error occurred: '.$e->getMessage());
         }
     }
-
 
     private function fetchApiData($checkin, $checkout, $adults, $children, $hotelIds, $hotelHids)
     {
@@ -271,96 +251,199 @@ class HotelHController extends Controller
     }
 
 
+    // public function hotelInfo($id, Request $request)
+    // {
+    //     Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
+
+    //     try {
+    //         $checkin = $request->query('checkin', now()->format('Y-m-d'));
+    //         $checkout = $request->query('checkout', now()->addDay()->format('Y-m-d'));
+    //         $residency = $request->query('residency', 'gb');
+    //         $language = $request->query('language', 'en');
+    //         $currency = $request->query('currency', 'EUR');
+    //         $adults = (int) $request->query('adults', 1);
+
+    //         // Handle children properly
+    //         $childrenParam = $request->query('children', []);
+    //         if (is_string($childrenParam)) {
+    //             $children = array_filter(array_map('intval', explode(',', $childrenParam)));
+    //         } elseif (is_array($childrenParam)) {
+    //             $children = array_map('intval', $childrenParam);
+    //         } else {
+    //             $children = [];
+    //         }
+
+    //         // Fetch hotel from DB
+    //         $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
+    //         if (!$dbHotel) {
+    //             Log::error('Hotel not found in DB', ['hotel_id' => $id]);
+    //             return redirect()->back()->withErrors(['error' => 'Hotel not found']);
+    //         }
+
+    //         $hotelImages = DB::table('hotel_images')
+    //             ->where('hotel_id', $id)
+    //             ->pluck('image_url')
+    //             ->toArray();
+
+    //         // Build API request
+    //         $apiBody = [
+    //             'checkin' => $checkin,
+    //             'checkout' => $checkout,
+    //             'residency' => $residency,
+    //             'language' => $language,
+    //             'currency' => $currency,
+    //             'id' => $id,
+    //             'guests' => [[
+    //                 'adults' => $adults,
+    //                 'children' => $children,
+    //             ]]
+    //         ];
+
+    //         $response = Http::withBasicAuth($this->username, $this->password)
+    //             ->withHeaders(['Content-Type' => 'application/json'])
+    //             ->post($this->apiUrl . 'search/hp/', $apiBody);
+
+    //         if ($response->failed()) {
+    //             Log::error('API call failed', ['response' => $response->body()]);
+    //             throw new \Exception('Failed to fetch hotel details');
+    //         }
+
+    //         $apiData = $response->json()['data']['hotels'][0] ?? null;
+    //         if (!$apiData) {
+    //             return redirect()->back()->withErrors(['error' => 'Hotel not found in API']);
+    //         }
+
+    //         $hotel = [
+    //             'id' => $apiData['id'] ?? $dbHotel->hotel_id,
+    //             'name' => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
+    //             'address' => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
+    //             'star_rating' => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
+    //             'check_in_time' => $apiData['check_in_time'] ?? 'N/A',
+    //             'check_out_time' => $apiData['check_out_time'] ?? 'N/A',
+    //             'images_ext' => $hotelImages,
+    //             'price_per_night' => $apiData['rates'][0]['daily_prices'][0] ?? 'N/A',
+    //         ];
+
+    //         $roomRates = $apiData['rates'] ?? [];
+    //         $hasRoomRates = count($roomRates) > 0;
+
+    //         return view('Hotel::frontend.info-ha', compact(
+    //             'hotel', 'roomRates', 'hasRoomRates',
+    //             'checkin', 'checkout', 'residency', 'language',
+    //             'adults', 'children', 'currency'
+    //         ));
+
+    //     } catch (\Exception $e) {
+    //         Log::error('Error fetching hotel info', [
+    //             'hotel_id' => $id,
+    //             'error' => $e->getMessage(),
+    //         ]);
+    //         return redirect()->back()->withErrors(['error' => 'Could not load hotel information.']);
+    //     }
+    // }
+
     public function hotelInfo($id, Request $request)
     {
         Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
 
         try {
-            $checkin = $request->query('checkin', now()->format('Y-m-d'));
-            $checkout = $request->query('checkout', now()->addDay()->format('Y-m-d'));
+            // 1) Read query parameters
+            $checkin   = $request->query('checkin', now()->format('Y-m-d'));
+            $checkout  = $request->query('checkout', now()->addDay()->format('Y-m-d'));
             $residency = $request->query('residency', 'gb');
-            $language = $request->query('language', 'en');
-            $currency = $request->query('currency', 'EUR');
-            $adults = (int) $request->query('adults', 1);
+            $language  = $request->query('language', 'en');
+            $currency  = $request->query('currency', 'EUR');
+            $adults    = (int)$request->query('adults', 1);
 
-            // Handle children properly
-            $childrenParam = $request->query('children', []);
-            if (is_string($childrenParam)) {
-                $children = array_filter(array_map('intval', explode(',', $childrenParam)));
-            } elseif (is_array($childrenParam)) {
-                $children = array_map('intval', $childrenParam);
-            } else {
-                $children = [];
-            }
+            // 2) Sanitize child ages
+            $rawChildren = $request->query('children', []);
+            $children = is_array($rawChildren)
+                ? array_values(array_filter(
+                    array_map('intval', $rawChildren),
+                    fn($a) => $a >= 0 && $a <= 17
+                ))
+                : [];
 
-            // Fetch hotel from DB
+            // 3) Fetch hotel & images from DB
             $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
-            if (!$dbHotel) {
+            if (! $dbHotel) {
                 Log::error('Hotel not found in DB', ['hotel_id' => $id]);
-                return redirect()->back()->withErrors(['error' => 'Hotel not found']);
+                return redirect()->back()->withErrors(['Hotel not found']);
             }
-
             $hotelImages = DB::table('hotel_images')
                 ->where('hotel_id', $id)
                 ->pluck('image_url')
                 ->toArray();
 
-            // Build API request
+            // 4) Call ETG detail API
             $apiBody = [
-                'checkin' => $checkin,
-                'checkout' => $checkout,
+                'checkin'   => $checkin,
+                'checkout'  => $checkout,
                 'residency' => $residency,
-                'language' => $language,
-                'currency' => $currency,
-                'id' => $id,
-                'guests' => [[
-                    'adults' => $adults,
+                'language'  => $language,
+                'currency'  => $currency,
+                'id'        => $id,
+                'guests'    => [[
+                    'adults'   => $adults,
                     'children' => $children,
-                ]]
+                ]],
             ];
-
             $response = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'search/hp/', $apiBody);
+                ->withHeaders(['Content-Type'=>'application/json'])
+                ->post($this->apiUrl.'search/hp/', $apiBody);
 
             if ($response->failed()) {
-                Log::error('API call failed', ['response' => $response->body()]);
+                Log::error('API call failed', ['body' => $response->body()]);
                 throw new \Exception('Failed to fetch hotel details');
             }
 
             $apiData = $response->json()['data']['hotels'][0] ?? null;
-            if (!$apiData) {
-                return redirect()->back()->withErrors(['error' => 'Hotel not found in API']);
+            if (! $apiData) {
+                return redirect()->back()->withErrors(['Hotel not found in API']);
             }
 
+            // 5) Build hotel info
             $hotel = [
-                'id' => $apiData['id'] ?? $dbHotel->hotel_id,
-                'name' => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
-                'address' => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
-                'star_rating' => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
-                'check_in_time' => $apiData['check_in_time'] ?? 'N/A',
-                'check_out_time' => $apiData['check_out_time'] ?? 'N/A',
-                'images_ext' => $hotelImages,
-                'price_per_night' => $apiData['rates'][0]['daily_prices'][0] ?? 'N/A',
+                'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,
+                'name'                  => $dbHotel->name   ?? $apiData['name']    ?? 'N/A',
+                'address'               => $dbHotel->address?? $apiData['address'] ?? 'N/A',
+                'star_rating'           => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
+                'images_ext'            => $hotelImages,
+                'metapolicy_extra_info' => $apiData['metapolicy_extra_info'] ?? '',
             ];
 
-            $roomRates = $apiData['rates'] ?? [];
-            $hasRoomRates = count($roomRates) > 0;
+            // 6) Room rates
+            $roomRates = collect($apiData['rates'] ?? [])->map(function($rate) {
+                $payment = $rate['payment_options']['payment_types'][0] ?? [];
 
+                // ETG net price & commission
+                $rate['net_amount']        = data_get($payment, 'commission_info.charge.amount_net', null);
+                $rate['commission_amount'] = data_get($payment, 'commission_info.charge.amount_commission', null);
+
+                return $rate;
+            })->toArray();
+
+
+            // 7) Render view
             return view('Hotel::frontend.info-ha', compact(
-                'hotel', 'roomRates', 'hasRoomRates',
-                'checkin', 'checkout', 'residency', 'language',
-                'adults', 'children', 'currency'
+                'hotel',
+                'roomRates',
+                'checkin',
+                'checkout',
+                'adults',
+                'children',
+                'currency'
             ));
-
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error fetching hotel info', [
                 'hotel_id' => $id,
-                'error' => $e->getMessage(),
+                'error'    => $e->getMessage(),
             ]);
-            return redirect()->back()->withErrors(['error' => 'Could not load hotel information.']);
+            return redirect()->back()->withErrors(['error'=>'Could not load hotel information.']);
         }
     }
+
 
 
 
@@ -381,49 +464,53 @@ class HotelHController extends Controller
     public function prebookRoom(Request $request)
     {
         try {
-            // Validate the request
-            $request->validate([
-                'book_hash' => 'required|string', // Ensure 'book_hash' is provided
-                'room_name' => 'required|string', // Room name is required
+            $validated = $request->validate([
+                'book_hash'  => 'required|string',
+                'room_name'  => 'required|string',
+                'children'   => 'sometimes',
             ]);
 
-            // Retrieve input values, with default for 'price_increase_percent'
-            $bookHash = $request->input('book_hash'); // Retrieve 'book_hash'
-            $priceIncreasePercent = (int) $request->input('price_increase_percent', 20); // Default to 20 if not provided
-            $roomName = $request->input('room_name'); // Retrieve room name
+            $bookHash             = $validated['book_hash'];
+            $priceIncreasePercent = (int) $request->input('price_increase_percent', 20);
+            $roomName             = $validated['room_name'];
 
-            // Prepare the API payload
             $apiBody = [
-                'hash' => $bookHash,
-                'price_increase_percent' => $priceIncreasePercent,
+                'hash'                  => $bookHash,
+                'price_increase_percent'=> $priceIncreasePercent,
             ];
 
-            // Call the Prebook API
             $response = Http::withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->apiUrl . 'hotel/prebook/', $apiBody);
 
             if ($response->failed()) {
-                throw new \Exception('Prebook API request failed: ' . $response->body());
+                throw new \Exception(
+                    'Prebook API request failed: ' . $response->body()
+                );
             }
 
             $prebookData = $response->json();
+            $rawChildren = $request->input('children', []);
+            $children = is_string($rawChildren)
+                ? (json_decode($rawChildren, true) ?: [])
+                : (array) $rawChildren;
 
-            // Store the room name and prebook data in the session
             session([
                 'prebookData' => $prebookData,
-                'roomName' => $roomName,
-                'checkin' => $request->checkin,
-                'checkout' => $request->checkout,
-                'adults' => (int) $request->input('adults', 1),
-                'children' => json_decode($request->input('children', '[]'), true),
+                'roomName'    => $roomName,
+                'checkin'     => $request->checkin,
+                'checkout'    => $request->checkout,
+                'adults'      => (int) $request->input('adults', 1),
+                'children'    => $children,
             ]);
 
-            // Redirect to the result page with prebooking data
             return redirect()->route('hotel.prebook.result');
+
         } catch (\Exception $e) {
             Log::error('Prebook failed', ['error' => $e->getMessage()]);
-            return redirect()->back()->withErrors(['error' => 'Prebooking failed: ' . $e->getMessage()]);
+            return back()->withErrors([
+                'error' => 'Prebooking failed: ' . $e->getMessage(),
+            ]);
         }
     }
 
@@ -568,93 +655,99 @@ class HotelHController extends Controller
 
     public function processPayment(Request $request)
     {
-        try {
-            // Validate the input
-            $request->validate([
-                'order_id' => 'required|string',
-                'partner_order_id' => 'required|string',
-                'payment_method' => 'required|numeric',
-                'guests' => 'required|array',
-                'guests.*.first_name' => 'required|string',
-                'guests.*.last_name' => 'required|string',
-            ]);
+        // 1) Basic validation
+        $request->validate([
+            'order_id'         => 'required|string',
+            'partner_order_id' => 'required|string',
+            'payment_method'   => 'required|integer|min:0',
+            'guests'           => 'required|array|min:1',
+            'guests.*.first_name' => 'required|string',
+            'guests.*.last_name'  => 'required|string',
+        ]);
 
-            $orderId = $request->input('order_id');
-            $partnerOrderId = $request->input('partner_order_id');
-            $paymentMethodIndex = $request->input('payment_method');
-            $guests = $request->input('guests');
+        try {
+            $orderId         = $request->input('order_id');
+            $partnerOrderId  = $request->input('partner_order_id');
+            $pmIndex         = $request->input('payment_method');
+            $guests          = $request->input('guests');
 
             $bookingData = session('bookingData');
-            if (!$bookingData) {
-                throw new \Exception('No booking data found.');
+            if (! $bookingData) {
+                throw new \Exception('Session bookingData missing');
             }
 
-            $selectedPayment = $bookingData['payment_types'][$paymentMethodIndex] ?? null;
-            if (!$selectedPayment) {
-                throw new \Exception('Invalid payment method selected.');
+            $paymentTypes = data_get($bookingData, 'payment_types', []);
+            if (! isset($paymentTypes[$pmIndex])) {
+                throw new \Exception('Invalid payment method index');
             }
+            $selectedPayment = $paymentTypes[$pmIndex];
 
-            if ($selectedPayment['is_need_credit_card_data']) {
+            // 2) If CC data is needed, validate
+            if (! empty($selectedPayment['is_need_credit_card_data'])) {
                 $request->validate([
-                    'card_number' => 'required|string|min:16|max:16',
-                    'card_holder' => 'required|string',
-                    'expiry_month' => 'required|string|min:2|max:2',
-                    'expiry_year' => 'required|string|min:2|max:2',
-                    'cvc' => 'required|string|min:3|max:4',
+                    'card_number'  => 'required|digits:16',
+                    'card_holder'  => 'required|string',
+                    'expiry_month' => 'required|digits:2',
+                    'expiry_year'  => 'required|digits:2',
+                    'cvc'          => 'required|digits_between:3,4',
                 ]);
-
                 $creditCardData = [
-                    'card_number' => $request->input('card_number'),
-                    'card_holder' => $request->input('card_holder'),
+                    'card_number'  => $request->input('card_number'),
+                    'card_holder'  => $request->input('card_holder'),
                     'expiry_month' => $request->input('expiry_month'),
-                    'expiry_year' => $request->input('expiry_year'),
-                    'cvc' => $request->input('cvc'),
+                    'expiry_year'  => $request->input('expiry_year'),
+                    'cvc'          => $request->input('cvc'),
                 ];
             }
 
-            $rooms = $bookingData['rooms'] ?? null;
-            if (!$rooms) {
-                throw new \Exception('Rooms data is missing from the booking information.');
+            $rooms = session('rooms', []);
+            if (empty($rooms)) {
+                throw new \Exception('Rooms data missing from session');
             }
 
-            // Prepare API payload
+            // 3) Build payload
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
-                'order_id' => $orderId,
-                'payment_type' => [
-                    'type' => $selectedPayment['type'],
-                    'amount' => $selectedPayment['amount'],
+                'order_id'         => $orderId,
+                'payment_type'     => [
+                    'type'          => $selectedPayment['type'],
+                    'amount'        => $selectedPayment['amount'],
                     'currency_code' => $selectedPayment['currency_code'],
                 ],
-                'language' => 'en',
-                'rooms' => $rooms,
-                'guests' => $guests, // Include guests
+                'language'         => 'en',
+                'rooms'            => $rooms,
+                'guests'           => $guests,
                 'credit_card_data' => $creditCardData ?? null,
             ];
 
-            Log::info('Processing payment with API payload', ['payload' => $apiBody]);
+            Log::info('Sending payment payload', ['payload'=>$apiBody]);
 
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiBody);
+            $resp = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type'=>'application/json'])
+                ->post($this->apiUrl.'hotel/order/booking/finish/', $apiBody);
 
-            Log::info('Payment API Response', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
+            if (! $resp->successful()) {
+                throw new \Exception('Payment API HTTP '.$resp->status());
+            }
+            $json = $resp->json();
 
-            if ($response->failed()) {
-                throw new \Exception('Payment API request failed: ' . $response->body());
+            if (($json['status'] ?? '') !== 'ok') {
+                throw new \Exception('Payment failed: '.($json['error'] ?? 'unknown'));
             }
 
-            $paymentResult = $response->json();
+            session(['bookingResult'=>$json['data']]);
 
-            return redirect()->route('hotel.payment.success')->with('paymentResult', $paymentResult);
-        } catch (\Exception $e) {
-            Log::error('Payment processing failed', ['error' => $e->getMessage()]);
-            return redirect()->back()->withErrors(['error' => 'Payment failed: ' . $e->getMessage()]);
+            return redirect()->route('hotel.payment.success');
+        }
+        catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors());
+        }
+        catch (\Exception $e) {
+            Log::error('processPayment error', ['message'=>$e->getMessage(),'trace'=>$e->getTraceAsString()]);
+            return redirect()->back()->withErrors(['error'=>'Payment processing failed: '.$e->getMessage()]);
         }
     }
+
 
     // public function finishBooking(Request $request)
     // {
@@ -1131,162 +1224,149 @@ class HotelHController extends Controller
     //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
     // }
 
+
+
+
     public function finishBooking(Request $request)
     {
-        $data = $request->all();
-
-        if (!isset($data['order_id'])) {
-            \Log::error('Missing order_id in booking data.');
-            return response()->json(['error' => 'Missing order_id'], 422);
-        }
-
-        $userFirstName = isset($data['first_name']) ? trim($data['first_name']) : '';
-        $userLastName  = isset($data['last_name']) ? trim($data['last_name']) : '';
-        $userEmail     = (isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL))
-                            ? trim($data['email'])
-                            : 'guest@example.com';
-        $userPhone     = isset($data['phone']) ? trim($data['phone']) : '';
-        if (strlen($userPhone) < 5) {
-            $userPhone = '+0000000000';
-        }
-
-        $user = auth()->user();
-        $bookedBy = 'guest';
-        $adminId = null;
-        $agentId = $data['agent_id'] ?? null;
-        $userId = null;
-
-        if ($user) {
-            $roleId = $user->role_id;
-            $bookedBy = match ($roleId) {
-                1 => 'admin',
-                2 => 'agent',
-                3 => 'user',
-                default => 'guest',
-            };
-
-            if ($roleId === 1 && !empty($data['agent_id'])) {
-                $agent = User::find($data['agent_id']);
-                if ($agent) {
-                    $userFirstName = $agent->name;
-                    $userLastName = '';
-                    $userEmail = $agent->email ?? $userEmail;
-                    $userPhone = $agent->phone ?? $userPhone;
-                    $agentId = $agent->id;
-
-                    \Log::info('Booking made by admin for agent', [
-                        'admin_id' => $user->id,
-                        'agent_id' => $agent->id,
-                        'agent_email' => $agent->email
-                    ]);
-                }
-                $adminId = $user->id;
-            } elseif ($roleId === 2) {
-                $agentId = $user->id;
-            } elseif ($roleId === 3) {
-                $userId = $user->id;
-            }
-        }
-
-        $originalPaymentType = $data['payment_type']['type'] ?? 'deposit';
-        $finalPaymentType = ($originalPaymentType === 'now') ? 'now' : 'deposit';
+        $request->validate([
+            'order_id'                    => 'required|string',
+            'partner_order_id'            => 'required|string',
+            'first_name'                  => 'required|string',
+            'last_name'                   => 'required|string',
+            'email'                       => 'required|email',
+            'phone'                       => 'required|string|min:5',
+            'payment_type'                => 'required|array',
+            'payment_type.type'           => 'required|string',
+            'payment_type.amount'         => 'required|numeric',
+            'payment_type.currency_code'  => 'required|string',
+            'rooms'                       => 'required|array',
+            'rooms.*.guests'              => 'required|array',
+            'rooms.*.guests.*.first_name' => 'required|string',
+            'rooms.*.guests.*.last_name'  => 'required|string',
+        ]);
 
         $payload = [
-            'user' => [
-                'first_name' => $userFirstName,
-                'last_name'  => $userLastName,
-                'email'      => 'lindor.morina@progtelx.com', // ✅ RateHawk email fixed
-                'phone'      => $userPhone,
+            'order_id'    => $request->input('order_id'),
+            'partner'     => ['partner_order_id' => $request->input('partner_order_id')],
+            'user'        => [
+                'first_name' => $request->input('first_name'),
+                'last_name'  => $request->input('last_name'),
+                'email'      => 'blerimmi@hotmail.com',
+                'phone'      => $request->input('phone'),
             ],
-            'supplier_data' => [
-                'first_name_original' => $data['supplier_data']['first_name_original'] ?? '',
-                'last_name_original'  => $data['supplier_data']['last_name_original'] ?? '',
-                'phone'               => $data['supplier_data']['phone'] ?? '',
-                'email'               => $data['supplier_data']['email'] ?? '',
-            ],
-            'partner' => [
-                'partner_order_id'  => $data['partner_order_id'] ?? '',
-                'comment'           => $data['partner_comment'] ?? '',
-                'amount_sell_b2b2c' => isset($data['amount_sell_b2b2c']) && is_numeric($data['amount_sell_b2b2c'])
-                                        ? number_format($data['amount_sell_b2b2c'], 2, '.', '')
-                                        : '0.00',
-            ],
-            'order_id'     => $data['order_id'],
-            'language'     => $data['language'] ?? 'en',
-            'rooms'        => $data['rooms'] ?? [],
-            'payment_type' => [
-                'type'          => $finalPaymentType,
-                'amount'        => $data['payment_type']['amount'] ?? '',
-                'currency_code' => $data['payment_type']['currency_code'] ?? 'EUR',
-                'is_need_credit_card_data' => false,
-            ],
-            'return_path' => $data['return_path'] ?? '',
+            'supplier_data' => $request->input('supplier_data', []),
+            'rooms'         => $request->input('rooms'),
+            'payment_type'  => $request->input('payment_type'),
+            'language'      => $request->input('language', 'en'),
+            'return_path'   => $request->input('return_path'),
+            'item_id'       => $request->input('item_id'),
+            'book_hash'     => $request->input('book_hash'),
         ];
 
-        \Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
+        Log::info('finishBooking payload', ['payload' => $payload]);
 
         $response = Http::withBasicAuth($this->username, $this->password)
             ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
             ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
 
-        \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
-
         $json = $response->json();
+        Log::info('finishBooking response', ['finish' => $json]);
 
-        if (isset($json['error']) && $json['error'] === 'insufficient_b2b_balance') {
-            \Log::warning('Simulating booking success due to insufficient_b2b_balance for testing.');
-            $json = [
-                'status' => 'ok',
-                'data'   => [
-                    'order_id' => $payload['order_id'],
-                    'item_id'  => 'simulated_guest_' . rand(1000, 9999),
-                    'status'   => 'Simulated'
-                ],
-            ];
-        }
-
-        if (isset($json['status']) && $json['status'] === 'ok') {
-            \Log::info('Booking success', ['response' => $json]);
-
-            $booking = MjellmaBooking::create([
-                'order_id'         => $data['order_id'],
-                'partner_order_id' => $data['partner_order_id'] ?? null,
-                'booked_by'        => $bookedBy,
-                'admin_id'         => $adminId,
-                'agent_id'         => $agentId,
-                'user_id'          => $userId,
-                'user_email'       => $userEmail,
-                'user_phone'       => $userPhone,
-                'payment_type'     => $finalPaymentType,
-                'payment_amount'   => $data['payment_type']['amount'] ?? null,
-                'currency_code'    => $data['payment_type']['currency_code'] ?? 'EUR',
-                'pcb_status'       => $json['data']['status'] ?? null,
-                'api_status'       => $json['status'],
-                'api_error'        => $json['error'] ?? null,
+        $statusResp = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
+            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                'partner_order_id' => $payload['partner']['partner_order_id']
             ]);
 
-            event(new MjellmaBookingCreatedEvent($booking));
+        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
+        Log::info('finishBooking status response', ['status' => $statusData]);
 
-            // 📝 Log notification firing
-            \Log::info('🔔 MjellmaBookingCreatedEvent triggered', [
-                'order_id' => $booking->order_id,
-                'partner_order_id' => $booking->partner_order_id,
-                'user_email' => $booking->user_email,
+        if (data_get($statusData, 'status') === 'ok') {
+            MjellmaBooking::create([
+                'order_id'         => $payload['order_id'],
+                'partner_order_id' => $payload['partner']['partner_order_id'],
+                'payment_type'     => $payload['payment_type']['type'],
+                'payment_amount'   => $payload['payment_type']['amount'],
+                'currency_code'    => $payload['payment_type']['currency_code'],
+                'api_status'       => 'ok',
             ]);
 
             return view('Hotel::frontend.payment-success', [
-                'order_id' => $payload['order_id'],
-                'partner_order_id' => $data['partner_order_id'] ?? null,
+                'order_id'         => $payload['order_id'],
+                'partner_order_id' => $payload['partner']['partner_order_id'],
             ]);
         }
 
-
-        \Log::error('Booking failed', [
-            'payload_sent'  => $payload,
-            'response_body' => $response->body()
+        return view('Hotel::frontend.booking-pending', [
+            'status'  => $statusData,
+            'order_id' => $payload['order_id'],
         ]);
+    }
 
-        return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
+    public function completeBooking(Request $request)
+    {
+        $booking = MjellmaBooking::findOrFail($request->input('booking_id'));
+        $partnerId = $request->input('partner_order_id', $booking->partner_order_id);
+
+        $finishPayload = [
+            'order_id'        => $booking->order_id,
+            'partner_order_id'=> $partnerId,
+            'supplier_data'   => $request->input('supplier_data', []),
+            'payment_type'    => [
+                'amount'        => $booking->payment_amount,
+                'currency_code' => $booking->currency_code,
+                'type'          => $booking->payment_type,
+            ],
+            'return_path'     => $request->input('return_path'),
+            'rooms'           => $request->input('rooms'),
+            'language'        => $request->input('language', 'en'),
+            'book_hash'       => $booking->book_hash,
+            'item_id'         => $booking->item_id,
+        ];
+
+        try {
+            $finishResp = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->timeout(30)
+                ->post($this->apiUrl . 'hotel/order/booking/finish/', $finishPayload);
+
+            if ($finishResp->serverError()) {
+                throw new RequestException($finishResp->toPsrResponse());
+            }
+
+            $finishData = $finishResp->json();
+            Log::info('completeBooking finish response', ['data' => $finishData]);
+
+            if (data_get($finishData, 'status') === 'ok') {
+                $booking->update(['status' => 'processing']);
+            } else {
+                Log::warning('Finish API call returned non-ok', ['response' => $finishData]);
+            }
+
+        } catch (RequestException $e) {
+            Log::error('Finish API call failed, falling back to status', ['error' => $e->getMessage()]);
+        }
+
+        $statusResp = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
+            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                'partner_order_id' => $partnerId
+            ]);
+
+        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
+
+        if (data_get($statusData, 'status') === 'ok') {
+            return view('Hotel::frontend.payment-success', compact('booking', 'statusData'));
+        }
+
+        return view('Hotel::frontend.booking-pending', [
+            'booking' => $booking,
+            'status'  => $statusData,
+        ]);
     }
 
 
@@ -1341,32 +1421,63 @@ class HotelHController extends Controller
     //see details
     public function showBookingDetails(Request $request, $orderId)
     {
-        $response = Http::withBasicAuth($this->username, $this->password)
-            ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/info/', [
-                "ordering" => [
-                    "ordering_type" => "desc",
-                    "ordering_by"   => "created_at"
-                ],
-                "pagination" => [
-                    "page_size"    => 1,
-                    "page_number"  => 1
-                ],
-                "search" => [
-                    "order_ids" => [(int) $orderId]
-                ],
-                "language" => "en"
+        try {
+            // 1) Fetch “order/info”
+            $infoResp = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type'=>'application/json'])
+                ->post($this->apiUrl.'hotel/order/info/', [
+                    'ordering'   => ['ordering_type'=>'desc', 'ordering_by'=>'created_at'],
+                    'pagination' => ['page_size'=>1, 'page_number'=>1],
+                    'search'     => ['order_ids'=>[(int)$orderId]],
+                    'language'   => 'en',
+                ]);
+
+            if (! $infoResp->successful()) {
+                throw new \Exception("order/info returned HTTP ".$infoResp->status());
+            }
+
+            $infoJson = $infoResp->json();
+            if (($infoJson['status'] ?? '') !== 'ok' || empty($infoJson['data']['orders'][0])) {
+                throw new \Exception($infoJson['error'] ?? 'No order found');
+            }
+
+            $bookingInfo = $infoJson['data']['orders'][0];
+            $partnerOrderId = data_get($bookingInfo, 'partner_data.order_id');
+            if (! $partnerOrderId) {
+                throw new \Exception("Missing partner_order_id in partner_data");
+            }
+
+            // 2) Fetch “finish/status”
+            $statusResp = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type'=>'application/json'])
+                ->post($this->apiUrl.'hotel/order/booking/finish/status/', [
+                    'partner_order_id' => $partnerOrderId
+                ]);
+
+            if (! $statusResp->successful()) {
+                throw new \Exception("finish/status returned HTTP ".$statusResp->status());
+            }
+
+            $statusJson = $statusResp->json();
+            $finalStatus = $statusJson['status'] ?? 'UNKNOWN';
+            $finishData  = $statusJson;
+
+        } catch (\Exception $e) {
+            Log::error('Error in showBookingDetails', [
+                'orderId'=>$orderId,
+                'message'=>$e->getMessage(),
+                'trace'=>$e->getTraceAsString()
             ]);
-
-        $json = $response->json();
-
-        if ($json['status'] === 'ok' && isset($json['data']['orders'][0])) {
-            return view('Hotel::admin.details', [
-                'booking' => $json['data']['orders'][0]
+            return redirect()->back()->withErrors([
+                'error' => 'Could not load booking details: '.$e->getMessage()
             ]);
         }
 
-        return redirect()->back()->with('error', $json['error'] ?? 'Unable to fetch booking details.');
+        return view('Hotel::admin.details', [
+            'booking'     => $bookingInfo,
+            'finalStatus' => $finalStatus,
+            'finishData'  => $finishData,
+        ]);
     }
 
     //cancel

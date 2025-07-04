@@ -39,14 +39,19 @@ def insert_batch(cursor, hotels, images):
     if hotels:
         cursor.executemany(
             """
-            INSERT INTO hotels (hotel_id, hid, name, address, latitude, longitude, star_rating)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO hotels (
+                hotel_id, hid, name, address, latitude, longitude, star_rating,
+                metapolicy_struct, metapolicy_extra_info
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-            name = VALUES(name),
-            address = VALUES(address),
-            latitude = VALUES(latitude),
-            longitude = VALUES(longitude),
-            star_rating = VALUES(star_rating)
+                name = VALUES(name),
+                address = VALUES(address),
+                latitude = VALUES(latitude),
+                longitude = VALUES(longitude),
+                star_rating = VALUES(star_rating),
+                metapolicy_struct = VALUES(metapolicy_struct),
+                metapolicy_extra_info = VALUES(metapolicy_extra_info)
             """,
             hotels,
         )
@@ -83,7 +88,9 @@ def decompress_and_store_data(dump_url):
             address TEXT,
             latitude TEXT,
             longitude TEXT,
-            star_rating FLOAT
+            star_rating FLOAT,
+            metapolicy_struct JSON,
+            metapolicy_extra_info JSON
         )
     """)
 
@@ -113,8 +120,15 @@ def decompress_and_store_data(dump_url):
 
             hotels_batch.append(
                 (
-                    hotel["id"], hotel["hid"], hotel.get("name"), hotel.get("address"),
-                    hotel.get("latitude"), hotel.get("longitude"), hotel.get("star_rating")
+                    hotel["id"],
+                    hotel["hid"],
+                    hotel.get("name"),
+                    hotel.get("address"),
+                    hotel.get("latitude"),
+                    hotel.get("longitude"),
+                    hotel.get("star_rating"),
+                    json.dumps(hotel.get("metapolicy_struct")) if hotel.get("metapolicy_struct") else None,
+                    json.dumps(hotel.get("metapolicy_extra_info")) if hotel.get("metapolicy_extra_info") else None
                 )
             )
 
