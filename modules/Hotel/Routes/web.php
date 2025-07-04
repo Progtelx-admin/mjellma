@@ -40,6 +40,9 @@ Route::get('/hotel/booking/confirmation/{book_hash}', [HotelHController::class, 
 // payment & finish
 Route::post('/hotel/payment', [HotelHController::class, 'processPayment'])
     ->name('hotel.payment');
+Route::post('/hotel/booking/complete', [HotelHController::class, 'completeBooking'])
+->name('hotel.booking.complete');
+
 Route::post('/hotel/booking/finish', [HotelHController::class, 'finishBooking'])
     ->name('hotel.booking.finish');
 Route::get('/hotel/payment/success', function () {

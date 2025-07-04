@@ -1224,82 +1224,149 @@ class HotelHController extends Controller
     //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
     // }
 
+
+
+
     public function finishBooking(Request $request)
     {
-        // 1) Validate minimum required fields
         $request->validate([
-            'order_id'           => 'required|string',
-            'partner_order_id'   => 'required|string',
-            'payment_type'       => 'required|array',
-            'payment_type.type'  => 'required|string',
-            'payment_type.amount'=> 'required|numeric',
-            'payment_type.currency_code' => 'required|string',
+            'order_id'                    => 'required|string',
+            'partner_order_id'            => 'required|string',
+            'first_name'                  => 'required|string',
+            'last_name'                   => 'required|string',
+            'email'                       => 'required|email',
+            'phone'                       => 'required|string|min:5',
+            'payment_type'                => 'required|array',
+            'payment_type.type'           => 'required|string',
+            'payment_type.amount'         => 'required|numeric',
+            'payment_type.currency_code'  => 'required|string',
+            'rooms'                       => 'required|array',
+            'rooms.*.guests'              => 'required|array',
+            'rooms.*.guests.*.first_name' => 'required|string',
+            'rooms.*.guests.*.last_name'  => 'required|string',
         ]);
 
-        $data = $request->only([
-            'order_id',
-            'partner_order_id',
-            'supplier_data',
-            'payment_type',
-            'return_path',
-            'rooms',
-            'guests',
-            'user',
-            'partner',
-            'language'
+        $payload = [
+            'order_id'    => $request->input('order_id'),
+            'partner'     => ['partner_order_id' => $request->input('partner_order_id')],
+            'user'        => [
+                'first_name' => $request->input('first_name'),
+                'last_name'  => $request->input('last_name'),
+                'email'      => $request->input('email'),
+                'phone'      => $request->input('phone'),
+            ],
+            'supplier_data' => $request->input('supplier_data', []),
+            'rooms'         => $request->input('rooms'),
+            'payment_type'  => $request->input('payment_type'),
+            'language'      => $request->input('language', 'en'),
+            'return_path'   => $request->input('return_path'),
+            'item_id'       => $request->input('item_id'),
+            'book_hash'     => $request->input('book_hash'),
+        ];
+
+        Log::info('finishBooking payload', ['payload' => $payload]);
+
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
+            ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+
+        $json = $response->json();
+        Log::info('finishBooking response', ['finish' => $json]);
+
+        $statusResp = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
+            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                'partner_order_id' => $payload['partner']['partner_order_id']
+            ]);
+
+        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
+        Log::info('finishBooking status response', ['status' => $statusData]);
+
+        if (data_get($statusData, 'status') === 'ok') {
+            MjellmaBooking::create([
+                'order_id'         => $payload['order_id'],
+                'partner_order_id' => $payload['partner']['partner_order_id'],
+                'payment_type'     => $payload['payment_type']['type'],
+                'payment_amount'   => $payload['payment_type']['amount'],
+                'currency_code'    => $payload['payment_type']['currency_code'],
+                'api_status'       => 'ok',
+            ]);
+
+            return view('Hotel::frontend.payment-success', [
+                'order_id'         => $payload['order_id'],
+                'partner_order_id' => $payload['partner']['partner_order_id'],
+            ]);
+        }
+
+        return view('Hotel::frontend.booking-pending', [
+            'status'  => $statusData,
+            'order_id' => $payload['order_id'],
         ]);
+    }
+
+    public function completeBooking(Request $request)
+    {
+        $booking = MjellmaBooking::findOrFail($request->input('booking_id'));
+        $partnerId = $request->input('partner_order_id', $booking->partner_order_id);
+
+        $finishPayload = [
+            'order_id'        => $booking->order_id,
+            'partner_order_id'=> $partnerId,
+            'supplier_data'   => $request->input('supplier_data', []),
+            'payment_type'    => [
+                'amount'        => $booking->payment_amount,
+                'currency_code' => $booking->currency_code,
+                'type'          => $booking->payment_type,
+            ],
+            'return_path'     => $request->input('return_path'),
+            'rooms'           => $request->input('rooms'),
+            'language'        => $request->input('language', 'en'),
+            'book_hash'       => $booking->book_hash,
+            'item_id'         => $booking->item_id,
+        ];
 
         try {
-            Log::info('finishBooking payload', ['payload'=>$data]);
+            $finishResp = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->timeout(30)
+                ->post($this->apiUrl . 'hotel/order/booking/finish/', $finishPayload);
 
-            $resp = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type'=>'application/json'])
-                ->post($this->apiUrl.'hotel/order/booking/finish/', $data);
-
-            if (! $resp->successful()) {
-                throw new \Exception('Finish API HTTP '.$resp->status());
+            if ($finishResp->serverError()) {
+                throw new RequestException($finishResp->toPsrResponse());
             }
 
-            $json = $resp->json();
+            $finishData = $finishResp->json();
+            Log::info('completeBooking finish response', ['data' => $finishData]);
 
-            // 2) Special testing override
-            if (($json['error'] ?? '') === 'insufficient_b2b_balance') {
-                Log::warning('Insufficient balance, simulating OK for test');
-                $json = ['status'=>'ok','data'=>['order_id'=>$data['order_id'],'status'=>'Simulated']];
+            if (data_get($finishData, 'status') === 'ok') {
+                $booking->update(['status' => 'processing']);
+            } else {
+                Log::warning('Finish API call returned non-ok', ['response' => $finishData]);
             }
 
-            if (($json['status'] ?? '') === 'ok') {
-                // Record to DB
-                $booking = MjellmaBooking::create([
-                    'order_id'         => $data['order_id'],
-                    'partner_order_id' => $data['partner_order_id'],
-                    'payment_type'     => $data['payment_type']['type'],
-                    'payment_amount'   => $data['payment_type']['amount'],
-                    'currency_code'    => $data['payment_type']['currency_code'],
-                    'pcb_status'       => $json['data']['status'] ?? null,
-                    'api_status'       => 'ok',
-                ]);
-
-                event(new \App\Events\MjellmaBookingCreatedEvent($booking));
-
-                return view('Hotel::frontend.payment-success', [
-                    'order_id'          => $data['order_id'],
-                    'partner_order_id'  => $data['partner_order_id'],
-                ]);
-            }
-
-            // 3) Failure
-            Log::error('finishBooking returned error', ['response'=>$json]);
-            return response()->json([
-                'error'=> $json['error'] ?? 'unknown'
-            ], 500);
-
-        } catch (\Exception $e) {
-            Log::error('finishBooking exception', ['message'=>$e->getMessage()]);
-            return response()->json([
-                'error'=>'Server error: '.$e->getMessage()
-            ], 500);
+        } catch (RequestException $e) {
+            Log::error('Finish API call failed, falling back to status', ['error' => $e->getMessage()]);
         }
+
+        $statusResp = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->timeout(30)
+            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                'partner_order_id' => $partnerId
+            ]);
+
+        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
+
+        if (data_get($statusData, 'status') === 'ok') {
+            return view('Hotel::frontend.payment-success', compact('booking', 'statusData'));
+        }
+
+        return view('Hotel::frontend.booking-pending', [
+            'booking' => $booking,
+            'status'  => $statusData,
+        ]);
     }
 
 
