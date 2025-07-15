@@ -375,7 +375,13 @@ class HotelHController extends Controller
                 ->pluck('image_url')
                 ->toArray();
 
-            // 4) Call ETG detail API
+            // Decode JSON columns
+            $metapolicyStruct = $dbHotel->metapolicy_struct
+                ? json_decode($dbHotel->metapolicy_struct, true)
+                : [];
+            $metapolicyExtraInfo = $dbHotel->metapolicy_extra_info ?? '';
+
+            // 4) Call ETG detail API (for rates)
             $apiBody = [
                 'checkin'   => $checkin,
                 'checkout'  => $checkout,
@@ -396,46 +402,36 @@ class HotelHController extends Controller
                 Log::error('API call failed', ['body' => $response->body()]);
                 throw new \Exception('Failed to fetch hotel details');
             }
-
             $apiData = $response->json()['data']['hotels'][0] ?? null;
             if (! $apiData) {
                 return redirect()->back()->withErrors(['Hotel not found in API']);
             }
 
-            // 5) Build hotel info
-            $hotel = [
-                'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,
-                'name'                  => $dbHotel->name   ?? $apiData['name']    ?? 'N/A',
-                'address'               => $dbHotel->address?? $apiData['address'] ?? 'N/A',
-                'star_rating'           => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
-                'images_ext'            => $hotelImages,
-                'metapolicy_extra_info' => $apiData['metapolicy_extra_info'] ?? '',
-            ];
-
-            // 6) Room rates
+            // 5) Room rates
             $roomRates = collect($apiData['rates'] ?? [])->map(function($rate) {
                 $payment = $rate['payment_options']['payment_types'][0] ?? [];
-
-                // ETG net price & commission
                 $rate['net_amount']        = data_get($payment, 'commission_info.charge.amount_net', null);
                 $rate['commission_amount'] = data_get($payment, 'commission_info.charge.amount_commission', null);
-
                 return $rate;
             })->toArray();
 
+            // 6) Build hotel info for view
+            $hotel = [
+                'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,
+                'name'                  => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
+                'address'               => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
+                'star_rating'           => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
+                'images_ext'            => $hotelImages,
+                'metapolicy_struct'     => $metapolicyStruct,
+                'metapolicy_extra_info' => $metapolicyExtraInfo ?: ($apiData['metapolicy_extra_info'] ?? ''),
+            ];
 
             // 7) Render view
             return view('Hotel::frontend.info-ha', compact(
-                'hotel',
-                'roomRates',
-                'checkin',
-                'checkout',
-                'adults',
-                'children',
-                'currency'
+                'hotel', 'roomRates', 'checkin', 'checkout', 'adults', 'children', 'currency'
             ));
-        }
-        catch (\Exception $e) {
+
+        } catch (\Exception $e) {
             Log::error('Error fetching hotel info', [
                 'hotel_id' => $id,
                 'error'    => $e->getMessage(),
