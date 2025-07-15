@@ -26,7 +26,7 @@
             </a>
         </div>
 
-        {{-- HOTEL HEADER --}}
+        {{-- Hotel Header --}}
         <div class="hotel-header d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h1 class="fw-bold">{{ $hotel['name'] }}</h1>
@@ -44,7 +44,7 @@
             </div>
         </div>
 
-        {{-- IMAGE CAROUSEL --}}
+        {{-- Image Carousel --}}
         @if (!empty($hotel['images_ext']))
             <div id="hotelImageCarousel" class="carousel slide mb-5" data-bs-ride="carousel">
                 <div class="carousel-inner">
@@ -64,7 +64,7 @@
             </div>
         @endif
 
-        {{-- ADDITIONAL POLICY INFO --}}
+        {{-- Additional Policy Information --}}
         @if (!empty($hotel['metapolicy_extra_info']))
             <div class="mb-5">
                 <h4>Additional Policy Information</h4>
@@ -72,7 +72,7 @@
             </div>
         @endif
 
-        {{-- AVAILABLE ROOMS --}}
+        {{-- Available Rooms --}}
         <h3 class="mb-4">Available Rooms</h3>
         @forelse($roomRates as $rate)
             <div class="card mb-4 room-card shadow-sm">
@@ -87,37 +87,28 @@
                     <div class="col-md-6 text-end p-3">
                         @php
                             $payment = $rate['payment_options']['payment_types'][0] ?? [];
-                            $allTaxes = data_get($payment, 'tax_data.taxes', []);
-                            $onSiteTaxes = collect($allTaxes)->where('included_by_supplier', false)->values();
-                            $policies = data_get($payment, 'cancellation_penalties.policies', []);
-                            $netAmount = data_get(
-                                $payment,
-                                'commission_info.charge.amount_net',
-                                $payment['amount'] ?? 0,
+                            $onSiteTaxes = collect(data_get($payment, 'tax_data.taxes', []))->where(
+                                'included_by_supplier',
+                                false,
                             );
-                            $commissionAmount = data_get($payment, 'commission_info.charge.amount_commission', null);
+                            $policies = data_get($payment, 'cancellation_penalties.policies', []);
+                            $net = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
+                            $comm = data_get($payment, 'commission_info.charge.amount_commission', null);
                             $currency = $payment['currency_code'] ?? '';
                         @endphp
 
-                        <h4 class="text-primary">
-                            {{ number_format((float) $netAmount, 2) }} {{ $currency }}
-                        </h4>
-
-                        @if (!is_null($commissionAmount))
-                            <p class="text-muted">
-                                <small>Your commission: {{ number_format((float) $commissionAmount, 2) }}
-                                    {{ $currency }}</small>
-                            </p>
+                        <h4 class="text-primary">{{ number_format((float) $net, 2) }} {{ $currency }}</h4>
+                        @if (!is_null($comm))
+                            <p class="text-muted"><small>Your commission: {{ number_format((float) $comm, 2) }}
+                                    {{ $currency }}</small></p>
                         @endif
 
-                        {{-- On-site Taxes --}}
                         @if ($onSiteTaxes->isNotEmpty())
                             <div class="mt-2 text-start">
                                 <strong>On-site Taxes:</strong>
                                 <ul class="list-unstyled mb-0">
                                     @foreach ($onSiteTaxes as $tax)
-                                        <li>
-                                            {{ ucwords(str_replace('_', ' ', $tax['name'])) }}:
+                                        <li>{{ ucwords(str_replace('_', ' ', $tax['name'])) }}:
                                             {{ number_format((float) $tax['amount'], 2) }} {{ $tax['currency_code'] }}
                                             <small class="text-muted">(to be paid at hotel)</small>
                                         </li>
@@ -126,7 +117,6 @@
                             </div>
                         @endif
 
-                        {{-- Cancellation Policies --}}
                         @if (!empty($policies))
                             <div class="mt-2 text-start">
                                 <strong>Cancellation Policies (UTC+0):</strong>
@@ -139,34 +129,25 @@
                                             $end = $p['end_at'] ? \Carbon\Carbon::parse($p['end_at'])->utc() : null;
                                             $fee = number_format($p['amount_show'] ?? ($p['amount_charge'] ?? 0), 2);
                                         @endphp
-
-                                        @if (is_null($start) && !is_null($end))
-                                            <li>
-                                                Free cancellation until
-                                                <strong>{{ $end->format('Y-m-d H:i') }} UTC</strong>.
+                                        @if (is_null($start) && $end)
+                                            <li>Free cancellation until <strong>{{ $end->format('Y-m-d H:i') }}
+                                                    UTC</strong>.</li>
+                                        @elseif($start && $end)
+                                            <li>From <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong> to
+                                                <strong>{{ $end->format('Y-m-d H:i') }} UTC</strong>: Fee
+                                                {{ $fee }} {{ $currency }}
                                             </li>
-                                        @elseif (!is_null($start) && !is_null($end))
-                                            <li>
-                                                From <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong>
-                                                to <strong>{{ $end->format('Y-m-d H:i') }} UTC</strong>:
-                                                Fee {{ $fee }} {{ $currency }}
-                                            </li>
-                                        @elseif (!is_null($start) && is_null($end))
-                                            <li>
-                                                After <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong>:
-                                                Fee {{ $fee }} {{ $currency }}
-                                            </li>
+                                        @elseif($start)
+                                            <li>After <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong>: Fee
+                                                {{ $fee }} {{ $currency }}</li>
                                         @else
-                                            <li>
-                                                No free cancellation available. Full charge applies.
-                                            </li>
+                                            <li>No free cancellation available. Full charge applies.</li>
                                         @endif
                                     @endforeach
                                 </ul>
                             </div>
                         @endif
 
-                        {{-- Choose Button --}}
                         <form method="POST" action="{{ route('hotel.prebook') }}">
                             @csrf
                             <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
@@ -189,6 +170,154 @@
         @empty
             <p>No rooms available.</p>
         @endforelse
+
+        @php
+            $policy = $hotel['metapolicy_struct'] ?? [];
+        @endphp
+
+        @if (count($policy))
+            <table class="table table-borderless mb-5">
+                <tbody>
+                    {{-- Cancellation / prepayment --}}
+                    <tr>
+                        <th class="align-top">
+                            <i class="fa fa-info-circle text-secondary me-2"></i>
+                            Cancellation/prepayment
+                        </th>
+                        <td>
+                            @if (!empty($policy['deposit']))
+                                <ul class="mb-0 ps-3">
+                                    @foreach ($policy['deposit'] as $dep)
+                                        <li>
+                                            {{ str_replace('_', ' ', $dep['deposit_type']) }} —
+                                            {{ number_format((float) $dep['price'], 2) }} {{ $dep['currency'] ?? '' }}
+                                            ({{ str_replace('_', ' ', $dep['payment_type']) }},
+                                            {{ str_replace('_', ' ', $dep['pricing_method']) }})
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @else
+                                <p class="mb-0">
+                                    Cancellation and prepayment policies vary according to accommodation type.
+                                    Please check what <a href="#conditions">conditions</a> may apply to each option when
+                                    making your selection.
+                                </p>
+                            @endif
+                        </td>
+                    </tr>
+
+                    {{-- Children and beds --}}
+                    <tr>
+                        <th class="align-top">
+                            <i class="fa fa-users text-secondary me-2"></i>
+                            Children and beds
+                        </th>
+                        <td>
+                            <strong>Child policies</strong><br>
+                            @if (!empty($policy['children']))
+                                @foreach ($policy['children'] as $ch)
+                                    Age {{ $ch['age_start'] }}–{{ $ch['age_end'] }} —
+                                    {{ number_format((float) $ch['price'], 2) }} {{ $ch['currency'] ?? '' }}
+                                    (Extra bed: {{ str_replace('_', ' ', $ch['extra_bed']) }})
+                                    @if (!$loop->last)
+                                        <br>
+                                    @endif
+                                @endforeach
+                            @else
+                                Children of any age are welcome.
+                            @endif
+
+                            <br><br>
+                            <strong>Cot &amp; extra bed policies</strong><br>
+                            @if (!empty($policy['cot']))
+                                @foreach ($policy['cot'] as $cot)
+                                    {{ $cot['amount'] }} cot(s) —
+                                    {{ number_format((float) $cot['price'], 2) }} {{ $cot['currency'] ?? '' }}
+                                    per {{ str_replace('_', ' ', $cot['price_unit']) }}
+                                    @if (!$loop->last)
+                                        <br>
+                                    @endif
+                                @endforeach
+                            @elseif(!empty($policy['extra_bed']))
+                                @foreach ($policy['extra_bed'] as $eb)
+                                    {{ $eb['amount'] }} extra bed(s) —
+                                    {{ number_format((float) $eb['price'], 2) }} {{ $eb['currency'] ?? '' }}
+                                    per {{ str_replace('_', ' ', $eb['price_unit']) }}
+                                    @if (!$loop->last)
+                                        <br>
+                                    @endif
+                                @endforeach
+                            @else
+                                Cots and extra beds are not available at this property.
+                            @endif
+                        </td>
+                    </tr>
+
+                    {{-- No age restriction --}}
+                    <tr>
+                        <th>
+                            <i class="fa fa-user-check text-secondary me-2"></i>
+                            No age restriction
+                        </th>
+                        <td>There is no age requirement for check-in</td>
+                    </tr>
+
+                    {{-- Accepted payment methods --}}
+                    <tr>
+                        <th>
+                            <i class="fa fa-credit-card text-secondary me-2"></i>
+                            Accepted payment methods
+                        </th>
+                        <td>
+                            @foreach ($policy['payment_methods'] ?? ['visa', 'mastercard', 'cash'] as $m)
+                                <img src="{{ asset('icons/' . $m . '.svg') }}" alt="{{ ucfirst($m) }}" class="me-1"
+                                    style="height:24px;">
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- Parties/events --}}
+                    <tr>
+                        <th>
+                            <i class="fa fa-ban text-secondary me-2"></i>
+                            Parties
+                        </th>
+                        <td>Parties/events are not allowed</td>
+                    </tr>
+
+                    {{-- Pets --}}
+                    <tr>
+                        <th>
+                            <i class="fa fa-paw text-secondary me-2"></i>
+                            Pets
+                        </th>
+                        <td>
+                            @if (!empty($policy['pets']))
+                                @foreach ($policy['pets'] as $pet)
+                                    {{ ucfirst($pet['pets_type']) }} —
+                                    {{ number_format((float) $pet['price'], 2) }} {{ $pet['currency'] ?? '' }}
+                                    ({{ str_replace('_', ' ', $pet['inclusion']) }})
+                                    @if (!$loop->last)
+                                        <br>
+                                    @endif
+                                @endforeach
+                            @else
+                                Pets are not allowed.
+                            @endif
+                        </td>
+                    </tr>
+                    {{-- Additional Information --}}
+                    @if (!empty($hotel['metapolicy_extra_info']))
+                        <tr>
+                            <th><i class="fa fa-file-alt text-secondary me-2"></i>Additional Information</th>
+                            <td>{!! $hotel['metapolicy_extra_info'] !!}</td>
+                        </tr>
+                    @endif
+                </tbody>
+            </table>
+        @endif
+
+
 
     </div>
 @endsection

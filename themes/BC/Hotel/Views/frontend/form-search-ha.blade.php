@@ -52,6 +52,9 @@
 
                     <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
                         aria-labelledby="hotel-tab">
+                        <div id="dateErrorAlert" class="alert alert-danger d-none" role="alert">
+                        </div>
+
                         <form method="GET" action="{{ route('hotel.search') }}">
                             @csrf
 
@@ -272,6 +275,49 @@
                     checkoutInput.value = this.value;
                 }
             });
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkinInput = document.getElementById('checkin');
+            const checkoutInput = document.getElementById('checkout');
+            const errorAlert = document.getElementById('dateErrorAlert');
+
+            function validateDates() {
+                const checkin = checkinInput.value;
+                const checkout = checkoutInput.value;
+
+                if (checkin && checkout) {
+                    if (checkin === checkout) {
+                        errorAlert.textContent = "Check-in and check-out dates cannot be the same.";
+                        errorAlert.classList.remove('d-none');
+                        return false;
+                    } else {
+                        errorAlert.classList.add('d-none');
+                        errorAlert.textContent = '';
+                        return true;
+                    }
+                }
+                return true;
+            }
+
+            checkinInput.addEventListener('change', function() {
+                checkoutInput.min = this.value;
+                if (checkoutInput.value < this.value) {
+                    checkoutInput.value = this.value;
+                }
+                validateDates();
+            });
+
+            checkoutInput.addEventListener('change', validateDates);
+
+            // Optional: prevent form submission if dates are invalid
+            const form = document.querySelector('form');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    if (!validateDates()) {
+                        e.preventDefault();
+                    }
+                });
+            }
         });
     </script>
 

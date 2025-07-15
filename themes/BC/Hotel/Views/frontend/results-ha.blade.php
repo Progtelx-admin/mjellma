@@ -88,10 +88,14 @@
                     <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"></i></button>
                     <button id="grid-view-btn" class="btn btn-outline-secondary"><i class="fa fa-th"></i></button>
                 </div>
-
                 @if ($hotels->count())
                     <div id="hotel-list">
                         @foreach ($hotels as $hotel)
+                            {{-- Skip hotels without a price --}}
+                            @if (empty($hotel->daily_price))
+                                @continue
+                            @endif
+
                             @php
                                 // build the full query payload for the detail link
                                 $query = array_merge(
@@ -133,7 +137,7 @@
                                                 </p>
                                                 <p class="text-muted">{{ $hotel->address }}</p>
                                                 <p class="fs-5 text-primary">
-                                                    From <strong>{{ $hotel->daily_price ?? 'N/A' }}</strong> / night
+                                                    From <strong>{{ $hotel->daily_price }}</strong> / night
                                                 </p>
                                                 <p class="text-success">
                                                     Breakfast: {{ $hotel->has_breakfast ? 'Yes' : 'No' }}
@@ -145,17 +149,10 @@
                             </a>
                         @endforeach
                     </div>
-
-                    <div id="loading-spinner" class="my-3 text-center" style="display:none;">
-                        <div class="spinner-border"></div>
-                    </div>
-
-                    <div class="text-center mb-5">
-                        <button id="load-more-btn" class="btn btn-outline-primary">Load More</button>
-                    </div>
                 @else
                     <p class="text-center text-muted fs-5">No hotels found.</p>
                 @endif
+
             </div>
         </div>
     </div>
