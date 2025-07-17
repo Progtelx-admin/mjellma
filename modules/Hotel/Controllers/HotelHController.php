@@ -408,13 +408,18 @@ class HotelHController extends Controller
             }
 
             // 5) Room rates
-            $roomRates = collect($apiData['rates'] ?? [])->map(function($rate) {
+            $roomRates = collect($apiData['rates'] ?? [])->map(function ($rate) {
                 $payment = $rate['payment_options']['payment_types'][0] ?? [];
-                $rate['net_amount']        = data_get($payment, 'commission_info.charge.amount_net', null);
-                $rate['commission_amount'] = data_get($payment, 'commission_info.charge.amount_commission', null);
+
+                $net        = data_get($payment, 'commission_info.charge.amount_net', 0.0);
+                $commission = data_get($payment, 'commission_info.charge.amount_commission', 0.0);
+
+                $rate['net_amount']        = $net;
+                $rate['commission_amount'] = $commission;
+                $rate['final_price']       = round($net + $commission, 2);
+
                 return $rate;
             })->toArray();
-
             // 6) Build hotel info for view
             $hotel = [
                 'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,

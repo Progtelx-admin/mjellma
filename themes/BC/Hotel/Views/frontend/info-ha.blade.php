@@ -44,33 +44,29 @@
             </div>
         </div>
 
-        {{-- Image Carousel --}}
+        {{-- Custom Image Slider --}}
         @if (!empty($hotel['images_ext']))
-            <div id="hotelImageCarousel" class="carousel slide mb-5" data-bs-ride="carousel">
-                <div class="carousel-inner">
+            <div class="custom-slider mb-5" id="customImageSlider">
+                <div class="slides">
                     @foreach ($hotel['images_ext'] as $idx => $img)
-                        <div class="carousel-item {{ $idx === 0 ? 'active' : '' }}">
-                            <img src="{{ $img }}" class="d-block w-100 rounded shadow-sm"
-                                style="height:600px;object-fit:cover;" alt="Slide {{ $idx + 1 }}">
-                        </div>
+                        <img src="{{ $img }}" alt="Hotel image {{ $idx + 1 }}"
+                            class="slide-img {{ $idx === 0 ? 'active' : '' }}">
                     @endforeach
                 </div>
-                <button class="carousel-control-prev" data-bs-target="#hotelImageCarousel" data-bs-slide="prev">
-                    <span class="carousel-control-prev-icon"></span>
-                </button>
-                <button class="carousel-control-next" data-bs-target="#hotelImageCarousel" data-bs-slide="next">
-                    <span class="carousel-control-next-icon"></span>
-                </button>
+                <button class="slider-btn prev-btn" onclick="changeSlide(-1)">‹</button>
+                <button class="slider-btn next-btn" onclick="changeSlide(1)">›</button>
             </div>
         @endif
+
 
         {{-- Additional Policy Information --}}
         @if (!empty($hotel['metapolicy_extra_info']))
             <div class="mb-5">
                 <h4>Additional Policy Information</h4>
-                <p>{!! $hotel['metapolicy_extra_info'] !!}</p>
+                <p>{!! nl2br(e(str_replace(["\\r\\n", "\\n"], "\n", $hotel['metapolicy_extra_info']))) !!}</p>
             </div>
         @endif
+
 
         {{-- Available Rooms --}}
         <h3 class="mb-4">Available Rooms</h3>
@@ -97,9 +93,17 @@
                             $currency = $payment['currency_code'] ?? '';
                         @endphp
 
-                        <h4 class="text-primary">{{ number_format((float) $net, 2) }} {{ $currency }}</h4>
+                        @php
+                            $finalPrice = $net + ($comm ?? 0);
+                        @endphp
+
+                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2) }} {{ $currency }}
+                        </h4>
+
                         @if (!is_null($comm))
-                            <p class="text-muted"><small>Your commission: {{ number_format((float) $comm, 2) }}
+                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2) }}
+                                    {{ $currency }}</small></p>
+                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2) }}
                                     {{ $currency }}</small></p>
                         @endif
 
@@ -306,13 +310,6 @@
                             @endif
                         </td>
                     </tr>
-                    {{-- Additional Information --}}
-                    @if (!empty($hotel['metapolicy_extra_info']))
-                        <tr>
-                            <th><i class="fa fa-file-alt text-secondary me-2"></i>Additional Information</th>
-                            <td>{!! $hotel['metapolicy_extra_info'] !!}</td>
-                        </tr>
-                    @endif
                 </tbody>
             </table>
         @endif
@@ -320,9 +317,8 @@
 
 
     </div>
-@endsection
 
-@push('styles')
+
     <style>
         .room-card {
             border-radius: 10px;
@@ -334,15 +330,86 @@
 
         ul.list-unstyled small {
             font-style: italic;
-            color: #6c757d;
         }
 
         ul.list-unstyled strong {
             font-weight: 600;
         }
-    </style>
-@endpush
 
-@push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-@endpush
+        /* Custom Slider Styles */
+        .custom-slider {
+            position: relative;
+            max-width: 100%;
+            height: 600px;
+            overflow: hidden;
+            border-radius: 10px;
+        }
+
+        .custom-slider .slides {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .custom-slider .slide-img {
+            min-width: 100%;
+            object-fit: cover;
+            display: none;
+            height: 600px;
+            border-radius: 10px;
+        }
+
+        .custom-slider .slide-img.active {
+            display: block;
+        }
+
+        .slider-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            /* remove background */
+            border: none;
+            font-size: 3rem;
+            color: #fff;
+            /* or #000 depending on your image */
+            padding: 0;
+            cursor: pointer;
+            z-index: 10;
+            transition: color 0.3s;
+        }
+
+
+
+        .prev-btn {
+            left: 15px;
+        }
+
+        .next-btn {
+            right: 15px;
+        }
+    </style>
+
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide-img');
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.add('active');
+                }
+            });
+        }
+
+        function changeSlide(step) {
+            currentSlide = (currentSlide + step + slides.length) % slides.length;
+            showSlide(currentSlide);
+        }
+
+        // Optional: Auto play every 5 seconds
+        setInterval(() => changeSlide(1), 5000);
+    </script>
+@endsection
