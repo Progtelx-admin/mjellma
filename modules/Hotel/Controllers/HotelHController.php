@@ -407,19 +407,33 @@ class HotelHController extends Controller
                 return redirect()->back()->withErrors(['Hotel not found in API']);
             }
 
-            // 5) Room rates
-            $roomRates = collect($apiData['rates'] ?? [])->map(function ($rate) {
+            // 5) Room rates with meal type mapping
+            $mealTypeMap = [
+                'Room Only'         => 'RO',
+                'Bed and Breakfast' => 'BB',
+                'Half Board'        => 'HB',
+                'Full Board'        => 'FB',
+                'All Inclusive'     => 'AI',
+            ];
+
+            $roomRates = collect($apiData['rates'] ?? [])->map(function ($rate) use ($mealTypeMap) {
                 $payment = $rate['payment_options']['payment_types'][0] ?? [];
 
                 $net        = data_get($payment, 'commission_info.charge.amount_net', 0.0);
                 $commission = data_get($payment, 'commission_info.charge.amount_commission', 0.0);
 
+                $mealName = data_get($rate, 'meal_type.name', 'N/A');
+                $mealCode = $mealTypeMap[$mealName] ?? null;
+
                 $rate['net_amount']        = $net;
                 $rate['commission_amount'] = $commission;
                 $rate['final_price']       = round($net + $commission, 2);
+                $rate['meal_type']         = $mealName;
+                $rate['meal_code']         = $mealCode;
 
                 return $rate;
             })->toArray();
+
             // 6) Build hotel info for view
             $hotel = [
                 'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,
@@ -444,8 +458,6 @@ class HotelHController extends Controller
             return redirect()->back()->withErrors(['error'=>'Could not load hotel information.']);
         }
     }
-
-
 
 
     public function getHotelSuggestions(Request $request)

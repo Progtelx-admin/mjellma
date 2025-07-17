@@ -76,8 +76,33 @@
                     <div class="col-md-6">
                         <div class="card-body">
                             <h5 class="fw-bold">{{ $rate['room_name'] }}</h5>
-                            <p>Meal: {{ ucfirst($rate['meal'] ?? 'N/A') }}</p>
-                            <p>Breakfast: {{ $rate['meal_data']['has_breakfast'] ? 'Yes' : 'No' }}</p>
+                            @php
+                                $mealData = data_get($rate, 'meal_data', []);
+                                $mealValue = $mealData['value'] ?? null;
+                                $hasBreakfast = $mealData['has_breakfast'] ?? false;
+                                $hasLunch = $mealData['has_lunch'] ?? false;
+                                $hasDinner = $mealData['has_dinner'] ?? false;
+                                $noChildMeal = $mealData['no_child_meal'] ?? null;
+
+                                if ($mealValue === 'nomeal') {
+                                    $mealLabel = 'No meal included';
+                                } else {
+                                    $mealParts = collect([
+                                        $hasBreakfast ? 'Breakfast' : null,
+                                        $hasLunch ? 'Lunch' : null,
+                                        $hasDinner ? 'Dinner' : null,
+                                    ])->filter();
+
+                                    $mealLabel = $mealParts->isEmpty() ? '-' : $mealParts->implode(', ');
+                                }
+                            @endphp
+
+                            <p>Meals: {{ $mealLabel }}</p>
+
+                            @if (!is_null($noChildMeal))
+                                <p>Child Meal: {{ $noChildMeal ? 'Not included' : 'Included' }}</p>
+                            @endif
+
                         </div>
                     </div>
                     <div class="col-md-6 text-end p-3">
