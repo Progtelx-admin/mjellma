@@ -347,105 +347,149 @@ class HotelHController extends Controller
         Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
 
         try {
-            // 1) Read query parameters
+            // 1. Parse parameters
             $checkin   = $request->query('checkin', now()->format('Y-m-d'));
             $checkout  = $request->query('checkout', now()->addDay()->format('Y-m-d'));
             $residency = $request->query('residency', 'gb');
             $language  = $request->query('language', 'en');
             $currency  = $request->query('currency', 'EUR');
             $adults    = (int)$request->query('adults', 1);
+            $children  = collect($request->query('children', []))
+                ->filter(fn($age) => is_numeric($age) && $age >= 0 && $age <= 17)
+                ->map(fn($age) => (int)$age)
+                ->values()
+                ->toArray();
 
-            // 2) Sanitize child ages
-            $rawChildren = $request->query('children', []);
-            $children = is_array($rawChildren)
-                ? array_values(array_filter(
-                    array_map('intval', $rawChildren),
-                    fn($a) => $a >= 0 && $a <= 17
-                ))
-                : [];
-
-            // 3) Fetch hotel & images from DB
+            // 2. Lookup hotel in DB
             $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
-            if (! $dbHotel) {
-                Log::error('Hotel not found in DB', ['hotel_id' => $id]);
+            if (!$dbHotel || empty($dbHotel->hid)) {
+                Log::error('Hotel not found or missing HID', ['hotel_id' => $id]);
                 return redirect()->back()->withErrors(['Hotel not found']);
             }
+
             $hotelImages = DB::table('hotel_images')
                 ->where('hotel_id', $id)
                 ->pluck('image_url')
                 ->toArray();
 
-            // Decode JSON columns
             $metapolicyStruct = $dbHotel->metapolicy_struct
                 ? json_decode($dbHotel->metapolicy_struct, true)
                 : [];
             $metapolicyExtraInfo = $dbHotel->metapolicy_extra_info ?? '';
 
-            // 4) Call ETG detail API (for rates)
-            $apiBody = [
-                'checkin'   => $checkin,
-                'checkout'  => $checkout,
-                'residency' => $residency,
-                'language'  => $language,
-                'currency'  => $currency,
-                'id'        => $id,
-                'guests'    => [[
-                    'adults'   => $adults,
-                    'children' => $children,
-                ]],
-            ];
-            $response = Http::withBasicAuth($this->username, $this->password)
+            // 3. API call: hotel rates
+            $rateResponse = Http::withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type'=>'application/json'])
-                ->post($this->apiUrl.'search/hp/', $apiBody);
+                ->post($this->apiUrl.'search/hp/', [
+                    'checkin'   => $checkin,
+                    'checkout'  => $checkout,
+                    'residency' => $residency,
+                    'language'  => $language,
+                    'currency'  => $currency,
+                    'id'        => $id,
+                    'guests'    => [[ 'adults' => $adults, 'children' => $children ]],
+                ]);
 
-            if ($response->failed()) {
-                Log::error('API call failed', ['body' => $response->body()]);
-                throw new \Exception('Failed to fetch hotel details');
-            }
-            $apiData = $response->json()['data']['hotels'][0] ?? null;
-            if (! $apiData) {
-                return redirect()->back()->withErrors(['Hotel not found in API']);
+            if ($rateResponse->failed()) {
+                Log::error('Rate API failed', ['body' => $rateResponse->body()]);
+                throw new \Exception('Failed to fetch hotel rates');
             }
 
-            // 5) Room rates with meal type mapping
+            $hotelRateData = $rateResponse->json()['data']['hotels'][0] ?? null;
+
+            // 4. API call: room images (via hotel info)
+            $infoResponse = Http::withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type'=>'application/json'])
+                ->post($this->apiUrl.'hotel/info/', [
+                    'hid'      => (int)$dbHotel->hid,
+                    'language' => $language,
+                ]);
+
+            $roomImageMap = [];
+            if ($infoResponse->ok() && isset($infoResponse['data']['room_groups'])) {
+                foreach ($infoResponse['data']['room_groups'] as $group) {
+                    $roomNameRaw = $group['name'] ?? null;
+                    $roomNameKey = $this->normalizeRoomName($roomNameRaw);
+
+                    $images = collect($group['images_ext'] ?? [])
+                        ->pluck('url')
+                        ->filter()
+                        ->map(fn($u) => str_replace('{size}', '1080x1920', $u))
+                        ->values()
+                        ->toArray();
+
+                    $roomImageMap[$roomNameKey] = $images;
+
+                    Log::info('Mapped room group images', [
+                        'room_name_key' => $roomNameKey,
+                        'image_count'   => count($images),
+                        'first_image'   => $images[0] ?? 'N/A',
+                    ]);
+                }
+            } else {
+                Log::warning('Empty or invalid room image API response', ['hotel_id' => $id]);
+            }
+
+            // 5. Map room rates + attach images
             $mealTypeMap = [
-                'Room Only'         => 'RO',
+                'Room Only' => 'RO',
                 'Bed and Breakfast' => 'BB',
-                'Half Board'        => 'HB',
-                'Full Board'        => 'FB',
-                'All Inclusive'     => 'AI',
+                'Half Board' => 'HB',
+                'Full Board' => 'FB',
+                'All Inclusive' => 'AI'
             ];
 
-            $roomRates = collect($apiData['rates'] ?? [])->map(function ($rate) use ($mealTypeMap) {
-                $payment = $rate['payment_options']['payment_types'][0] ?? [];
+            $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($mealTypeMap, $roomImageMap) {
+                $payment    = $rate['payment_options']['payment_types'][0] ?? [];
+                $net        = data_get($payment, 'commission_info.charge.amount_net', 0);
+                $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
+                $mealName   = data_get($rate, 'meal_type.name', 'N/A');
 
-                $net        = data_get($payment, 'commission_info.charge.amount_net', 0.0);
-                $commission = data_get($payment, 'commission_info.charge.amount_commission', 0.0);
+                $roomNameRaw = $rate['name'] ?? $rate['room_name'] ?? null;
+                if (empty($roomNameRaw)) {
+                    Log::warning('Rate missing room name', ['rate' => $rate]);
+                    $rate['room_images'] = [];
+                    return $rate;
+                }
 
-                $mealName = data_get($rate, 'meal_type.name', 'N/A');
-                $mealCode = $mealTypeMap[$mealName] ?? null;
+                $roomNameKey = $this->normalizeRoomName($roomNameRaw);
+
+                // Try exact match first
+                $roomImages = $roomImageMap[$roomNameKey] ?? $this->findClosestImageMatch($roomNameKey, $roomImageMap);
+
+                if (empty($roomImages)) {
+                    Log::debug('No images matched for room', ['room_name_key' => $roomNameKey]);
+                }
 
                 $rate['net_amount']        = $net;
                 $rate['commission_amount'] = $commission;
                 $rate['final_price']       = round($net + $commission, 2);
                 $rate['meal_type']         = $mealName;
-                $rate['meal_code']         = $mealCode;
+                $rate['meal_code']         = $mealTypeMap[$mealName] ?? null;
+                $rate['room_images']       = $roomImages;
+
+                Log::info('Processing rate', [
+                    'room_name_key' => $roomNameKey,
+                    'has_images'    => !empty($roomImages),
+                    'image_count'   => count($roomImages),
+                    'first_image'   => $roomImages[0] ?? 'N/A',
+                ]);
 
                 return $rate;
             })->toArray();
 
-            // 6) Build hotel info for view
+
+            // 6. Final hotel object
             $hotel = [
-                'id'                    => $apiData['id'] ?? $dbHotel->hotel_id,
-                'name'                  => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
-                'address'               => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
-                'star_rating'           => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
+                'id'                    => $hotelRateData['id'] ?? $dbHotel->hotel_id,
+                'name'                  => $dbHotel->name ?? $hotelRateData['name'] ?? 'N/A',
+                'address'               => $dbHotel->address ?? $hotelRateData['address'] ?? 'N/A',
+                'star_rating'           => $dbHotel->star_rating ?? $hotelRateData['star_rating'] ?? 0,
                 'images_ext'            => $hotelImages,
                 'metapolicy_struct'     => $metapolicyStruct,
-                'metapolicy_extra_info' => $metapolicyExtraInfo ?: ($apiData['metapolicy_extra_info'] ?? ''),
+                'metapolicy_extra_info' => $metapolicyExtraInfo ?: ($hotelRateData['metapolicy_extra_info'] ?? ''),
             ];
 
-            // 7) Render view
             return view('Hotel::frontend.info-ha', compact(
                 'hotel', 'roomRates', 'checkin', 'checkout', 'adults', 'children', 'currency'
             ));
@@ -457,6 +501,35 @@ class HotelHController extends Controller
             ]);
             return redirect()->back()->withErrors(['error'=>'Could not load hotel information.']);
         }
+    }
+
+    private function findClosestImageMatch(string $roomNameKey, array $imageMap): array
+    {
+        $roomWords = explode(' ', $roomNameKey);
+        $bestMatch = [];
+        $maxOverlap = 0;
+
+        foreach ($imageMap as $key => $images) {
+            $keyWords = explode(' ', $key);
+            $overlap = count(array_intersect($roomWords, $keyWords));
+
+            if ($overlap > $maxOverlap && !empty($images)) {
+                $maxOverlap = $overlap;
+                $bestMatch = $images;
+            }
+        }
+
+        // Optional: return only if there are at least 2 common words
+        return $maxOverlap >= 2 ? $bestMatch : [];
+    }
+
+
+
+    private function normalizeRoomName($name)
+    {
+        // Remove all text in parentheses (including multiple sets)
+        $name = preg_replace('/\([^)]*\)/', '', $name);
+        return trim(strtolower(preg_replace('/\s+/', ' ', $name))); // also normalize whitespace
     }
 
 

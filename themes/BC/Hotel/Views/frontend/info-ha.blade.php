@@ -76,6 +76,26 @@
                     <div class="col-md-6">
                         <div class="card-body">
                             <h5 class="fw-bold">{{ $rate['room_name'] }}</h5>
+                            @if (!empty($rate['room_images']))
+                                <div id="room-slider-{{ $loop->iteration }}"
+                                    class="room-image-slider mb-3 position-relative">
+                                    @foreach ($rate['room_images'] as $i => $image)
+                                        <img src="{{ $image }}" alt="Room Image {{ $i + 1 }}"
+                                            class="room-slide-img {{ $i === 0 ? 'active' : '' }}"
+                                            onclick="openFullImage('{{ $image }}')">
+                                    @endforeach
+
+                                    @if (count($rate['room_images']) > 1)
+                                        <button class="slider-btn room-prev"
+                                            onclick="changeRoomSlide({{ $loop->iteration }}, -1)">‹</button>
+                                        <button class="slider-btn room-next"
+                                            onclick="changeRoomSlide({{ $loop->iteration }}, 1)">›</button>
+                                    @endif
+                                </div>
+                            @else
+                                <p>No room images available.</p>
+                            @endif
+
                             @php
                                 $mealData = data_get($rate, 'meal_data', []);
                                 $mealValue = $mealData['value'] ?? null;
@@ -122,16 +142,6 @@
                             $finalPrice = $net + ($comm ?? 0);
                         @endphp
 
-                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2) }} {{ $currency }}
-                        </h4>
-
-                        @if (!is_null($comm))
-                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2) }}
-                                    {{ $currency }}</small></p>
-                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2) }}
-                                    {{ $currency }}</small></p>
-                        @endif
-
                         @if ($onSiteTaxes->isNotEmpty())
                             <div class="mt-2 text-start">
                                 <strong>On-site Taxes:</strong>
@@ -175,6 +185,15 @@
                                     @endforeach
                                 </ul>
                             </div>
+                        @endif
+
+                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2) }} {{ $currency }}
+                        </h4>
+                        @if (!is_null($comm))
+                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2) }}
+                                    {{ $currency }}</small></p>
+                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2) }}
+                                    {{ $currency }}</small></p>
                         @endif
 
                         <form method="POST" action="{{ route('hotel.prebook') }}">
@@ -338,11 +357,12 @@
                 </tbody>
             </table>
         @endif
-
-
-
     </div>
 
+    <div id="imageModal" class="modal-img-viewer" onclick="closeFullImage()">
+        <button class="close-btn" onclick="closeFullImage()">×</button>
+        <img id="modalImage" src="" alt="Full Room Image">
+    </div>
 
     <style>
         .room-card {
@@ -413,6 +433,80 @@
         .next-btn {
             right: 15px;
         }
+
+        .room-image-slider {
+            position: relative;
+            max-width: 100%;
+            height: 300px;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        .room-slide-img {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            display: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .room-slide-img.active {
+            display: block;
+        }
+
+        .room-image-slider .slider-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            border: none;
+            font-size: 2rem;
+            padding: 0 10px;
+            z-index: 10;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .room-image-slider .room-prev {
+            left: 10px;
+        }
+
+        .room-image-slider .room-next {
+            right: 10px;
+        }
+
+        /* Fullscreen Modal */
+        .modal-img-viewer {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-img-viewer img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+
+        .modal-img-viewer .close-btn {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+        }
     </style>
 
 
@@ -437,4 +531,31 @@
         // Optional: Auto play every 5 seconds
         setInterval(() => changeSlide(1), 5000);
     </script>
+
+    <script>
+        // Room Sliders
+        const roomSliders = {};
+
+        function changeRoomSlide(roomId, step) {
+            const slides = document.querySelectorAll(`#room-slider-${roomId} .room-slide-img`);
+            if (!roomSliders[roomId]) roomSliders[roomId] = 0;
+
+            roomSliders[roomId] = (roomSliders[roomId] + step + slides.length) % slides.length;
+
+            slides.forEach((s, i) => s.classList.toggle('active', i === roomSliders[roomId]));
+        }
+
+        // Modal full image viewer
+        function openFullImage(url) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modal.style.display = 'flex';
+            modalImg.src = url;
+        }
+
+        function closeFullImage() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+    </script>
+
 @endsection
