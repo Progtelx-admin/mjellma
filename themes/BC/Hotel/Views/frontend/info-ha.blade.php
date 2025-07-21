@@ -44,33 +44,29 @@
             </div>
         </div>
 
-        {{-- Image Carousel --}}
+        {{-- Custom Image Slider --}}
         @if (!empty($hotel['images_ext']))
-            <div id="hotelImageCarousel" class="carousel slide mb-5" data-bs-ride="carousel">
-                <div class="carousel-inner">
+            <div class="custom-slider mb-5" id="customImageSlider">
+                <div class="slides">
                     @foreach ($hotel['images_ext'] as $idx => $img)
-                        <div class="carousel-item {{ $idx === 0 ? 'active' : '' }}">
-                            <img src="{{ $img }}" class="d-block w-100 rounded shadow-sm"
-                                style="height:600px;object-fit:cover;" alt="Slide {{ $idx + 1 }}">
-                        </div>
+                        <img src="{{ $img }}" alt="Hotel image {{ $idx + 1 }}"
+                            class="slide-img {{ $idx === 0 ? 'active' : '' }}">
                     @endforeach
                 </div>
-                <button class="carousel-control-prev" data-bs-target="#hotelImageCarousel" data-bs-slide="prev">
-                    <span class="carousel-control-prev-icon"></span>
-                </button>
-                <button class="carousel-control-next" data-bs-target="#hotelImageCarousel" data-bs-slide="next">
-                    <span class="carousel-control-next-icon"></span>
-                </button>
+                <button class="slider-btn prev-btn" onclick="changeSlide(-1)">‹</button>
+                <button class="slider-btn next-btn" onclick="changeSlide(1)">›</button>
             </div>
         @endif
+
 
         {{-- Additional Policy Information --}}
         @if (!empty($hotel['metapolicy_extra_info']))
             <div class="mb-5">
                 <h4>Additional Policy Information</h4>
-                <p>{!! $hotel['metapolicy_extra_info'] !!}</p>
+                <p>{!! nl2br(e(str_replace(["\\r\\n", "\\n"], "\n", $hotel['metapolicy_extra_info']))) !!}</p>
             </div>
         @endif
+
 
         {{-- Available Rooms --}}
         <h3 class="mb-4">Available Rooms</h3>
@@ -80,8 +76,53 @@
                     <div class="col-md-6">
                         <div class="card-body">
                             <h5 class="fw-bold">{{ $rate['room_name'] }}</h5>
-                            <p>Meal: {{ ucfirst($rate['meal'] ?? 'N/A') }}</p>
-                            <p>Breakfast: {{ $rate['meal_data']['has_breakfast'] ? 'Yes' : 'No' }}</p>
+                            @if (!empty($rate['room_images']))
+                                <div id="room-slider-{{ $loop->iteration }}"
+                                    class="room-image-slider mb-3 position-relative">
+                                    @foreach ($rate['room_images'] as $i => $image)
+                                        <img src="{{ $image }}" alt="Room Image {{ $i + 1 }}"
+                                            class="room-slide-img {{ $i === 0 ? 'active' : '' }}"
+                                            onclick="openFullImage('{{ $image }}')">
+                                    @endforeach
+
+                                    @if (count($rate['room_images']) > 1)
+                                        <button class="slider-btn room-prev"
+                                            onclick="changeRoomSlide({{ $loop->iteration }}, -1)">‹</button>
+                                        <button class="slider-btn room-next"
+                                            onclick="changeRoomSlide({{ $loop->iteration }}, 1)">›</button>
+                                    @endif
+                                </div>
+                            @else
+                                <p>No room images available.</p>
+                            @endif
+
+                            @php
+                                $mealData = data_get($rate, 'meal_data', []);
+                                $mealValue = $mealData['value'] ?? null;
+                                $hasBreakfast = $mealData['has_breakfast'] ?? false;
+                                $hasLunch = $mealData['has_lunch'] ?? false;
+                                $hasDinner = $mealData['has_dinner'] ?? false;
+                                $noChildMeal = $mealData['no_child_meal'] ?? null;
+
+                                if ($mealValue === 'nomeal') {
+                                    $mealLabel = 'No meal included';
+                                } else {
+                                    $mealParts = collect([
+                                        $hasBreakfast ? 'Breakfast' : null,
+                                        $hasLunch ? 'Lunch' : null,
+                                        $hasDinner ? 'Dinner' : null,
+                                    ])->filter();
+
+                                    $mealLabel = $mealParts->isEmpty() ? '-' : $mealParts->implode(', ');
+                                }
+                            @endphp
+
+                            <p>Meals: {{ $mealLabel }}</p>
+
+                            @if (!is_null($noChildMeal))
+                                <p>Child Meal: {{ $noChildMeal ? 'Not included' : 'Included' }}</p>
+                            @endif
+
                         </div>
                     </div>
                     <div class="col-md-6 text-end p-3">
@@ -97,11 +138,9 @@
                             $currency = $payment['currency_code'] ?? '';
                         @endphp
 
-                        <h4 class="text-primary">{{ number_format((float) $net, 2) }} {{ $currency }}</h4>
-                        @if (!is_null($comm))
-                            <p class="text-muted"><small>Your commission: {{ number_format((float) $comm, 2) }}
-                                    {{ $currency }}</small></p>
-                        @endif
+                        @php
+                            $finalPrice = $net + ($comm ?? 0);
+                        @endphp
 
                         @if ($onSiteTaxes->isNotEmpty())
                             <div class="mt-2 text-start">
@@ -146,6 +185,15 @@
                                     @endforeach
                                 </ul>
                             </div>
+                        @endif
+
+                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2) }} {{ $currency }}
+                        </h4>
+                        @if (!is_null($comm))
+                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2) }}
+                                    {{ $currency }}</small></p>
+                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2) }}
+                                    {{ $currency }}</small></p>
                         @endif
 
                         <form method="POST" action="{{ route('hotel.prebook') }}">
@@ -306,23 +354,16 @@
                             @endif
                         </td>
                     </tr>
-                    {{-- Additional Information --}}
-                    @if (!empty($hotel['metapolicy_extra_info']))
-                        <tr>
-                            <th><i class="fa fa-file-alt text-secondary me-2"></i>Additional Information</th>
-                            <td>{!! $hotel['metapolicy_extra_info'] !!}</td>
-                        </tr>
-                    @endif
                 </tbody>
             </table>
         @endif
-
-
-
     </div>
-@endsection
 
-@push('styles')
+    <div id="imageModal" class="modal-img-viewer" onclick="closeFullImage()">
+        <button class="close-btn" onclick="closeFullImage()">×</button>
+        <img id="modalImage" src="" alt="Full Room Image">
+    </div>
+
     <style>
         .room-card {
             border-radius: 10px;
@@ -334,15 +375,187 @@
 
         ul.list-unstyled small {
             font-style: italic;
-            color: #6c757d;
         }
 
         ul.list-unstyled strong {
             font-weight: 600;
         }
-    </style>
-@endpush
 
-@push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-@endpush
+        /* Custom Slider Styles */
+        .custom-slider {
+            position: relative;
+            max-width: 100%;
+            height: 600px;
+            overflow: hidden;
+            border-radius: 10px;
+        }
+
+        .custom-slider .slides {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .custom-slider .slide-img {
+            min-width: 100%;
+            object-fit: cover;
+            display: none;
+            height: 600px;
+            border-radius: 10px;
+        }
+
+        .custom-slider .slide-img.active {
+            display: block;
+        }
+
+        .slider-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            /* remove background */
+            border: none;
+            font-size: 3rem;
+            color: #fff;
+            /* or #000 depending on your image */
+            padding: 0;
+            cursor: pointer;
+            z-index: 10;
+            transition: color 0.3s;
+        }
+
+
+
+        .prev-btn {
+            left: 15px;
+        }
+
+        .next-btn {
+            right: 15px;
+        }
+
+        .room-image-slider {
+            position: relative;
+            max-width: 100%;
+            height: 300px;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        .room-slide-img {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            display: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .room-slide-img.active {
+            display: block;
+        }
+
+        .room-image-slider .slider-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            border: none;
+            font-size: 2rem;
+            padding: 0 10px;
+            z-index: 10;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .room-image-slider .room-prev {
+            left: 10px;
+        }
+
+        .room-image-slider .room-next {
+            right: 10px;
+        }
+
+        /* Fullscreen Modal */
+        .modal-img-viewer {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-img-viewer img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+
+        .modal-img-viewer .close-btn {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+        }
+    </style>
+
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide-img');
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.add('active');
+                }
+            });
+        }
+
+        function changeSlide(step) {
+            currentSlide = (currentSlide + step + slides.length) % slides.length;
+            showSlide(currentSlide);
+        }
+
+        // Optional: Auto play every 5 seconds
+        setInterval(() => changeSlide(1), 5000);
+    </script>
+
+    <script>
+        // Room Sliders
+        const roomSliders = {};
+
+        function changeRoomSlide(roomId, step) {
+            const slides = document.querySelectorAll(`#room-slider-${roomId} .room-slide-img`);
+            if (!roomSliders[roomId]) roomSliders[roomId] = 0;
+
+            roomSliders[roomId] = (roomSliders[roomId] + step + slides.length) % slides.length;
+
+            slides.forEach((s, i) => s.classList.toggle('active', i === roomSliders[roomId]));
+        }
+
+        // Modal full image viewer
+        function openFullImage(url) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modal.style.display = 'flex';
+            modalImg.src = url;
+        }
+
+        function closeFullImage() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+    </script>
+
+@endsection
