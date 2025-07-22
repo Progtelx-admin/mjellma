@@ -162,7 +162,11 @@ class HotelHController extends Controller
             }
 
             // 8) Retrieve & paginate
-            $allHotels   = collect(Cache::get($cacheKey,[]))->map(fn($h)=>(object)$h);
+            $allHotels = collect(Cache::get($cacheKey, []))
+                ->map(fn($h) => (object)$h)
+                ->sortByDesc(fn($hotel) => !empty($hotel->daily_price))
+                ->values();
+
             $page        = (int)$request->input('page',1);
             $perPage     = 10;
             $pagedHotels = $allHotels->slice(($page-1)*$perPage,$perPage)->values();

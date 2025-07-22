@@ -91,29 +91,24 @@
                 @if ($hotels->count())
                     <div id="hotel-list">
                         @foreach ($hotels as $hotel)
-                            {{-- Skip hotels without a price --}}
-                            @if (empty($hotel->daily_price))
-                                @continue
-                            @endif
-
                             @php
-                                // build the full query payload for the detail link
                                 $query = array_merge(
                                     ['id' => $hotel->hotel_id],
-                                    request()->only([
-                                        'hotel_name',
-                                        'location',
-                                        'checkin',
-                                        'checkout',
-                                        'adults',
-                                        'rooms',
-                                        'latitude',
-                                        'longitude',
-                                        'currency',
-                                    ]),
+                                    [
+                                        'name' => urlencode(request('name')),
+                                        'location' => urlencode(request('location')),
+                                        'checkin' => request('checkin'),
+                                        'checkout' => request('checkout'),
+                                        'adults' => request('adults'),
+                                        'rooms' => request('rooms'),
+                                        'latitude' => request('latitude'),
+                                        'longitude' => request('longitude'),
+                                        'currency' => request('currency'),
+                                    ],
                                     ['children_count' => request('children_count', 0)],
                                     ['children' => request('children', [])],
                                 );
+
                             @endphp
 
                             <a href="{{ route('hotel.info', $query) }}"
@@ -136,9 +131,16 @@
                                                     @endfor
                                                 </p>
                                                 <p class="text-muted">{{ $hotel->address }}</p>
-                                                <p class="fs-5 text-primary">
-                                                    From <strong>{{ $hotel->daily_price }}</strong> / night
-                                                </p>
+                                                @if ($hotel->daily_price)
+                                                    <p class="fs-5 text-primary">
+                                                        From <strong>{{ $hotel->daily_price }}</strong> / night
+                                                    </p>
+                                                @else
+                                                    <p class="fs-6 text-danger">
+                                                        No room available
+                                                    </p>
+                                                @endif
+
                                                 <p class="text-success">
                                                     Breakfast: {{ $hotel->has_breakfast ? 'Yes' : 'No' }}
                                                 </p>
