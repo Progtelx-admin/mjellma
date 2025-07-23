@@ -92,23 +92,23 @@
                     <div id="hotel-list">
                         @foreach ($hotels as $hotel)
                             @php
+                                // build the full query payload for the detail link
                                 $query = array_merge(
                                     ['id' => $hotel->hotel_id],
-                                    [
-                                        'name' => urlencode(request('name')),
-                                        'location' => urlencode(request('location')),
-                                        'checkin' => request('checkin'),
-                                        'checkout' => request('checkout'),
-                                        'adults' => request('adults'),
-                                        'rooms' => request('rooms'),
-                                        'latitude' => request('latitude'),
-                                        'longitude' => request('longitude'),
-                                        'currency' => request('currency'),
-                                    ],
+                                    request()->only([
+                                        'hotel_name',
+                                        'location',
+                                        'checkin',
+                                        'checkout',
+                                        'adults',
+                                        'rooms',
+                                        'latitude',
+                                        'longitude',
+                                        'currency',
+                                    ]),
                                     ['children_count' => request('children_count', 0)],
                                     ['children' => request('children', [])],
                                 );
-
                             @endphp
 
                             <a href="{{ route('hotel.info', $query) }}"

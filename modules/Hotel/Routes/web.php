@@ -6,65 +6,47 @@ use Modules\Hotel\Controllers\HotelHController;
 //     Route::get('/','HotelController@index')->name('hotel.search'); // Search
 //     Route::get('/{slug}','HotelController@detail')->name('hotel.detail');// Detail
 // });
-Route::post('/hotel/booking/handle', [HotelHController::class, 'handleBookingSubmission'])
-    ->name('hotel.booking.handle');
+Route::post('/hotel/booking/handle', [HotelHController::class, 'handleBookingSubmission'])->name('hotel.booking.handle');
 
 // PCB return (processing spinner callback)
-Route::get('/pcb-return', [HotelHController::class, 'handlePcbReturn'])
-    ->name('pcb.booking.return');
+Route::get('/pcb-return', [HotelHController::class, 'handlePcbReturn'])->name('pcb.booking.return');
 
 // after PCB, confirm payment
-Route::get('/hotel/payment/confirm', [HotelHController::class, 'confirmAfterPcb'])
-    ->name('hotel.payment.confirm');
+Route::get('/hotel/payment/confirm', [HotelHController::class, 'confirmAfterPcb'])->name('hotel.payment.confirm');
 
 // list & search
-Route::get('/hotels', [HotelHController::class, 'showHotels'])
-    ->name('hotel.show');
-Route::get('/hotels/search', [HotelHController::class, 'searchHotels'])
-    ->name('hotel.search');
-Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'])
-    ->name('hotel.suggestions');
+Route::get('/hotels', [HotelHController::class, 'showHotels'])->name('hotel.show');
+Route::get('/hotels/search', [HotelHController::class, 'searchHotels'])->name('hotel.search');
+Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'])->name('hotel.suggestions');
 
 // **PREBOOK** (must come before the wildcard `{id}`)
-Route::post('/hotel/prebook', [HotelHController::class, 'prebookRoom'])
-    ->name('hotel.prebook');
-Route::get('/hotel/prebook/result', [HotelHController::class, 'prebookResult'])
-    ->name('hotel.prebook.result');
+Route::post('/hotel/prebook', [HotelHController::class, 'prebookRoom'])->name('hotel.prebook');
+Route::get('/hotel/prebook/result', [HotelHController::class, 'prebookResult'])->name('hotel.prebook.result');
+Route::get('/hotel/booking/failed', function () {return view('Hotel::frontend.booking-failed');})->name('hotel.booking.failed');
+
 
 // **BOOK** & confirmation
-Route::post('/hotel/book', [HotelHController::class, 'bookRoom'])
-    ->name('hotel.book');
-Route::get('/hotel/booking/confirmation/{book_hash}', [HotelHController::class, 'bookingConfirmation'])
-    ->name('hotel.booking.confirmation');
+Route::post('/hotel/book', [HotelHController::class, 'bookRoom'])->name('hotel.book');
+Route::get('/hotel/booking/confirmation/{book_hash}', [HotelHController::class, 'bookingConfirmation'])->name('hotel.booking.confirmation');
 
 // payment & finish
-Route::post('/hotel/payment', [HotelHController::class, 'processPayment'])
-    ->name('hotel.payment');
-Route::post('/hotel/booking/complete', [HotelHController::class, 'completeBooking'])
-->name('hotel.booking.complete');
+Route::post('/hotel/payment', [HotelHController::class, 'processPayment'])->name('hotel.payment');
+Route::post('/hotel/booking/complete', [HotelHController::class, 'completeBooking'])->name('hotel.booking.complete');
 
-Route::post('/hotel/booking/finish', [HotelHController::class, 'finishBooking'])
-    ->name('hotel.booking.finish');
+Route::post('/hotel/booking/finish', [HotelHController::class, 'finishBooking'])->name('hotel.booking.finish');
 Route::get('/hotel/payment/success', function () {
     return view('Hotel::frontend.payment-success');
 })->name('hotel.payment.success');
 
 // **WILDCARD** — catch‐all hotel info (must come last)
-Route::get('/hotel/{id}', [HotelHController::class, 'hotelInfo'])
-    ->where('id', '[^\\.]+')
-    ->name('hotel.info');
+Route::get('/hotel/{id}', [HotelHController::class, 'hotelInfo'])->where('id', '[^\\.]+')->name('hotel.info');
 
 // admin / back-office (if still needed)
-Route::get('/booking', [HotelHController::class, 'index'])
-    ->name('hotel.admin.booking.index');
-Route::get('/booking-history', [HotelHController::class, 'bookingHistory'])
-    ->name('hotel.booking.index');
-Route::get('/booking/{orderId}/invoice', [HotelHController::class, 'showBookingInvoice'])
-    ->name('hotel.booking.invoice');
-Route::get('/bookings/{orderId}/details', [HotelHController::class, 'showBookingDetails'])
-    ->name('booking.admin.details');
-Route::post('/bookings/{partnerOrderId}/cancel', [HotelHController::class, 'cancelBooking'])
-    ->name('booking.admin.cancel');
+Route::get('/booking', [HotelHController::class, 'index'])->name('hotel.admin.booking.index');
+Route::get('/booking-history', [HotelHController::class, 'bookingHistory'])->name('hotel.booking.index');
+Route::get('/booking/{orderId}/invoice', [HotelHController::class, 'showBookingInvoice'])->name('hotel.booking.invoice');
+Route::get('/bookings/{orderId}/details', [HotelHController::class, 'showBookingDetails'])->name('booking.admin.details');
+Route::post('/bookings/{partnerOrderId}/cancel', [HotelHController::class, 'cancelBooking'])->name('booking.admin.cancel');
 
 Route::group(['prefix' => 'user/' . config('hotel.hotel_route_prefix'), 'middleware' => ['auth', 'verified']], function () {
     Route::get('/', 'VendorController@index')->name('hotel.vendor.index');
