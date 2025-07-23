@@ -758,7 +758,6 @@ class HotelHController extends Controller
             $partnerOrderId = $request->input('partner_order_id');
             $userIp = $request->input('user_ip');
 
-            // Save booking data in session
             session([
                 'booking.partner_order_id' => $partnerOrderId,
                 'booking.book_hash' => $bookHash,
@@ -799,7 +798,6 @@ class HotelHController extends Controller
                 $data = $bookingData['data'];
                 session(['bookingData' => $data]);
 
-                // 🔥 Store with order_id in cache for PCB
                 $token = Str::random(32);
                 Cache::put("pending_booking_{$token}", array_merge($request->all(), [
                     'order_id' => $data['order_id'],
@@ -810,9 +808,29 @@ class HotelHController extends Controller
                 $errorMessage = $bookingData['error'] ?? 'Unknown error';
 
                 if ($errorMessage === 'double_booking_form') {
-                    // Handle double booking specifically
                     return redirect()->route('hotel.booking.failed')->withErrors([
                         'error' => __('This booking request has already been submitted or processed. Please try with a new request.'),
+                    ]);
+                }
+
+                if ($errorMessage === 'unknown') {
+                    Log::warning('⚠️ Unknown error received, polling finish/status as fallback.');
+
+                    $statusResponse = Http::withBasicAuth($this->username, $this->password)
+                        ->withHeaders(['Content-Type' => 'application/json'])
+                        ->timeout(15)
+                        ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                            'partner_order_id' => $partnerOrderId,
+                        ]);
+
+                    $statusData = $statusResponse->json();
+
+                    if (data_get($statusData, 'status') === 'ok') {
+                        return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
+                    }
+
+                    return redirect()->route('hotel.booking.failed')->withErrors([
+                        'error' => __('Booking failed after retrying. Please try again.'),
                     ]);
                 }
 
@@ -827,6 +845,7 @@ class HotelHController extends Controller
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
 
 
     public function bookingConfirmation($book_hash)
@@ -1476,9 +1495,9 @@ class HotelHController extends Controller
         }
 
         $payload = [
-            'order_id'    => $request->input('order_id'),
-            'partner'     => ['partner_order_id' => $partnerOrderId],
-            'user'        => [
+            'order_id'      => $request->input('order_id'),
+            'partner'       => ['partner_order_id' => $partnerOrderId],
+            'user'          => [
                 'first_name' => $request->input('first_name'),
                 'last_name'  => $request->input('last_name'),
                 'email'      => $request->input('email'),
@@ -1503,7 +1522,18 @@ class HotelHController extends Controller
         $json = $response->json();
         Log::info('finishBooking response', ['response' => $json]);
 
-        if (data_get($json, 'status') === 'ok' || data_get($json, 'status') === 'processing') {
+        $status = data_get($json, 'status');
+        $error = data_get($json, 'error');
+
+        if ($error === 'booking_finish_did_not_succeed') {
+            Log::error('❌ booking_finish_did_not_succeed — aborting status poll');
+            return view('Hotel::frontend.booking-pending', [
+                'status' => ['error' => 'booking_finish_did_not_succeed'],
+                'order_id' => $payload['order_id'],
+            ]);
+        }
+
+        if ($status === 'ok' || $status === 'processing') {
             MjellmaBooking::updateOrCreate(
                 ['partner_order_id' => $partnerOrderId],
                 [
@@ -1511,7 +1541,7 @@ class HotelHController extends Controller
                     'payment_type'   => $payload['payment_type']['type'],
                     'payment_amount' => $payload['payment_type']['amount'],
                     'currency_code'  => $payload['payment_type']['currency_code'],
-                    'api_status'     => data_get($json, 'status'),
+                    'api_status'     => $status,
                 ]
             );
         }
@@ -1538,6 +1568,7 @@ class HotelHController extends Controller
             'order_id' => $payload['order_id'],
         ]);
     }
+
 
     public function completeBooking(Request $request)
     {
@@ -1573,6 +1604,15 @@ class HotelHController extends Controller
             $finishData = $finishResp->json();
             Log::info('completeBooking finish response', ['data' => $finishData]);
 
+            // ✅ Handle double_booking_finish error
+            if (isset($finishData['error']) && $finishData['error'] === 'double_booking_finish') {
+                Log::warning('⚠️ double_booking_finish detected — skipping repeat call to booking_finish.');
+                return view('Hotel::frontend.booking-pending', [
+                    'status' => ['error' => 'double_booking_finish'],
+                    'order_id' => $booking->order_id,
+                ]);
+            }
+
             if (data_get($finishData, 'status') === 'ok') {
                 $booking->update(['status' => 'processing']);
             } else {
@@ -1601,6 +1641,7 @@ class HotelHController extends Controller
             'status'  => $statusData,
         ]);
     }
+
 
 
     public function index(Request $request)
