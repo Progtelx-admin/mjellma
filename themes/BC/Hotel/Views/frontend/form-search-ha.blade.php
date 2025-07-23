@@ -155,6 +155,8 @@
 
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
+                            <input type="hidden" id="locationSelected" name="locationSelected" value="false">
+
                         </form>
                     </div>
 
@@ -170,25 +172,25 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Carousel init
         document.addEventListener('DOMContentLoaded', function() {
+            // Carousel
             new bootstrap.Carousel(document.getElementById('carouselBackground'), {
                 interval: 2000,
                 ride: 'carousel',
                 pause: false,
                 wrap: true
             });
-        });
 
-        // Location suggestions
-        document.addEventListener("DOMContentLoaded", function() {
+            // Location autocomplete & validation
             const locationInput = document.getElementById("location");
             const suggestionsList = document.getElementById("suggestions");
             const latInput = document.getElementById("latitude");
             const lonInput = document.getElementById("longitude");
+            const locationSelectedInput = document.getElementById("locationSelected");
 
             locationInput.addEventListener("input", function() {
-                const q = this.value;
+                locationSelectedInput.value = "false"; // reset flag
+                const q = this.value.trim();
                 if (q.length < 3) {
                     suggestionsList.innerHTML = "";
                     suggestionsList.classList.add("d-none");
@@ -207,6 +209,7 @@
                                 locationInput.value = loc.display_name;
                                 latInput.value = loc.lat;
                                 lonInput.value = loc.lon;
+                                locationSelectedInput.value = "true";
                                 suggestionsList.innerHTML = "";
                                 suggestionsList.classList.add("d-none");
                             };
@@ -214,16 +217,15 @@
                         });
                     }).catch(console.error);
             });
-            document.addEventListener("click", e => {
+
+            document.addEventListener("click", function(e) {
                 if (!suggestionsList.contains(e.target) && e.target !== locationInput) {
                     suggestionsList.innerHTML = "";
                     suggestionsList.classList.add("d-none");
                 }
             });
-        });
 
-        // Children input & dynamic ages
-        document.addEventListener('DOMContentLoaded', function() {
+            // Children age inputs
             const countInput = document.getElementById('children_count');
             const agesRow = document.getElementById('children-ages-row');
 
@@ -238,14 +240,14 @@
                     const col = document.createElement('div');
                     col.className = 'col-md-2';
                     col.innerHTML = `
-                      <div class="form-floating">
-                        <select name="children[]" id="child_age_${i}"
-                                class="form-select form-select-sm border border-2 border-danger" required>
-                          <option value="" selected>Age needed</option>
-                          ${[...Array(18).keys()].map(a => `<option value="${a}">${a}</option>`).join('')}
-                        </select>
-                        <label for="child_age_${i}" class="small">Child ${i}</label>
-                      </div>`;
+                        <div class="form-floating">
+                            <select name="children[]" id="child_age_${i}"
+                                    class="form-select form-select-sm border border-2 border-danger" required>
+                                <option value="" selected>Age needed</option>
+                                ${[...Array(18).keys()].map(a => `<option value="${a}">${a}</option>`).join('')}
+                            </select>
+                            <label for="child_age_${i}" class="small">Child ${i}</label>
+                        </div>`;
                     agesRow.append(col);
                 }
             }
@@ -257,34 +259,19 @@
                 this.value = v;
                 renderAges(v);
             });
-
             renderAges(parseInt(countInput.value) || 0);
-        });
 
-        // Prevent past dates and enforce checkout >= checkin
-        document.addEventListener('DOMContentLoaded', function() {
+            // Date validation
             const checkinInput = document.getElementById('checkin');
             const checkoutInput = document.getElementById('checkout');
+            const errorAlert = document.getElementById('dateErrorAlert');
             const today = new Date().toISOString().split('T')[0];
             checkinInput.min = today;
             checkoutInput.min = today;
 
-            checkinInput.addEventListener('change', function() {
-                checkoutInput.min = this.value;
-                if (checkoutInput.value < this.value) {
-                    checkoutInput.value = this.value;
-                }
-            });
-        });
-        document.addEventListener('DOMContentLoaded', function() {
-            const checkinInput = document.getElementById('checkin');
-            const checkoutInput = document.getElementById('checkout');
-            const errorAlert = document.getElementById('dateErrorAlert');
-
             function validateDates() {
                 const checkin = checkinInput.value;
                 const checkout = checkoutInput.value;
-
                 if (checkin && checkout) {
                     if (checkin === checkout) {
                         errorAlert.textContent = "Check-in and check-out dates cannot be the same.";
@@ -309,17 +296,31 @@
 
             checkoutInput.addEventListener('change', validateDates);
 
-            // Optional: prevent form submission if dates are invalid
+            // Final form validation
             const form = document.querySelector('form');
             if (form) {
                 form.addEventListener('submit', function(e) {
-                    if (!validateDates()) {
+                    const locationValue = locationInput.value.trim();
+                    const locationSelected = locationSelectedInput.value === "true";
+                    const datesValid = validateDates();
+
+                    if (locationValue !== "" && !locationSelected) {
                         e.preventDefault();
+                        errorAlert.textContent = "Please select a location from the suggestions.";
+                        errorAlert.classList.remove("d-none");
+                        return;
+                    }
+
+                    if (!datesValid) {
+                        e.preventDefault();
+                        return;
                     }
                 });
             }
         });
     </script>
+
+
 
 
     <style>

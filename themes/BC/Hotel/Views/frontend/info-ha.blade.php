@@ -104,24 +104,48 @@
                                 $hasDinner = $mealData['has_dinner'] ?? false;
                                 $noChildMeal = $mealData['no_child_meal'] ?? null;
 
-                                if ($mealValue === 'nomeal') {
-                                    $mealLabel = 'No meal included';
-                                } else {
-                                    $mealParts = collect([
-                                        $hasBreakfast ? 'Breakfast' : null,
-                                        $hasLunch ? 'Lunch' : null,
-                                        $hasDinner ? 'Dinner' : null,
-                                    ])->filter();
+                                $mealParts = collect([
+                                    $hasBreakfast ? 'Breakfast' : null,
+                                    $hasLunch ? 'Lunch' : null,
+                                    $hasDinner ? 'Dinner' : null,
+                                ])->filter();
 
-                                    $mealLabel = $mealParts->isEmpty() ? '-' : $mealParts->implode(', ');
-                                }
+                                $mealLabel =
+                                    $mealValue === 'nomeal' || $mealParts->isEmpty()
+                                        ? 'No meal included'
+                                        : $mealParts->implode(', ');
                             @endphp
 
-                            <p>Meals: {{ $mealLabel }}</p>
+                            <p><strong>Meals:</strong> {{ $mealLabel }}</p>
 
                             @if (!is_null($noChildMeal))
-                                <p>Child Meal: {{ $noChildMeal ? 'Not included' : 'Included' }}</p>
+                                <p><strong>Child Meal:</strong> {{ $noChildMeal ? 'Not included' : 'Included' }}</p>
                             @endif
+
+                            @if (!empty($hotel['metapolicy_struct']['meal']))
+                                <h5>Hotel Meal Policy (ETG)</h5>
+                                @foreach ($hotel['metapolicy_struct']['meal'] as $meal)
+                                    <p>
+                                        {{ ucfirst($meal['meal_type']) }}:
+                                        {{ $meal['inclusion'] === 'included' ? 'Included' : 'Not included' }} –
+                                        Price: {{ $meal['price'] }} {{ $meal['currency'] ?? '' }}
+                                    </p>
+                                @endforeach
+                            @endif
+
+                            @if (!empty($hotel['metapolicy_struct']['children_meal']))
+                                <h5>Children's Meal Policy</h5>
+                                @foreach ($hotel['metapolicy_struct']['children_meal'] as $cMeal)
+                                    <p>
+                                        Age {{ $cMeal['age_start'] }}–{{ $cMeal['age_end'] }}:
+                                        {{ ucfirst($cMeal['meal_type']) }},
+                                        {{ $cMeal['inclusion'] === 'included' ? 'included' : 'not included' }} –
+                                        Price: {{ $cMeal['price'] }} {{ $cMeal['currency'] ?? '' }}
+                                    </p>
+                                @endforeach
+                            @endif
+
+
 
                         </div>
                     </div>
