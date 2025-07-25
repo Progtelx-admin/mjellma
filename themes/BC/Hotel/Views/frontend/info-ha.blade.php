@@ -247,43 +247,68 @@
             $policy = $hotel['metapolicy_struct'] ?? [];
         @endphp
 
-        @if (count($policy))
+        @if (count($hotel['metapolicy_struct'] ?? []))
+            @php $policy = $hotel['metapolicy_struct']; @endphp
+
             <table class="table table-borderless mb-5">
                 <tbody>
-                    {{-- Cancellation / prepayment --}}
+
+                    {{-- Check-in / Check-out --}}
+                    @if (!empty($policy['check_in_check_out']))
+                        <tr>
+                            <th>Check-in / Check-out</th>
+                            <td>
+                                @foreach ($policy['check_in_check_out'] as $cico)
+                                    @if (!empty($cico['check_in']))
+                                        Check-in: {{ $cico['check_in'] }}<br>
+                                    @endif
+                                    @if (!empty($cico['check_out']))
+                                        Check-out: {{ $cico['check_out'] }}<br>
+                                    @endif
+                                @endforeach
+                            </td>
+                        </tr>
+                    @endif
+                    {{-- Additional Fees --}}
+                    @if (!empty($policy['add_fee']))
+                        <tr>
+                            <th>Additional Fees</th>
+                            <td>
+                                @foreach ($policy['add_fee'] as $fee)
+                                    {{ ucfirst(str_replace('_', ' ', $fee['fee_type'] ?? '')) }} —
+                                    {{ number_format((float) $fee['price'], 2) }} {{ $fee['currency'] ?? '' }}
+                                    ({{ ucfirst(str_replace('_', ' ', $fee['inclusion'] ?? '')) }})
+                                    <br>
+                                @endforeach
+                            </td>
+                        </tr>
+                    @endif
+
+                    {{-- Deposits --}}
                     <tr>
-                        <th class="align-top">
-                            <i class="fa fa-info-circle text-secondary me-2"></i>
-                            Cancellation/prepayment
-                        </th>
+                        <th>Deposits (Security / Other)</th>
                         <td>
                             @if (!empty($policy['deposit']))
                                 <ul class="mb-0 ps-3">
                                     @foreach ($policy['deposit'] as $dep)
                                         <li>
-                                            {{ str_replace('_', ' ', $dep['deposit_type']) }} —
+                                            {{ $dep['deposit_type'] !== 'unspecified' ? ucfirst($dep['deposit_type']) : 'General' }}
+                                            —
                                             {{ number_format((float) $dep['price'], 2) }} {{ $dep['currency'] ?? '' }}
-                                            ({{ str_replace('_', ' ', $dep['payment_type']) }},
-                                            {{ str_replace('_', ' ', $dep['pricing_method']) }})
+                                            ({{ ucfirst($dep['payment_type'] ?? 'N/A') }},
+                                            {{ ucfirst($dep['pricing_method'] ?? 'N/A') }})
                                         </li>
                                     @endforeach
                                 </ul>
                             @else
-                                <p class="mb-0">
-                                    Cancellation and prepayment policies vary according to accommodation type.
-                                    Please check what <a href="#conditions">conditions</a> may apply to each option when
-                                    making your selection.
-                                </p>
+                                No deposit information provided.
                             @endif
                         </td>
                     </tr>
 
-                    {{-- Children and beds --}}
+                    {{-- Children and Beds --}}
                     <tr>
-                        <th class="align-top">
-                            <i class="fa fa-users text-secondary me-2"></i>
-                            Children and beds
-                        </th>
+                        <th>Children and beds</th>
                         <td>
                             <strong>Child policies</strong><br>
                             @if (!empty($policy['children']))
@@ -291,96 +316,175 @@
                                     Age {{ $ch['age_start'] }}–{{ $ch['age_end'] }} —
                                     {{ number_format((float) $ch['price'], 2) }} {{ $ch['currency'] ?? '' }}
                                     (Extra bed: {{ str_replace('_', ' ', $ch['extra_bed']) }})
-                                    @if (!$loop->last)
-                                        <br>
-                                    @endif
+                                    <br>
                                 @endforeach
                             @else
-                                Children of any age are welcome.
+                                Children of any age are welcome.<br>
                             @endif
 
-                            <br><br>
-                            <strong>Cot &amp; extra bed policies</strong><br>
+                            <br><strong>Cot policies</strong><br>
                             @if (!empty($policy['cot']))
                                 @foreach ($policy['cot'] as $cot)
                                     {{ $cot['amount'] }} cot(s) —
                                     {{ number_format((float) $cot['price'], 2) }} {{ $cot['currency'] ?? '' }}
                                     per {{ str_replace('_', ' ', $cot['price_unit']) }}
-                                    @if (!$loop->last)
-                                        <br>
-                                    @endif
+                                    ({{ ucfirst(str_replace('_', ' ', $cot['inclusion'] ?? 'unspecified')) }})
+                                    <br>
                                 @endforeach
-                            @elseif(!empty($policy['extra_bed']))
+                            @else
+                                No cot policies available.<br>
+                            @endif
+
+                            <br><strong>Extra bed policies</strong><br>
+                            @if (!empty($policy['extra_bed']))
                                 @foreach ($policy['extra_bed'] as $eb)
                                     {{ $eb['amount'] }} extra bed(s) —
                                     {{ number_format((float) $eb['price'], 2) }} {{ $eb['currency'] ?? '' }}
                                     per {{ str_replace('_', ' ', $eb['price_unit']) }}
-                                    @if (!$loop->last)
-                                        <br>
-                                    @endif
+                                    ({{ ucfirst(str_replace('_', ' ', $eb['inclusion'] ?? 'unspecified')) }})
+                                    <br>
                                 @endforeach
                             @else
-                                Cots and extra beds are not available at this property.
+                                No extra bed policies available.
                             @endif
                         </td>
                     </tr>
 
-                    {{-- No age restriction --}}
+                    {{-- No Age Restriction --}}
                     <tr>
-                        <th>
-                            <i class="fa fa-user-check text-secondary me-2"></i>
-                            No age restriction
-                        </th>
+                        <th>No age restriction</th>
                         <td>There is no age requirement for check-in</td>
                     </tr>
 
-                    {{-- Accepted payment methods --}}
+                    {{-- Accepted Payment Methods --}}
                     <tr>
-                        <th>
-                            <i class="fa fa-credit-card text-secondary me-2"></i>
-                            Accepted payment methods
-                        </th>
+                        <th>Accepted payment methods</th>
                         <td>
-                            @foreach ($policy['payment_methods'] ?? ['visa', 'mastercard', 'cash'] as $m)
-                                <img src="{{ asset('icons/' . $m . '.svg') }}" alt="{{ ucfirst($m) }}" class="me-1"
-                                    style="height:24px;">
+                            @foreach ($hotel['payment_methods'] ?? ['visa', 'mastercard', 'cash'] as $method)
+                                <img src="{{ asset('icons/' . $method . '.svg') }}" alt="{{ ucfirst($method) }}"
+                                    class="me-1" style="height:24px;">
                             @endforeach
                         </td>
                     </tr>
 
-                    {{-- Parties/events --}}
+                    {{-- Parties --}}
                     <tr>
-                        <th>
-                            <i class="fa fa-ban text-secondary me-2"></i>
-                            Parties
-                        </th>
+                        <th>Parties</th>
                         <td>Parties/events are not allowed</td>
                     </tr>
 
                     {{-- Pets --}}
                     <tr>
-                        <th>
-                            <i class="fa fa-paw text-secondary me-2"></i>
-                            Pets
-                        </th>
+                        <th>Pets</th>
                         <td>
                             @if (!empty($policy['pets']))
                                 @foreach ($policy['pets'] as $pet)
-                                    {{ ucfirst($pet['pets_type']) }} —
+                                    {{ ucfirst($pet['pets_type'] ?? 'Pet') }} —
                                     {{ number_format((float) $pet['price'], 2) }} {{ $pet['currency'] ?? '' }}
-                                    ({{ str_replace('_', ' ', $pet['inclusion']) }})
-                                    @if (!$loop->last)
-                                        <br>
-                                    @endif
+                                    ({{ ucfirst(str_replace('_', ' ', $pet['inclusion'])) }})
+                                    <br>
                                 @endforeach
                             @else
                                 Pets are not allowed.
                             @endif
                         </td>
                     </tr>
+
+                    {{-- Internet --}}
+                    <tr>
+                        <th>Internet</th>
+                        <td>
+                            @foreach ($policy['internet'] ?? [] as $net)
+                                {{ ucfirst($net['work_area']) }} —
+                                {{ ucfirst(str_replace('_', ' ', $net['inclusion'])) }}
+                                @if ($net['price'] > 0)
+                                    – {{ number_format((float) $net['price'], 2) }} {{ $net['currency'] ?? '' }}
+                                    per {{ str_replace('_', ' ', $net['price_unit']) }}
+                                @endif
+                                <br>
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- No-show --}}
+                    @if (!empty($policy['no_show']) && $policy['no_show']['availability'] === 'available')
+                        <tr>
+                            <th>No-show Policy</th>
+                            <td>
+                                No-show charge applies after
+                                {{ \Carbon\Carbon::createFromFormat('H:i:s', $policy['no_show']['time'])->format('H:i') }}
+                                ({{ str_replace('_', ' ', $policy['no_show']['day_period']) }})
+                            </td>
+                        </tr>
+                    @endif
+
+                    {{-- Parking --}}
+                    <tr>
+                        <th>Parking</th>
+                        <td>
+                            @foreach ($policy['parking'] ?? [] as $park)
+                                {{ $park['territory_type'] !== 'unspecified' ? ucfirst($park['territory_type']) : 'General' }}
+                                —
+                                {{ ucfirst(str_replace('_', ' ', $park['inclusion'])) }}
+                                – {{ number_format((float) $park['price'], 2) }} {{ $park['currency'] ?? '' }}
+                                per {{ str_replace('_', ' ', $park['price_unit']) }}<br>
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- Shuttle --}}
+                    <tr>
+                        <th>Shuttle</th>
+                        <td>
+                            @foreach ($policy['shuttle'] ?? [] as $shuttle)
+                                {{ ucfirst(str_replace('_', ' ', $shuttle['destination_type'])) }} —
+                                {{ ucfirst(str_replace('_', ' ', $shuttle['inclusion'])) }}
+                                @if ($shuttle['price'] > 0)
+                                    – {{ number_format((float) $shuttle['price'], 2) }} {{ $shuttle['currency'] ?? '' }}
+                                @endif
+                                ({{ ucfirst(str_replace('_', ' ', $shuttle['shuttle_type'])) }})
+                                <br>
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- Meals --}}
+                    <tr>
+                        <th>Meals</th>
+                        <td>
+                            @foreach ($policy['meal'] ?? [] as $meal)
+                                {{ ucfirst($meal['meal_type']) }} —
+                                {{ ucfirst(str_replace('_', ' ', $meal['inclusion'])) }} –
+                                {{ number_format((float) $meal['price'], 2) }} {{ $meal['currency'] ?? '' }}<br>
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- Children's Meals --}}
+                    <tr>
+                        <th>Children's Meals</th>
+                        <td>
+                            @foreach ($policy['children_meal'] ?? [] as $cm)
+                                Age {{ $cm['age_start'] }}–{{ $cm['age_end'] }}:
+                                {{ ucfirst($cm['meal_type']) }},
+                                {{ ucfirst(str_replace('_', ' ', $cm['inclusion'])) }} –
+                                {{ number_format((float) $cm['price'], 2) }} {{ $cm['currency'] ?? '' }}<br>
+                            @endforeach
+                        </td>
+                    </tr>
+
+                    {{-- Visa Support --}}
+                    <tr>
+                        <th>Visa</th>
+                        <td>
+                            {{ $policy['visa']['visa_support'] === 'support_enable' ? 'Visa support available' : 'No visa support' }}
+                        </td>
+                    </tr>
+
                 </tbody>
             </table>
         @endif
+
     </div>
 
     <div id="imageModal" class="modal-img-viewer" onclick="closeFullImage()">
