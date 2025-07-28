@@ -7,9 +7,9 @@ USERNAME = "8166"
 PASSWORD = "028c1cb6-c2e7-4ce2-9ace-1bba8aec92a6"
 API_URL = "https://api.worldota.net/api/b2b/v3/hotel/static/"
 
-DB_NAME = "mjellma"
-DB_USER = "root"
-DB_PASSWORD = ""
+DB_NAME = "rezervo24_mjellma"
+DB_USER = "rezervo24_mjellma"
+DB_PASSWORD = "4gjp{qW~*]lZ"
 DB_HOST = "localhost"
 DB_PORT = "3306"
 
