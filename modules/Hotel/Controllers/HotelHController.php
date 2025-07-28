@@ -24,6 +24,70 @@ class HotelHController extends Controller
     private $username = "8166";
     private $password = "028c1cb6-c2e7-4ce2-9ace-1bba8aec92a6";
 
+    /**
+     * List of errors returned from the booking finish call that should be treated
+     * as final.  When one of these errors is encountered, we will not attempt
+     * to poll the finish status endpoint because the documentation indicates
+     * there is no chance of recovery by retrying.  See RateHawk docs for
+     * definitions of these error codes.  Notably, `double_booking_finish`
+     * is excluded from this list because it requires polling the status endpoint
+     * rather than immediately failing.  Likewise, `timeout`, `unknown` and
+     * HTTP 5xx responses are not listed here since those conditions instruct
+     * us to poll the status endpoint.
+     *
+     * @var string[]
+     */
+    private array $finalFinishErrors = [
+        'book_hash_not_found',
+        'booking_form',
+        'booking_form_expired',
+        'chosen_payment_type_was_not_available_on_booking_form',
+        'email',
+        'incorrect_chosen_payment_type',
+        'incorrect_guests_number',
+        'incorrect_children_data',
+        'incorrect_rooms_number',
+        'insufficient_b2b_balance',
+        'order_not_found',
+        'rate_not_found',
+        'return_path_required',
+        'unauthorized_group_booking',
+        'arrival_date_differs_from_checkin_date',
+        'not_enough_credit_card_data',
+        'incorrect_init_uuid_format',
+        'incorrect_pay_uuid_format',
+        'sandbox_restriction',
+        'supplier_data_required',
+        // Generic authentication/contract errors
+        'decoding_json', 'endpoint_exceeded_limit', 'endpoint_not_active', 'endpoint_not_found',
+        'incorrect_credentials', 'invalid_auth_header', 'invalid_params', 'no_auth_header',
+        'not_allowed_host', 'overdue_debt', 'unexpected_method',
+        // booking_finish_did_not_succeed can be returned from the finish call if the
+        // API determines that the booking could not be started at all.  Treat it as
+        // unrecoverable here as well, although it is more commonly returned from the
+        // status call.
+        'booking_finish_did_not_succeed',
+    ];
+
+    /**
+     * List of errors returned from the booking finish status call that are
+     * considered terminal.  When one of these is encountered, we must stop
+     * polling immediately.  This array mirrors the set documented by
+     * RateHawk for the `/hotel/order/booking/finish/status/` endpoint and is
+     * used by pollFinishStatus().  Note that `double_booking_finish` does not
+     * appear here because that error is returned only from the finish call.
+     *
+     * @var string[]
+     */
+    private array $finalStatusErrors = [
+        '3ds', 'block', 'book_limit', 'booking_finish_did_not_succeed',
+        'charge', 'provider', 'soldout', 'not_allowed', 'order_not_found',
+        // Additional final errors that may appear across endpoints
+        'decoding_json', 'endpoint_exceeded_limit', 'endpoint_not_active', 'endpoint_not_found',
+        'incorrect_credentials', 'invalid_auth_header', 'invalid_params', 'no_auth_header',
+        'not_allowed_host', 'overdue_debt', 'unexpected_method',
+    ];
+
     public function showHotels()
     {
         Log::info('Rendering hotel search form.');
@@ -147,8 +211,14 @@ class HotelHController extends Controller
                     $hid = $apiHotel['id'] ?? null;
                     if(!$hid) continue;
                     $dailyPrice   = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                    $hasBreakfast = collect($apiHotel['rates'] ?? [])
-                                        ->contains(fn($r)=> !empty($r['meal_data']['has_breakfast']));
+                // Determine if any rate for this hotel includes breakfast without relying on meal_data
+                $hasBreakfast = collect($apiHotel['rates'] ?? [])
+                    ->contains(function ($r) {
+                        // Prefer the newer `meal` field; fall back to the `meal_data.value` if necessary
+                        $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
+                        // Treat any meal plan other than `nomeal` that contains the word "breakfast" as including breakfast
+                        return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
+                    });
                     $pricesResult[$hid] = compact('dailyPrice','hasBreakfast');
                 }
                 foreach($hotels as $hotel){
@@ -452,39 +522,48 @@ class HotelHController extends Controller
             }
 
             // 5. Map room rates + attach images
-            $mealTypeMap = [
-                'Room Only'        => 'RO',
-                'Bed and Breakfast'=> 'BB',
-                'Half Board'       => 'HB',
-                'Full Board'       => 'FB',
-                'All Inclusive'    => 'AI'
-            ];
-
-            $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($mealTypeMap, $roomImageMap) {
+            $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($roomImageMap) {
+                // Extract pricing information
                 $payment    = $rate['payment_options']['payment_types'][0] ?? [];
                 $net        = data_get($payment, 'commission_info.charge.amount_net', 0);
                 $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
-                $mealName   = data_get($rate, 'meal_type.name', 'N/A');
 
+                // Determine human‑readable meal label based on the `meal` or `meal_data.value` field
+                $rawMeal   = strtolower((string) data_get($rate, 'meal', data_get($rate, 'meal_data.value')));
+                if (empty($rawMeal) || $rawMeal === 'nomeal') {
+                    $mealLabel = 'No meals';
+                } else {
+                    // Replace underscores with spaces and capitalize each word
+                    $mealLabel = ucwords(str_replace('_', ' ', $rawMeal));
+                }
+
+                // Ensure the room has a valid name
                 $roomNameRaw = $rate['name'] ?? $rate['room_name'] ?? null;
                 if (empty($roomNameRaw)) {
                     Log::warning('Rate missing room name', ['rate' => $rate]);
                     $rate['room_images'] = [];
+                    // Still attach basic pricing and meal info so UI remains consistent
+                    $rate['net_amount']        = $net;
+                    $rate['commission_amount'] = $commission;
+                    $rate['final_price']       = round($net + $commission, 2);
+                    $rate['meal_type']         = $mealLabel;
                     return $rate;
                 }
 
+                // Match room images using normalized room name
                 $roomNameKey = $this->normalizeRoomName($roomNameRaw);
-                $roomImages = $roomImageMap[$roomNameKey] ?? $this->findClosestImageMatch($roomNameKey, $roomImageMap);
-
+                $roomImages  = $roomImageMap[$roomNameKey] ?? $this->findClosestImageMatch($roomNameKey, $roomImageMap);
                 if (empty($roomImages)) {
                     Log::debug('No images matched for room', ['room_name_key' => $roomNameKey]);
                 }
 
+                // Attach computed fields back to the rate
                 $rate['net_amount']        = $net;
                 $rate['commission_amount'] = $commission;
                 $rate['final_price']       = round($net + $commission, 2);
-                $rate['meal_type']         = $mealName;
-                $rate['meal_code']         = $mealTypeMap[$mealName] ?? null;
+                $rate['meal_type']         = $mealLabel;
+                // Optionally derive a simple meal code based on the first letters of each word
+                $rate['meal_code']         = preg_match_all('/\b(\w)/u', $mealLabel, $m) ? strtoupper(implode('', $m[1])) : null;
                 $rate['room_images']       = $roomImages;
 
                 Log::info('Processing rate', [
@@ -549,6 +628,75 @@ class HotelHController extends Controller
         // Remove all text in parentheses (including multiple sets)
         $name = preg_replace('/\([^)]*\)/', '', $name);
         return trim(strtolower(preg_replace('/\s+/', ' ', $name))); // also normalize whitespace
+    }
+
+    /**
+     * Polls the RateHawk finish status endpoint until a final status or final error
+     * is returned.  This method implements the ETG recommendation to continue
+     * requesting `/hotel/order/booking/finish/status/` when you receive
+     * `timeout`, `unknown` or 5xx errors from either the finish call or the status call.
+     *
+     * @param string $partnerOrderId  The partner_order_id to check
+     * @param int    $timeout         Total number of seconds to keep polling (default 60)
+     * @param int    $interval        Delay in seconds between polls (default 5)
+     * @return array                  The JSON payload returned from the last status call
+     */
+    private function pollFinishStatus(string $partnerOrderId, int $timeout = 60, int $interval = 5): array
+    {
+        $startTime    = time();
+        $lastResponse = ['status' => null, 'error' => null];
+
+        // Keep polling until we hit a terminal condition or time runs out.  We
+        // consider a terminal condition to be a successful status (`status` ===
+        // `ok`) or the `error` field containing one of the final status errors.
+        do {
+            try {
+                $resp = Http::withBasicAuth($this->username, $this->password)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->timeout(30)
+                    ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                        'partner_order_id' => $partnerOrderId,
+                    ]);
+
+                // Successful HTTP response
+                if ($resp->successful()) {
+                    $json = $resp->json();
+                    $lastResponse = $json;
+                    $status = data_get($json, 'status');
+                    $error  = data_get($json, 'error');
+
+                    // When the booking has completed successfully (`status: ok`) or
+                    // when a final error appears, break out of the loop.
+                    if ($status === 'ok' || ($error && in_array($error, $this->finalStatusErrors, true))) {
+                        break;
+                    }
+                } else {
+                    // Non‑200 response: treat 5xx as temporary errors.  Record
+                    // status code so the caller can inspect it.  Only break
+                    // immediately on 4xx because these are usually contract errors.
+                    $statusCode = $resp->status();
+                    $lastResponse = [
+                        'status' => 'error',
+                        'error'  => $statusCode,
+                    ];
+                    if ($statusCode >= 400 && $statusCode < 500) {
+                        // 4xx errors are not recoverable by polling
+                        break;
+                    }
+                }
+            } catch (\Exception $e) {
+                // Network or other exception; treat as temporary and continue.
+                $lastResponse = [
+                    'status' => 'error',
+                    'error'  => 'unknown',
+                ];
+            }
+
+            // Sleep before the next poll.  Use PHP's sleep() to avoid busy‑waiting.
+            sleep($interval);
+        } while ((time() - $startTime) < $timeout);
+
+        return $lastResponse;
     }
 
 
@@ -744,37 +892,39 @@ class HotelHController extends Controller
     public function bookRoom(Request $request)
     {
         try {
+            // Validate input
             $request->validate([
-                'book_hash' => 'required|string',
-                'partner_order_id' => 'required|string',
-                'user_ip' => 'required|ip',
-                'hotel_id' => 'required|string',
-                'checkin' => 'required|date',
-                'checkout' => 'required|date',
-                'meal_plan' => 'nullable|string',
+                'book_hash'          => 'required|string',
+                'partner_order_id'   => 'required|string',
+                'user_ip'            => 'required|ip',
+                'hotel_id'           => 'required|string',
+                'checkin'            => 'required|date',
+                'checkout'           => 'required|date',
+                'meal_plan'          => 'nullable|string',
             ]);
 
-            $bookHash = $request->input('book_hash');
+            $bookHash       = $request->input('book_hash');
             $partnerOrderId = $request->input('partner_order_id');
-            $userIp = $request->input('user_ip');
+            $userIp         = $request->input('user_ip');
 
+            // Persist booking basics in session for later steps
             session([
                 'booking.partner_order_id' => $partnerOrderId,
-                'booking.book_hash' => $bookHash,
-                'booking.user_ip' => $userIp,
-                'booking.hotel_id' => $request->input('hotel_id'),
-                'booking.checkin' => $request->input('checkin'),
-                'booking.checkout' => $request->input('checkout'),
-                'booking.meal_plan' => $request->input('meal_plan'),
-                'booking.adults' => $request->input('adults', 1),
-                'booking.children' => json_decode($request->input('children', '[]'), true),
+                'booking.book_hash'        => $bookHash,
+                'booking.user_ip'          => $userIp,
+                'booking.hotel_id'         => $request->input('hotel_id'),
+                'booking.checkin'          => $request->input('checkin'),
+                'booking.checkout'         => $request->input('checkout'),
+                'booking.meal_plan'        => $request->input('meal_plan'),
+                'booking.adults'           => $request->input('adults', 1),
+                'booking.children'         => json_decode($request->input('children', '[]'), true),
             ]);
 
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
-                'book_hash' => $bookHash,
-                'language' => 'en',
-                'user_ip' => $userIp,
+                'book_hash'        => $bookHash,
+                'language'         => 'en',
+                'user_ip'          => $userIp,
             ];
 
             Log::info('📤 Sending booking form request to API', ['payload' => $apiBody]);
@@ -785,56 +935,74 @@ class HotelHController extends Controller
 
             Log::info('📥 Booking API Response', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'body'   => $response->body(),
             ]);
 
+            // If HTTP request fails (4xx/5xx), throw exception
             if ($response->failed()) {
                 throw new \Exception('Booking API request failed: ' . $response->body());
             }
 
-            $bookingData = $response->json();
+            $json       = $response->json();
+            $status     = data_get($json, 'status');
+            $error      = data_get($json, 'error');
+            $httpStatus = $response->status();
 
-            if (isset($bookingData['status']) && $bookingData['status'] === 'ok') {
-                $data = $bookingData['data'];
+            // If the form call succeeded, store bookingData and go to confirmation
+            if ($status === 'ok') {
+                $data = $json['data'] ?? [];
                 session(['bookingData' => $data]);
 
+                // cache pending booking for PCB callback etc.
                 $token = Str::random(32);
                 Cache::put("pending_booking_{$token}", array_merge($request->all(), [
                     'order_id' => $data['order_id'],
                 ]), now()->addMinutes(10));
 
                 return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
+            }
+
+            // Otherwise, handle the error from the booking form call
+            // Some errors are final; others (unknown/timeout or server errors) should trigger polling
+            // of the finish/status endpoint to see if the booking was created anyway.
+
+            // 1. Final error: double_booking_form (booking already submitted)
+            if ($error === 'double_booking_form') {
+                return redirect()->route('hotel.booking.failed')->withErrors([
+                    'error' => __('This booking request has already been submitted or processed. Please try with a new request.'),
+                ]);
+            }
+
+            // 2. Temporary errors: unknown, timeout or HTTP 5xx
+            $shouldPoll = false;
+            if ($error && in_array($error, ['unknown', 'timeout'], true)) {
+                Log::warning('⏳ Booking form returned temporary error; will poll finish/status', ['error' => $error]);
+                $shouldPoll = true;
+            } elseif ($httpStatus >= 500) {
+                Log::warning('⏳ Booking form returned server error; will poll finish/status', ['status' => $httpStatus]);
+                $shouldPoll = true;
             } else {
-                $errorMessage = $bookingData['error'] ?? 'Unknown error';
+                // Any other error from form call is treated as final and surfaced to user
+                throw new \Exception('Booking failed: ' . ($error ?? 'Unknown error'));
+            }
 
-                if ($errorMessage === 'double_booking_form') {
-                    return redirect()->route('hotel.booking.failed')->withErrors([
-                        'error' => __('This booking request has already been submitted or processed. Please try with a new request.'),
-                    ]);
+            // 3. Poll finish/status if required
+            if ($shouldPoll) {
+                // Poll using the same finish status endpoint.  Even though the finish call
+                // has not yet been sent, RateHawk may still return a status for the order
+                // if the booking has been created internally.
+                $statusData = $this->pollFinishStatus($partnerOrderId, 60, 5);
+                Log::info('bookRoom finish/status response', ['status' => $statusData]);
+
+                if (data_get($statusData, 'status') === 'ok') {
+                    // If status returns ok, treat as successful booking and go to confirmation
+                    return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
                 }
 
-                if ($errorMessage === 'unknown') {
-                    Log::warning('⚠️ Unknown error received, polling finish/status as fallback.');
-
-                    $statusResponse = Http::withBasicAuth($this->username, $this->password)
-                        ->withHeaders(['Content-Type' => 'application/json'])
-                        ->timeout(15)
-                        ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
-                            'partner_order_id' => $partnerOrderId,
-                        ]);
-
-                    $statusData = $statusResponse->json();
-
-                    if (data_get($statusData, 'status') === 'ok') {
-                        return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
-                    }
-
-                    return redirect()->route('hotel.booking.failed')->withErrors([
-                        'error' => __('Booking failed after retrying. Please try again.'),
-                    ]);
-                }
-
-                throw new \Exception('Booking failed: ' . $errorMessage);
+                // Otherwise, the booking did not complete.  Present failure message.
+                return redirect()->route('hotel.booking.failed')->withErrors([
+                    'error' => __('Booking failed after retrying. Please try again.'),
+                ]);
             }
 
         } catch (\Exception $e) {
@@ -1514,6 +1682,8 @@ class HotelHController extends Controller
 
         Log::info('📥 Booking Submission', ['payload' => $payload]);
 
+        // Send the finish call.  Any exception here should bubble up and
+        // trigger the catch block below.
         $response = Http::withBasicAuth($this->username, $this->password)
             ->withHeaders(['Content-Type' => 'application/json'])
             ->timeout(30)
@@ -1522,17 +1692,60 @@ class HotelHController extends Controller
         $json = $response->json();
         Log::info('finishBooking response', ['response' => $json]);
 
-        $status = data_get($json, 'status');
-        $error = data_get($json, 'error');
+        // Extract status and error returned from the finish call
+        $status     = data_get($json, 'status');
+        $error      = data_get($json, 'error');
+        $httpStatus = $response->status();
 
-        if ($error === 'booking_finish_did_not_succeed') {
-            Log::error('❌ booking_finish_did_not_succeed — aborting status poll');
-            return view('Hotel::frontend.booking-pending', [
-                'status' => ['error' => 'booking_finish_did_not_succeed'],
-                'order_id' => $payload['order_id'],
-            ]);
+        // Determine whether we should proceed to poll the status endpoint.
+        // According to RateHawk documentation:
+        // - `double_booking_finish` indicates a previous call is still in flight.
+        //   We must not send another finish call but should poll the status endpoint.
+        // - Any error in $finalFinishErrors is considered final; we surface the
+        //   error to the user immediately and do not poll.
+        // - `timeout`, `unknown` and HTTP 5xx responses are temporary and require
+        //   polling the status endpoint.
+        // - If status is `ok` or `processing` without an error, we should poll
+        //   until completion because the booking may still be settling.
+        $shouldPoll = false;
+
+        // Handle the special case of double_booking_finish
+        if ($error === 'double_booking_finish') {
+            Log::warning('⚠️ double_booking_finish — will poll finish/status for existing booking');
+            $shouldPoll = true;
+        } elseif ($error) {
+            // If we received an error, check if it is final
+            if (in_array($error, $this->finalFinishErrors, true)) {
+                Log::error('❌ Final finish error encountered', ['error' => $error]);
+                return view('Hotel::frontend.booking-pending', [
+                    'status'   => ['error' => $error],
+                    'order_id' => $payload['order_id'],
+                ]);
+            }
+            // For timeout/unknown errors we should poll
+            if (in_array($error, ['timeout', 'unknown'], true)) {
+                Log::warning('⏳ finish returned temporary error, will poll status', ['error' => $error]);
+                $shouldPoll = true;
+            } else {
+                // Unexpected error code: treat as unrecoverable and surface to user
+                Log::error('❌ Unhandled finish error', ['error' => $error]);
+                return view('Hotel::frontend.booking-pending', [
+                    'status'   => ['error' => $error],
+                    'order_id' => $payload['order_id'],
+                ]);
+            }
+        } elseif ($httpStatus >= 500) {
+            // Server errors should be treated as temporary; poll status
+            Log::warning('⏳ finish call returned server error, will poll status', ['http_status' => $httpStatus]);
+            $shouldPoll = true;
+        } else {
+            // No error field means status is either ok or processing; both warrant polling
+            if ($status === 'ok' || $status === 'processing') {
+                $shouldPoll = true;
+            }
         }
 
+        // If the finish call is ok or processing, persist it to our DB
         if ($status === 'ok' || $status === 'processing') {
             MjellmaBooking::updateOrCreate(
                 ['partner_order_id' => $partnerOrderId],
@@ -1546,26 +1759,30 @@ class HotelHController extends Controller
             );
         }
 
-        $statusResp = Http::withBasicAuth($this->username, $this->password)
-            ->withHeaders(['Content-Type' => 'application/json'])
-            ->timeout(30)
-            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
-                'partner_order_id' => $partnerOrderId
-            ]);
+        if ($shouldPoll) {
+            // Poll the finish/status endpoint until a final status or final error
+            $statusData = $this->pollFinishStatus($partnerOrderId, 60, 5);
+            Log::info('finishBooking status response', ['status' => $statusData]);
 
-        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
-        Log::info('finishBooking status response', ['status' => $statusData]);
+            if (data_get($statusData, 'status') === 'ok') {
+                return view('Hotel::frontend.payment-success', [
+                    'order_id'         => $payload['order_id'],
+                    'partner_order_id' => $partnerOrderId,
+                ]);
+            }
 
-        if (data_get($statusData, 'status') === 'ok') {
-            return view('Hotel::frontend.payment-success', [
+            return view('Hotel::frontend.booking-pending', [
+                'status'   => $statusData,
                 'order_id' => $payload['order_id'],
-                'partner_order_id' => $partnerOrderId,
             ]);
         }
 
-        return view('Hotel::frontend.booking-pending', [
-            'status' => $statusData,
-            'order_id' => $payload['order_id'],
+        // If we reach here it means there was no need to poll and no unrecoverable
+        // error was encountered.  In most cases this will be because the finish call
+        // returned `ok` and the booking was completed instantly.  Display success.
+        return view('Hotel::frontend.payment-success', [
+            'order_id'         => $payload['order_id'],
+            'partner_order_id' => $partnerOrderId,
         ]);
     }
 
@@ -1575,71 +1792,105 @@ class HotelHController extends Controller
         $booking = MjellmaBooking::findOrFail($request->input('booking_id'));
         $partnerId = $request->input('partner_order_id', $booking->partner_order_id);
 
+        // Build the finish payload according to the booking record and request
         $finishPayload = [
-            'order_id'        => $booking->order_id,
-            'partner_order_id'=> $partnerId,
-            'supplier_data'   => $request->input('supplier_data', []),
-            'payment_type'    => [
+            'order_id'         => $booking->order_id,
+            'partner_order_id' => $partnerId,
+            'supplier_data'    => $request->input('supplier_data', []),
+            'payment_type'     => [
                 'amount'        => $booking->payment_amount,
                 'currency_code' => $booking->currency_code,
                 'type'          => $booking->payment_type,
             ],
-            'return_path'     => $request->input('return_path'),
-            'rooms'           => $request->input('rooms'),
-            'language'        => $request->input('language', 'en'),
-            'book_hash'       => $booking->book_hash,
-            'item_id'         => $booking->item_id,
+            'return_path'      => $request->input('return_path'),
+            'rooms'            => $request->input('rooms'),
+            'language'         => $request->input('language', 'en'),
+            'book_hash'        => $booking->book_hash,
+            'item_id'          => $booking->item_id,
         ];
 
         try {
-            $finishResp = Http::withBasicAuth($this->username, $this->password)
+            $resp = Http::withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->timeout(30)
                 ->post($this->apiUrl . 'hotel/order/booking/finish/', $finishPayload);
 
-            if ($finishResp->serverError()) {
-                throw new RequestException($finishResp->toPsrResponse());
+            $json       = $resp->json();
+            $status     = data_get($json, 'status');
+            $error      = data_get($json, 'error');
+            $httpStatus = $resp->status();
+
+            Log::info('completeBooking finish response', ['response' => $json]);
+
+            // Determine if we should poll finish/status
+            $shouldPoll = false;
+            if ($error === 'double_booking_finish') {
+                Log::warning('⚠️ double_booking_finish returned by finish; will poll finish/status');
+                $shouldPoll = true;
+            } elseif ($error) {
+                if (in_array($error, $this->finalFinishErrors, true)) {
+                    // Final error – return pending view with error
+                    return view('Hotel::frontend.booking-pending', [
+                        'status'   => ['error' => $error],
+                        'order_id' => $booking->order_id,
+                    ]);
+                }
+                if (in_array($error, ['timeout', 'unknown'], true)) {
+                    Log::warning('⏳ Temporary finish error returned; will poll finish/status', ['error' => $error]);
+                    $shouldPoll = true;
+                } else {
+                    // Unknown error – treat as final
+                    return view('Hotel::frontend.booking-pending', [
+                        'status'   => ['error' => $error],
+                        'order_id' => $booking->order_id,
+                    ]);
+                }
+            } elseif ($httpStatus >= 500) {
+                Log::warning('⏳ Server error from finish call; will poll finish/status', ['status' => $httpStatus]);
+                $shouldPoll = true;
+            } else {
+                // status is ok or processing (no error)
+                if ($status === 'ok' || $status === 'processing') {
+                    $shouldPoll = true;
+                }
             }
 
-            $finishData = $finishResp->json();
-            Log::info('completeBooking finish response', ['data' => $finishData]);
+            // Persist booking status if finish returned ok or processing
+            if ($status === 'ok' || $status === 'processing') {
+                $booking->update(['status' => $status]);
+            }
 
-            // ✅ Handle double_booking_finish error
-            if (isset($finishData['error']) && $finishData['error'] === 'double_booking_finish') {
-                Log::warning('⚠️ double_booking_finish detected — skipping repeat call to booking_finish.');
+            if ($shouldPoll) {
+                $statusData = $this->pollFinishStatus($partnerId, 60, 5);
+                Log::info('completeBooking status response', ['status' => $statusData]);
+                if (data_get($statusData, 'status') === 'ok') {
+                    return view('Hotel::frontend.payment-success', [
+                        'booking'    => $booking,
+                        'statusData' => $statusData,
+                    ]);
+                }
                 return view('Hotel::frontend.booking-pending', [
-                    'status' => ['error' => 'double_booking_finish'],
-                    'order_id' => $booking->order_id,
+                    'booking' => $booking,
+                    'status'  => $statusData,
                 ]);
             }
 
-            if (data_get($finishData, 'status') === 'ok') {
-                $booking->update(['status' => 'processing']);
-            } else {
-                Log::warning('Finish API call returned non-ok', ['response' => $finishData]);
-            }
-
-        } catch (RequestException $e) {
-            Log::error('Finish API call failed, falling back to status', ['error' => $e->getMessage()]);
-        }
-
-        $statusResp = Http::withBasicAuth($this->username, $this->password)
-            ->withHeaders(['Content-Type' => 'application/json'])
-            ->timeout(30)
-            ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
-                'partner_order_id' => $partnerId
+            // If no polling is needed and no unrecoverable error, return success
+            return view('Hotel::frontend.payment-success', [
+                'booking'    => $booking,
+                'statusData' => $json,
             ]);
 
-        $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
-
-        if (data_get($statusData, 'status') === 'ok') {
-            return view('Hotel::frontend.payment-success', compact('booking', 'statusData'));
+        } catch (\Exception $e) {
+            Log::error('completeBooking finish call threw exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return view('Hotel::frontend.booking-pending', [
+                'booking' => $booking,
+                'status'  => ['error' => 'unknown'],
+            ]);
         }
-
-        return view('Hotel::frontend.booking-pending', [
-            'booking' => $booking,
-            'status'  => $statusData,
-        ]);
     }
 
 

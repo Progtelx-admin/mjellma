@@ -124,23 +124,79 @@
 
                             @if (!empty($hotel['metapolicy_struct']['meal']))
                                 <h5>Hotel Meal Policy (ETG)</h5>
-                                @foreach ($hotel['metapolicy_struct']['meal'] as $meal)
-                                    <p>
-                                        {{ ucfirst($meal['meal_type']) }}:
-                                        {{ $meal['inclusion'] === 'included' ? 'Included' : 'Not included' }} –
-                                        Price: {{ $meal['price'] }} {{ $meal['currency'] ?? '' }}
-                                    </p>
+                                @foreach ($hotel['metapolicy_struct']['meal'] as $policyMeal)
+                                    @php
+                                        // Determine if this meal type is included in the current rate.
+                                        $policyType = $policyMeal['meal_type'] ?? '';
+                                        $includedByRate = false;
+                                        // Use meal_data.has_* flags to understand what the rate includes
+                                        if ($policyType === 'breakfast' && data_get($rate, 'meal_data.has_breakfast')) {
+                                            $includedByRate = true;
+                                        }
+                                        if ($policyType === 'lunch' && data_get($rate, 'meal_data.has_lunch')) {
+                                            $includedByRate = true;
+                                        }
+                                        if ($policyType === 'dinner' && data_get($rate, 'meal_data.has_dinner')) {
+                                            $includedByRate = true;
+                                        }
+                                        // If the policy lists all-inclusive, consider it included when breakfast, lunch and dinner are all included
+                                        if ($policyType === 'all_inclusive') {
+                                            $hasBreakfast = data_get($rate, 'meal_data.has_breakfast');
+                                            $hasLunch = data_get($rate, 'meal_data.has_lunch');
+                                            $hasDinner = data_get($rate, 'meal_data.has_dinner');
+                                            $includedByRate = $hasBreakfast && $hasLunch && $hasDinner;
+                                        }
+
+                                        // Determine the final inclusion status and whether to show the price
+                                        if ($includedByRate) {
+                                            $inclusionText = 'Included';
+                                            $priceText = '';
+                                        } else {
+                                            $inclusionText =
+                                                ($policyMeal['inclusion'] ?? '') === 'included'
+                                                    ? 'Included'
+                                                    : 'Not included';
+                                            // Only show a price if the meal is not included; otherwise omit
+                                            $policyPrice = $policyMeal['price'] ?? '';
+                                            $policyCurrency = $policyMeal['currency'] ?? '';
+                                            $priceText =
+                                                $policyPrice !== ''
+                                                    ? ' – Price: ' . $policyPrice . ' ' . $policyCurrency
+                                                    : '';
+                                        }
+                                    @endphp
+                                    <p>{{ ucfirst($policyType) }}: {{ $inclusionText }}{{ $priceText }}</p>
                                 @endforeach
                             @endif
 
                             @if (!empty($hotel['metapolicy_struct']['children_meal']))
                                 <h5>Children's Meal Policy</h5>
-                                @foreach ($hotel['metapolicy_struct']['children_meal'] as $cMeal)
+                                @foreach ($hotel['metapolicy_struct']['children_meal'] as $childPolicy)
+                                    @php
+                                        // Determine if children’s meal is included in this rate.  The API sets
+                                        // meal_data.no_child_meal=true when there is no children meal.  If false, the rate
+                                        // includes a children’s meal.
+                                        $childMealIncludedByRate = !data_get($rate, 'meal_data.no_child_meal');
+                                        if ($childMealIncludedByRate) {
+                                            $childInclusionText = 'included';
+                                            $childPriceText = '';
+                                        } else {
+                                            $childInclusionText =
+                                                ($childPolicy['inclusion'] ?? '') === 'included'
+                                                    ? 'included'
+                                                    : 'not included';
+                                            $childPolicyPrice = $childPolicy['price'] ?? '';
+                                            $childPolicyCurrency = $childPolicy['currency'] ?? '';
+                                            $childPriceText =
+                                                $childPolicyPrice !== ''
+                                                    ? ' – Price: ' . $childPolicyPrice . ' ' . $childPolicyCurrency
+                                                    : '';
+                                        }
+                                    @endphp
                                     <p>
-                                        Age {{ $cMeal['age_start'] }}–{{ $cMeal['age_end'] }}:
-                                        {{ ucfirst($cMeal['meal_type']) }},
-                                        {{ $cMeal['inclusion'] === 'included' ? 'included' : 'not included' }} –
-                                        Price: {{ $cMeal['price'] }} {{ $cMeal['currency'] ?? '' }}
+                                        Age {{ $childPolicy['age_start'] }}–{{ $childPolicy['age_end'] }}:
+                                        {{ ucfirst($childPolicy['meal_type']) }},
+                                        {{ $childInclusionText }}{{ $childPriceText }}
                                     </p>
                                 @endforeach
                             @endif
