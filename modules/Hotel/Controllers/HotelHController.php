@@ -29,9 +29,14 @@ class HotelHController extends Controller
      * as final.  When one of these errors is encountered, we will not attempt
      * to poll the finish status endpoint because the documentation indicates
      * there is no chance of recovery by retrying.  See RateHawk docs for
-     * definitions of these error codes.  Notably, `double_booking_finish`
-     * is excluded from this list because it requires polling the status endpoint
-     * rather than immediately failing.  Likewise, `timeout`, `unknown` and
+     * definitions of these error codes.  Errors contained in this list are
+     * considered unrecoverable and will not trigger any further polling of the
+     * finish/status endpoint.  Both `double_booking_form` and
+     * `double_booking_finish` are included here because they indicate that the
+     * corresponding API method has been invoked multiple times for the same
+     * booking.  According to RateHawk, these errors do not represent a
+     * booking interruption; rather they signal that the client should stop
+     * calling the same method again.  Likewise, `timeout`, `unknown` and
      * HTTP 5xx responses are not listed here since those conditions instruct
      * us to poll the status endpoint.
      *
@@ -67,6 +72,15 @@ class HotelHController extends Controller
         // unrecoverable here as well, although it is more commonly returned from the
         // status call.
         'booking_finish_did_not_succeed',
+
+        // Errors indicating the finish or form call has been invoked multiple
+        // times for the same order.  These are considered final and should
+        // result in the client surfacing a user‑friendly error rather than
+        // retrying or polling.  They do not indicate that the booking itself
+        // failed; rather, the booking was already processed or is being
+        // processed, so repeating the call again is a logic error.
+        'double_booking_finish',
+        'double_booking_form',
     ];
 
     /**
@@ -637,11 +651,15 @@ class HotelHController extends Controller
      * `timeout`, `unknown` or 5xx errors from either the finish call or the status call.
      *
      * @param string $partnerOrderId  The partner_order_id to check
-     * @param int    $timeout         Total number of seconds to keep polling (default 60)
+     * @param int    $timeout         Total number of seconds to keep polling (default 300).  In line
+     *                                with RateHawk guidance, this timeout is longer than the 60 seconds
+     *                                previously used so that temporary errors like `timeout` or
+     *                                `unknown` can be retried until the general booking timeout
+     *                                elapses.
      * @param int    $interval        Delay in seconds between polls (default 5)
      * @return array                  The JSON payload returned from the last status call
      */
-    private function pollFinishStatus(string $partnerOrderId, int $timeout = 60, int $interval = 5): array
+    private function pollFinishStatus(string $partnerOrderId, int $timeout = 300, int $interval = 5): array
     {
         $startTime    = time();
         $lastResponse = ['status' => null, 'error' => null];
@@ -991,7 +1009,7 @@ class HotelHController extends Controller
                 // Poll using the same finish status endpoint.  Even though the finish call
                 // has not yet been sent, RateHawk may still return a status for the order
                 // if the booking has been created internally.
-                $statusData = $this->pollFinishStatus($partnerOrderId, 60, 5);
+                $statusData = $this->pollFinishStatus($partnerOrderId);
                 Log::info('bookRoom finish/status response', ['status' => $statusData]);
 
                 if (data_get($statusData, 'status') === 'ok') {
@@ -1699,22 +1717,21 @@ class HotelHController extends Controller
 
         // Determine whether we should proceed to poll the status endpoint.
         // According to RateHawk documentation:
-        // - `double_booking_finish` indicates a previous call is still in flight.
-        //   We must not send another finish call but should poll the status endpoint.
-        // - Any error in $finalFinishErrors is considered final; we surface the
-        //   error to the user immediately and do not poll.
+        // - Any error in $finalFinishErrors is considered final and we should
+        //   surface it to the user immediately.  This includes
+        //   `double_booking_finish`, which indicates that the finish call has
+        //   already been issued for this booking.  Repeating the call is a
+        //   logic error and does not warrant further polling.
         // - `timeout`, `unknown` and HTTP 5xx responses are temporary and require
         //   polling the status endpoint.
         // - If status is `ok` or `processing` without an error, we should poll
         //   until completion because the booking may still be settling.
         $shouldPoll = false;
 
-        // Handle the special case of double_booking_finish
-        if ($error === 'double_booking_finish') {
-            Log::warning('⚠️ double_booking_finish — will poll finish/status for existing booking');
-            $shouldPoll = true;
-        } elseif ($error) {
-            // If we received an error, check if it is final
+        if ($error) {
+            // If we received an error, check if it is final.  Any error in
+            // $finalFinishErrors, including double_booking_finish, should
+            // immediately surface a user‑friendly message and skip polling.
             if (in_array($error, $this->finalFinishErrors, true)) {
                 Log::error('❌ Final finish error encountered', ['error' => $error]);
                 return view('Hotel::frontend.booking-pending', [
@@ -1760,8 +1777,11 @@ class HotelHController extends Controller
         }
 
         if ($shouldPoll) {
-            // Poll the finish/status endpoint until a final status or final error
-            $statusData = $this->pollFinishStatus($partnerOrderId, 60, 5);
+            // Poll the finish/status endpoint until a final status or final error.  Use the
+            // default timeout (configured longer than the previous 60s limit) and
+            // the default interval.  Do not restrict polling to 60s as RateHawk
+            // recommends continuing until the general booking timeout expires.
+            $statusData = $this->pollFinishStatus($partnerOrderId);
             Log::info('finishBooking status response', ['status' => $statusData]);
 
             if (data_get($statusData, 'status') === 'ok') {
@@ -1824,22 +1844,21 @@ class HotelHController extends Controller
 
             // Determine if we should poll finish/status
             $shouldPoll = false;
-            if ($error === 'double_booking_finish') {
-                Log::warning('⚠️ double_booking_finish returned by finish; will poll finish/status');
-                $shouldPoll = true;
-            } elseif ($error) {
+            if ($error) {
+                // Final finish errors (including double_booking_finish) should be surfaced
+                // immediately and not retried or polled.
                 if (in_array($error, $this->finalFinishErrors, true)) {
-                    // Final error – return pending view with error
                     return view('Hotel::frontend.booking-pending', [
                         'status'   => ['error' => $error],
                         'order_id' => $booking->order_id,
                     ]);
                 }
+                // Temporary errors (timeout/unknown) warrant polling the finish/status endpoint
                 if (in_array($error, ['timeout', 'unknown'], true)) {
                     Log::warning('⏳ Temporary finish error returned; will poll finish/status', ['error' => $error]);
                     $shouldPoll = true;
                 } else {
-                    // Unknown error – treat as final
+                    // Any other error is treated as unrecoverable
                     return view('Hotel::frontend.booking-pending', [
                         'status'   => ['error' => $error],
                         'order_id' => $booking->order_id,
@@ -1861,7 +1880,10 @@ class HotelHController extends Controller
             }
 
             if ($shouldPoll) {
-                $statusData = $this->pollFinishStatus($partnerId, 60, 5);
+                // Poll using the default timeout and interval.  We avoid hard‑coding
+                // a short 60‑second window so that temporary errors can be retried
+                // until the general booking timeout expires.
+                $statusData = $this->pollFinishStatus($partnerId);
                 Log::info('completeBooking status response', ['status' => $statusData]);
                 if (data_get($statusData, 'status') === 'ok') {
                     return view('Hotel::frontend.payment-success', [
