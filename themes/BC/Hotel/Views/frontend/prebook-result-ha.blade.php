@@ -52,6 +52,15 @@
 
                         <p><strong>Children:</strong> {{ $childrenCount }}</p>
 
+                        {{-- Price Change Notice --}}
+                        @if (isset($priceChanged) && $priceChanged)
+                            <div class="alert alert-warning">
+                                <strong>Notice:</strong> The total price has changed since you last viewed it.
+                                <br>
+                                <strong>Original:</strong> {{ number_format($oldPrice, 2) }} {{ $oldCurrency }}<br>
+                                <strong>Updated:</strong> {{ number_format($newPrice, 2) }} {{ $newCurrency }}
+                            </div>
+                        @endif
 
                         @if ($rate)
                             <p><strong>Room Type:</strong> {{ $rate['room_name'] ?? 'N/A' }}</p>
@@ -61,7 +70,8 @@
                             </p>
                             <h4 class="fw-bold text-success">Total Price:
                                 {{ $rate['payment_options']['payment_types'][0]['amount'] ?? 'N/A' }}
-                                {{ $rate['payment_options']['payment_types'][0]['currency_code'] ?? 'EUR' }}</h4>
+                                {{ $rate['payment_options']['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                            </h4>
 
                             <!-- Book Now Button -->
                             <form method="POST" action="{{ route('hotel.book') }}" class="mt-auto">
@@ -79,7 +89,6 @@
                                 <input type="hidden" name="meal_plan" value="{{ $rate['meal'] ?? 'N/A' }}">
                                 <input type="hidden" name="adults" value="{{ session('adults', 1) }}">
                                 <input type="hidden" name="children" value="{{ json_encode(session('children', [])) }}">
-
 
                                 <button type="submit" class="btn btn-primary w-100 py-2 mt-3">Confirm Booking</button>
                             </form>

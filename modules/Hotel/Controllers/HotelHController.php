@@ -736,9 +736,9 @@ class HotelHController extends Controller
     {
         try {
             $validated = $request->validate([
-                'book_hash'  => 'required|string',
-                'room_name'  => 'required|string',
-                'children'   => 'sometimes',
+                'book_hash' => 'required|string',
+                'room_name' => 'required|string',
+                'children'  => 'sometimes',
             ]);
 
             $bookHash             = $validated['book_hash'];
@@ -746,8 +746,8 @@ class HotelHController extends Controller
             $roomName             = $validated['room_name'];
 
             $apiBody = [
-                'hash'                  => $bookHash,
-                'price_increase_percent'=> $priceIncreasePercent,
+                'hash'                   => $bookHash,
+                'price_increase_percent' => $priceIncreasePercent,
             ];
 
             $response = Http::withBasicAuth($this->username, $this->password)
@@ -755,9 +755,7 @@ class HotelHController extends Controller
                 ->post($this->apiUrl . 'hotel/prebook/', $apiBody);
 
             if ($response->failed()) {
-                throw new \Exception(
-                    'Prebook API request failed: ' . $response->body()
-                );
+                throw new \Exception('Prebook API request failed: ' . $response->body());
             }
 
             $prebookData = $response->json();
@@ -766,19 +764,24 @@ class HotelHController extends Controller
                 ? (json_decode($rawChildren, true) ?: [])
                 : (array) $rawChildren;
 
+            $displayFinalPrice = (float) $request->input('display_final_price', 0);
+            $displayCurrency   = $request->input('display_currency', 'EUR');
+
             session([
-                'prebookData' => $prebookData,
-                'roomName'    => $roomName,
-                'checkin'     => $request->checkin,
-                'checkout'    => $request->checkout,
-                'adults'      => (int) $request->input('adults', 1),
-                'children'    => $children,
+                'prebookData'         => $prebookData,
+                'roomName'            => $roomName,
+                'checkin'             => $request->checkin,
+                'checkout'            => $request->checkout,
+                'adults'              => (int) $request->input('adults', 1),
+                'children'            => $children,
+                'display_final_price' => $displayFinalPrice,
+                'display_currency'    => $displayCurrency,
             ]);
 
             return redirect()->route('hotel.prebook.result');
-
         } catch (\Exception $e) {
             Log::error('Prebook failed', ['error' => $e->getMessage()]);
+
             return back()->withErrors([
                 'error' => 'Prebooking failed: ' . $e->getMessage(),
             ]);
@@ -788,46 +791,71 @@ class HotelHController extends Controller
     public function prebookResult()
     {
         $prebookData = session('prebookData');
-        $roomName = session('roomName');
-        $checkin = session('checkin', now()->format('Y-m-d'));
-        $checkout = session('checkout', now()->addDay()->format('Y-m-d'));
-        $adults = session('adults', 1);
-        $children = session('children', []);
+        $roomName    = session('roomName');
+        $checkin     = session('checkin', now()->format('Y-m-d'));
+        $checkout    = session('checkout', now()->addDay()->format('Y-m-d'));
+        $adults      = session('adults', 1);
+        $children    = session('children', []);
 
+        $oldPrice    = (float) session('display_final_price', 0.0);
+        $oldCurrency = session('display_currency', '');
 
         if (!$prebookData) {
             return redirect()->route('hotel.info')->withErrors(['error' => 'No prebooking data found.']);
         }
 
-        // Fetch hotel details from the API response
         $hotelData = $prebookData['data']['hotels'][0] ?? null;
-        $hotelId = $hotelData['id'] ?? null;
+        $rate      = $hotelData['rates'][0] ?? null;
+        $hotelId   = $hotelData['id'] ?? null;
 
-        // Fetch from Database if API data is missing
         if (!$hotelId) {
             return redirect()->route('hotel.search')->withErrors(['error' => 'Hotel ID is missing from prebooking data.']);
         }
 
         $hotel = DB::table('hotels')->where('hotel_id', $hotelId)->first();
-
-        // Fetch hotel image
         $hotelImage = DB::table('hotel_images')
             ->where('hotel_id', $hotelId)
             ->orderBy('id')
             ->value('image_url');
 
-        // Ensure a default hotel object if API data is missing
         $hotelDetails = [
-            'id' => $hotelId,
-            'name' => $hotel->name ?? $hotelData['name'] ?? 'Hotel Name Not Available',
-            'address' => $hotel->address ?? $hotelData['address'] ?? 'Location Not Available',
+            'id'          => $hotelId,
+            'name'        => $hotel->name ?? $hotelData['name'] ?? 'Hotel Name Not Available',
+            'address'     => $hotel->address ?? $hotelData['address'] ?? 'Location Not Available',
             'star_rating' => $hotel->star_rating ?? $hotelData['star_rating'] ?? 0,
         ];
 
+        $newPrice = null;
+        $newCurrency = '';
+        $priceChanged = false;
+
+        if ($rate) {
+            $payment = $rate['payment_options']['payment_types'][0] ?? [];
+            $net        = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
+            $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
+            $newPrice   = (float) $net + (float) $commission;
+            $newCurrency = $payment['currency_code'] ?? '';
+
+            if ($oldPrice > 0 && abs($newPrice - $oldPrice) > 0.01) {
+                $priceChanged = true;
+            }
+        }
+
         return view('Hotel::frontend.prebook-result-ha', compact(
-            'prebookData', 'roomName', 'checkin', 'checkout', 'hotelDetails', 'hotelImage'
+            'prebookData',
+            'roomName',
+            'checkin',
+            'checkout',
+            'hotelDetails',
+            'hotelImage',
+            'priceChanged',
+            'oldPrice',
+            'newPrice',
+            'oldCurrency',
+            'newCurrency'
         ));
     }
+
 
     // public function bookRoom(Request $request)
     // {
