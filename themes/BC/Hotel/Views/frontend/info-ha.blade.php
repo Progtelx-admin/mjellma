@@ -280,6 +280,9 @@
                             @csrf
                             <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
                             <input type="hidden" name="room_name" value="{{ $rate['room_name'] }}">
+                            <input type="hidden" name="display_final_price"
+                                value="{{ number_format((float) $finalPrice, 2, '.', '') }}">
+                            <input type="hidden" name="display_currency" value="{{ $currency }}">
                             <input type="hidden" name="room_number" value="{{ $loop->iteration }}">
                             <input type="hidden" name="room_code" value="{{ $rate['room_code'] ?? '' }}">
                             <input type="hidden" name="checkin" value="{{ $checkin }}">
