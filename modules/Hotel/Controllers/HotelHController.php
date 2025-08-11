@@ -997,6 +997,23 @@ class HotelHController extends Controller
             // If the form call succeeded, store bookingData and go to confirmation
             if ($status === 'ok') {
                 $data = $json['data'] ?? [];
+                // Extract all taxes that are not included by the supplier and
+                // attach them to the booking data so the frontend can display
+                // every applicable tax to the user.  According to the ETG API
+                // documentation, the `tax_data` field of the search step
+                // contains all taxes and fees that must be shown【788235750464074†L456-L470】.
+                if (isset($data['tax_data']['taxes']) && is_array($data['tax_data']['taxes'])) {
+                    $notIncludedTaxes = [];
+                    foreach ($data['tax_data']['taxes'] as $tax) {
+                        // The `included_by_supplier` flag indicates whether
+                        // RateHawk already includes the tax in the price.  We
+                        // collect all taxes where this flag is false.
+                        if (empty($tax['included_by_supplier'])) {
+                            $notIncludedTaxes[] = $tax;
+                        }
+                    }
+                    $data['not_included_taxes'] = $notIncludedTaxes;
+                }
                 session(['bookingData' => $data]);
 
                 // cache pending booking for PCB callback etc.
@@ -1148,22 +1165,111 @@ class HotelHController extends Controller
 
             Log::info('Sending payment payload', ['payload'=>$apiBody]);
 
+            // Send the booking finish request to RateHawk.  Do not assume that a
+            // successful HTTP response from this endpoint means the booking
+            // itself has completed.  According to the ETG documentation, the
+            // final status of a booking can only be obtained by polling the
+            // `/hotel/order/booking/finish/status/` endpoint until a terminal
+            // status is returned【788235750464074†L491-L501】.  See finishBooking()
+            // for an example of the recommended logic.
             $resp = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type'=>'application/json'])
-                ->post($this->apiUrl.'hotel/order/booking/finish/', $apiBody);
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiBody);
 
-            if (! $resp->successful()) {
-                throw new \Exception('Payment API HTTP '.$resp->status());
+            // Attempt to decode the JSON response.  Even if the HTTP status is
+            // not 2xx, we still want to inspect the status and error fields.
+            $json = null;
+            try {
+                $json = $resp->json();
+            } catch (\Exception $e) {
+                Log::error('processPayment: Unable to decode JSON', ['exception' => $e->getMessage()]);
+                return view('Hotel::frontend.booking-pending', [
+                    'status'   => ['error' => 'decoding_json'],
+                    'order_id' => $orderId,
+                ]);
             }
-            $json = $resp->json();
 
-            if (($json['status'] ?? '') !== 'ok') {
-                throw new \Exception('Payment failed: '.($json['error'] ?? 'unknown'));
+            $status     = data_get($json, 'status');
+            $error      = data_get($json, 'error');
+            $httpStatus = $resp->status();
+            $shouldPoll = false;
+
+            // Persist provisional booking result (if present) so later pages can
+            // display details while polling.  If no data is provided this will
+            // simply store null.
+            session(['bookingResult' => $json['data'] ?? null]);
+
+            if ($error) {
+                // If a terminal error is returned from the finish call, do not
+                // poll.  Display the pending page with the error so the user
+                // knows the booking failed and can retry.  Errors listed in
+                // $finalFinishErrors are considered unrecoverable【788235750464074†L491-L501】.
+                if (in_array($error, $this->finalFinishErrors, true)) {
+                    Log::error('processPayment: Final finish error encountered', ['error' => $error]);
+                    return view('Hotel::frontend.booking-pending', [
+                        'status'   => ['error' => $error],
+                        'order_id' => $orderId,
+                    ]);
+                }
+                // Temporary errors (timeout or unknown) should trigger polling of
+                // the status endpoint to see if the booking eventually
+                // completes【788235750464074†L491-L501】.  Any other error code is
+                // treated as unrecoverable and surfaced to the user immediately.
+                if (in_array($error, ['timeout', 'unknown'], true)) {
+                    $shouldPoll = true;
+                } else {
+                    Log::error('processPayment: Unhandled finish error', ['error' => $error]);
+                    return view('Hotel::frontend.booking-pending', [
+                        'status'   => ['error' => $error],
+                        'order_id' => $orderId,
+                    ]);
+                }
+            } elseif ($httpStatus >= 500) {
+                // 5xx responses are considered temporary; poll status until a
+                // final result is obtained.
+                $shouldPoll = true;
+            } else {
+                // When no error is present, the status field will be `ok` or
+                // `processing`.  Both cases require polling until the final
+                // status arrives.  We set shouldPoll accordingly.
+                if ($status === 'ok' || $status === 'processing') {
+                    $shouldPoll = true;
+                }
             }
 
-            session(['bookingResult'=>$json['data']]);
+            if ($shouldPoll) {
+                // Poll the finish/status endpoint repeatedly until a final
+                // response.  The helper below uses a default timeout of 300
+                // seconds and polls every 5 seconds, which reflects the
+                // guidelines given by ETG【788235750464074†L491-L501】.
+                $statusData = $this->pollFinishStatus($partnerOrderId);
+                Log::info('processPayment: finish/status response after polling', ['statusData' => $statusData]);
+                if (data_get($statusData, 'status') === 'ok') {
+                    // Booking confirmed after polling.  Redirect to success.
+                    return redirect()->route('hotel.payment.success');
+                }
+                // Otherwise, display the pending page with the last status or
+                // error returned from the status call.
+                return view('Hotel::frontend.booking-pending', [
+                    'status'   => $statusData,
+                    'order_id' => $orderId,
+                ]);
+            }
 
-            return redirect()->route('hotel.payment.success');
+            // If no polling is required and no unrecoverable error occurred,
+            // consider the booking successful and redirect to the success page.
+            // This branch covers the rare case when RateHawk finishes the
+            // booking immediately and returns a final `ok` status from
+            // /booking/finish/.  If status is not ok, fall back to pending.
+            if ($status === 'ok') {
+                return redirect()->route('hotel.payment.success');
+            }
+
+            // Fallback: show pending if the status is neither ok nor final.
+            return view('Hotel::frontend.booking-pending', [
+                'status'   => ['status' => $status, 'error' => $error],
+                'order_id' => $orderId,
+            ]);
         }
         catch (\Illuminate\Validation\ValidationException $e) {
             return redirect()->back()->withErrors($e->errors());
