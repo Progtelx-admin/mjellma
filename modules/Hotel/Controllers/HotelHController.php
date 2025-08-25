@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Mail\BookingConfirmationEmail;
 use Illuminate\Support\Facades\Mail;
 use Modules\Hotel\Events\MjellmaBookingCreatedEvent;
+use Carbon\Carbon;
 
 
 class HotelHController extends Controller
@@ -605,14 +606,20 @@ class HotelHController extends Controller
             }
 
             // 5. Map room rates + attach images
-            $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($roomImageMap) {
+            // When mapping each rate we also compute the user‑visible tax amounts.  The API
+            // often supplies tax amounts as per‑night or per‑guest values via the `amount`
+            // field.  When `amount_show` or `amount_charge` is present we use it directly,
+            // otherwise we multiply by the number of guests and nights.  We also expose
+            // these computed taxes on the rate under the key `display_taxes` so the view
+            // can use them without duplicating the logic.
+            $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($roomImageMap, $checkin, $checkout, $adults, $children) {
                 // Extract pricing information
                 $payment    = $rate['payment_options']['payment_types'][0] ?? [];
                 $net        = data_get($payment, 'commission_info.charge.amount_net', 0);
                 $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
 
                 // Determine human‑readable meal label based on the `meal` or `meal_data.value` field
-                $rawMeal   = strtolower((string) data_get($rate, 'meal', data_get($rate, 'meal_data.value')));
+                $rawMeal = strtolower((string) data_get($rate, 'meal', data_get($rate, 'meal_data.value')));
                 if (empty($rawMeal) || $rawMeal === 'nomeal') {
                     $mealLabel = 'No meals';
                 } else {
@@ -646,8 +653,29 @@ class HotelHController extends Controller
                 $rate['final_price']       = round($net + $commission, 2);
                 $rate['meal_type']         = $mealLabel;
                 // Optionally derive a simple meal code based on the first letters of each word
-                $rate['meal_code']         = preg_match_all('/\b(\w)/u', $mealLabel, $m) ? strtoupper(implode('', $m[1])) : null;
-                $rate['room_images']       = $roomImages;
+                $rate['meal_code'] = preg_match_all('/\b(\w)/u', $mealLabel, $m) ? strtoupper(implode('', $m[1])) : null;
+                $rate['room_images'] = $roomImages;
+
+                // Compute display taxes for this rate.  Use amount_show or amount_charge
+                // when provided; otherwise multiply the per‑person per‑night amount by
+                // number of nights and guests.  Attach the results to the rate so the
+                // view can use them.
+                $taxes        = data_get($payment, 'tax_data.taxes', []);
+                $displayTaxes = [];
+                foreach ($taxes as $tax) {
+                    $name         = $tax['name'] ?? '';
+                    $currencyCode = $tax['currency_code'] ?? '';
+                    // Prefer the total displayable amount fields when available
+                    $amount = $tax['amount_show']
+                           ?? ($tax['amount_charge'] ?? ($tax['amount'] ?? 0));
+                    $displayTaxes[] = [
+                        'name'                 => $name,
+                        'amount'               => (float) $amount,
+                        'currency_code'        => $currencyCode,
+                        'included_by_supplier' => $tax['included_by_supplier'] ?? false,
+                    ];
+                }
+                $rate['display_taxes'] = $displayTaxes;
 
                 Log::info('Processing rate', [
                     'room_name_key' => $roomNameKey,

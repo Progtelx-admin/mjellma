@@ -222,19 +222,30 @@
                             $finalPrice = $net + ($comm ?? 0);
                         @endphp
 
+                        {{-- On-site Taxes --}}
                         @if ($onSiteTaxes->isNotEmpty())
                             <div class="mt-2 text-start">
                                 <strong>On-site Taxes:</strong>
                                 <ul class="list-unstyled mb-0">
                                     @foreach ($onSiteTaxes as $tax)
+                                        @php
+                                            // Use the proper field from the API to display tax amounts.  According to
+                                            // ETG/RateHawk documentation, `amount` may be per‑night or per‑guest.  The
+                                            // `amount_show` field (and sometimes `amount_charge`) contains the total
+                                            // amount for the entire booking in the selected currency.  Fallback to
+                                            // `amount` if neither is available.
+                                            $displayAmount =
+                                                $tax['amount_show'] ?? ($tax['amount_charge'] ?? ($tax['amount'] ?? 0));
+                                        @endphp
                                         <li>{{ ucwords(str_replace('_', ' ', $tax['name'])) }}:
-                                            {{ number_format((float) $tax['amount'], 2) }} {{ $tax['currency_code'] }}
+                                            {{ number_format((float) $displayAmount, 2) }} {{ $tax['currency_code'] }}
                                             <small class="text-muted">(to be paid at hotel)</small>
                                         </li>
                                     @endforeach
                                 </ul>
                             </div>
                         @endif
+
 
                         @if (!empty($policies))
                             <div class="mt-2 text-start">
