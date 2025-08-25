@@ -58,7 +58,6 @@
             </div>
         @endif
 
-
         {{-- Additional Policy Information --}}
         @if (!empty($hotel['metapolicy_extra_info']))
             <div class="mb-5">
@@ -66,7 +65,6 @@
                 <p>{!! nl2br(e(str_replace(["\\r\\n", "\\n"], "\n", $hotel['metapolicy_extra_info']))) !!}</p>
             </div>
         @endif
-
 
         {{-- Available Rooms --}}
         <h3 class="mb-4">Available Rooms</h3>
@@ -126,10 +124,9 @@
                                 <h5>Hotel Meal Policy (ETG)</h5>
                                 @foreach ($hotel['metapolicy_struct']['meal'] as $policyMeal)
                                     @php
-                                        // Determine if this meal type is included in the current rate.
                                         $policyType = $policyMeal['meal_type'] ?? '';
                                         $includedByRate = false;
-                                        // Use meal_data.has_* flags to understand what the rate includes
+
                                         if ($policyType === 'breakfast' && data_get($rate, 'meal_data.has_breakfast')) {
                                             $includedByRate = true;
                                         }
@@ -139,26 +136,24 @@
                                         if ($policyType === 'dinner' && data_get($rate, 'meal_data.has_dinner')) {
                                             $includedByRate = true;
                                         }
-                                        // If the policy lists all-inclusive, consider it included when breakfast, lunch and dinner are all included
+
                                         if ($policyType === 'all_inclusive') {
-                                            $hasBreakfast = data_get($rate, 'meal_data.has_breakfast');
-                                            $hasLunch = data_get($rate, 'meal_data.has_lunch');
-                                            $hasDinner = data_get($rate, 'meal_data.has_dinner');
-                                            $includedByRate = $hasBreakfast && $hasLunch && $hasDinner;
+                                            $includedByRate =
+                                                data_get($rate, 'meal_data.has_breakfast') &&
+                                                data_get($rate, 'meal_data.has_lunch') &&
+                                                data_get($rate, 'meal_data.has_dinner');
                                         }
 
-                                        // Determine the final inclusion status and whether to show the price
                                         if ($includedByRate) {
                                             $inclusionText = 'Included';
                                             $priceText = '';
                                         } else {
                                             $inclusionText =
-                                                ($policyMeal['inclusion'] ?? '') === 'included'
+                                                data_get($policyMeal, 'inclusion') === 'included'
                                                     ? 'Included'
                                                     : 'Not included';
-                                            // Only show a price if the meal is not included; otherwise omit
-                                            $policyPrice = $policyMeal['price'] ?? '';
-                                            $policyCurrency = $policyMeal['currency'] ?? '';
+                                            $policyPrice = data_get($policyMeal, 'price', '');
+                                            $policyCurrency = data_get($policyMeal, 'currency', '');
                                             $priceText =
                                                 $policyPrice !== ''
                                                     ? ' – Price: ' . $policyPrice . ' ' . $policyCurrency
@@ -173,20 +168,17 @@
                                 <h5>Children's Meal Policy</h5>
                                 @foreach ($hotel['metapolicy_struct']['children_meal'] as $childPolicy)
                                     @php
-                                        // Determine if children’s meal is included in this rate.  The API sets
-                                        // meal_data.no_child_meal=true when there is no children meal.  If false, the rate
-                                        // includes a children’s meal.
                                         $childMealIncludedByRate = !data_get($rate, 'meal_data.no_child_meal');
                                         if ($childMealIncludedByRate) {
                                             $childInclusionText = 'included';
                                             $childPriceText = '';
                                         } else {
                                             $childInclusionText =
-                                                ($childPolicy['inclusion'] ?? '') === 'included'
+                                                data_get($childPolicy, 'inclusion') === 'included'
                                                     ? 'included'
                                                     : 'not included';
-                                            $childPolicyPrice = $childPolicy['price'] ?? '';
-                                            $childPolicyCurrency = $childPolicy['currency'] ?? '';
+                                            $childPolicyPrice = data_get($childPolicy, 'price', '');
+                                            $childPolicyCurrency = data_get($childPolicy, 'currency', '');
                                             $childPriceText =
                                                 $childPolicyPrice !== ''
                                                     ? ' – Price: ' . $childPolicyPrice . ' ' . $childPolicyCurrency
@@ -200,39 +192,117 @@
                                     </p>
                                 @endforeach
                             @endif
-
-
-
                         </div>
                     </div>
+
                     <div class="col-md-6 text-end p-3">
                         @php
-                            $payment = $rate['payment_options']['payment_types'][0] ?? [];
-                            $onSiteTaxes = collect(data_get($payment, 'tax_data.taxes', []))->where(
-                                'included_by_supplier',
-                                false,
-                            );
-                            $policies = data_get($payment, 'cancellation_penalties.policies', []);
-                            $net = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
-                            $comm = data_get($payment, 'commission_info.charge.amount_commission', null);
-                            $currency = $payment['currency_code'] ?? '';
-                        @endphp
+                            // ---- FIXED: bind to the SELECTED payment type, not [0]
+                            $paymentTypes = data_get($rate, 'payment_options.payment_types', []);
 
-                        @php
-                            $finalPrice = $net + ($comm ?? 0);
+                            $selectedPaymentTypeId =
+                                request('payment_type_id') ??
+                                (session('booking.selected_payment_type_id') ??
+                                    data_get($rate, 'selected_payment_type_id'));
+
+                            $payment =
+                                collect($paymentTypes)->firstWhere('id', $selectedPaymentTypeId) ??
+                                (is_array($paymentTypes) && count($paymentTypes) ? $paymentTypes[0] : []);
+
+                            $currency = (string) data_get($payment, 'currency_code', '');
+
+                            // Entire tax array as returned by API (no conversions)
+                            $taxes = collect(data_get($payment, 'tax_data.taxes', []));
+
+                            // Shown as "to be paid at hotel" — NOT included in price
+                            $onSiteTaxes = $taxes->where('included_by_supplier', false);
+
+                            // Included by supplier — SHOULD be added to final price (but only if currency matches)
+                            $includedTaxes = $taxes->where('included_by_supplier', true);
+
+                            $includedTaxesSumInPriceCurrency = $includedTaxes
+                                ->filter(function ($t) use ($currency) {
+                                    return strtoupper((string) data_get($t, 'currency_code', '')) ===
+                                        strtoupper($currency);
+                                })
+                                ->sum(function ($t) {
+                                    return (float) (string) data_get($t, 'amount', 0);
+                                });
+
+                            // VAT meta (do not convert/change — display exactly as provided)
+                            $vatData = (array) data_get($payment, 'vat_data', []);
+                            $vatAmount = (float) (string) data_get($vatData, 'amount', 0);
+                            $vatCurrency = (string) data_get($vatData, 'currency_code', '');
+                            $vatApplied = (bool) data_get($vatData, 'applied', false);
+                            $vatIncluded = (bool) data_get($vatData, 'included', false);
+
+                            // Commission/Net (charge lane preferred; fallback to amount)
+                            $net = (float) data_get(
+                                $payment,
+                                'commission_info.charge.amount_net',
+                                data_get($payment, 'amount', 0),
+                            );
+                            $comm = data_get($payment, 'commission_info.charge.amount_commission');
+                            $comm = is_null($comm) ? null : (float) $comm;
+
+                            // ✅ FIX: final price = net + commission + all taxes included by supplier (same currency only)
+                            $finalPrice = $net + ($comm ?? 0) + $includedTaxesSumInPriceCurrency;
+
+                            // Policies (unchanged)
+                            $policies = (array) data_get($payment, 'cancellation_penalties.policies', []);
                         @endphp
 
                         @if ($onSiteTaxes->isNotEmpty())
                             <div class="mt-2 text-start">
-                                <strong>On-site Taxes:</strong>
+                                <strong>On-site Taxes (pay at hotel):</strong>
                                 <ul class="list-unstyled mb-0">
                                     @foreach ($onSiteTaxes as $tax)
-                                        <li>{{ ucwords(str_replace('_', ' ', $tax['name'])) }}:
-                                            {{ number_format((float) $tax['amount'], 2) }} {{ $tax['currency_code'] }}
-                                            <small class="text-muted">(to be paid at hotel)</small>
+                                        <li>
+                                            {{ ucwords(str_replace('_', ' ', (string) data_get($tax, 'name', ''))) }}:
+                                            {{ number_format((float) (string) data_get($tax, 'amount', 0), 2, '.', '') }}
+                                            {{ (string) data_get($tax, 'currency_code', '') }}
                                         </li>
                                     @endforeach
                                 </ul>
+                            </div>
+                        @endif
+
+                        @php
+                            $includedTaxesList = $includedTaxes->all();
+                        @endphp
+                        @if (!empty($includedTaxesList))
+                            <div class="mt-2 text-start">
+                                <strong>Included taxes & fees (already in price):</strong>
+                                <ul class="list-unstyled mb-0">
+                                    @foreach ($includedTaxesList as $tax)
+                                        <li>
+                                            {{ ucwords(str_replace('_', ' ', (string) data_get($tax, 'name', ''))) }}:
+                                            {{ number_format((float) (string) data_get($tax, 'amount', 0), 2, '.', '') }}
+                                            {{ (string) data_get($tax, 'currency_code', '') }}
+                                        </li>
+                                    @endforeach
+                                </ul>
+                                @if ($includedTaxesSumInPriceCurrency > 0 && strtoupper($currency) !== '')
+                                    <small class="text-muted">
+                                        (We added {{ number_format($includedTaxesSumInPriceCurrency, 2, '.', '') }}
+                                        {{ $currency }}
+                                        to the total above because supplier marks these as included.)
+                                    </small>
+                                @endif
+                            </div>
+                        @endif
+
+                        {{-- Always show VAT exactly as API returns (no conversions/rounding beyond formatting) --}}
+                        @if (!empty($vatData))
+                            <div class="mt-2 text-start">
+                                <strong>VAT (from API):</strong>
+                                <div class="text-muted">
+                                    Amount:
+                                    {{ number_format($vatAmount, 2, '.', '') }}
+                                    {{ $vatCurrency }}
+                                    — Applied: {{ $vatApplied ? 'Yes' : 'No' }},
+                                    Included in price: {{ $vatIncluded ? 'Yes' : 'No' }}
+                                </div>
                             </div>
                         @endif
 
@@ -246,7 +316,12 @@
                                                 ? \Carbon\Carbon::parse($p['start_at'])->utc()
                                                 : null;
                                             $end = $p['end_at'] ? \Carbon\Carbon::parse($p['end_at'])->utc() : null;
-                                            $fee = number_format($p['amount_show'] ?? ($p['amount_charge'] ?? 0), 2);
+                                            $fee = number_format(
+                                                $p['amount_show'] ?? ($p['amount_charge'] ?? 0),
+                                                2,
+                                                '.',
+                                                '',
+                                            );
                                         @endphp
                                         @if (is_null($start) && $end)
                                             <li>Free cancellation until <strong>{{ $end->format('Y-m-d H:i') }}
@@ -267,12 +342,82 @@
                             </div>
                         @endif
 
-                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2) }} {{ $currency }}
+                        <h4 class="text-primary">
+                            Total: {{ number_format((float) $finalPrice, 2, '.', '') }} {{ $currency }}
                         </h4>
                         @if (!is_null($comm))
-                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2) }}
+                            <p class="text-muted mb-0">
+                                <small>Net: {{ number_format((float) $net, 2, '.', '') }} {{ $currency }}</small>
+                            </p>
+                            <p class="text-muted">
+                                <small>Commission: {{ number_format((float) $comm, 2, '.', '') }}
+                                    {{ $currency }}</small>
+                            </p>
+                        @endif
+
+
+                        @php
+                            $finalPrice = $net + ($comm ?? 0);
+                        @endphp
+
+                        @if ($onSiteTaxes->isNotEmpty())
+                            <div class="mt-2 text-start">
+                                <strong>On-site Taxes:</strong>
+                                <ul class="list-unstyled mb-0">
+                                    @foreach ($onSiteTaxes as $tax)
+                                        <li>
+                                            {{ ucwords(str_replace('_', ' ', data_get($tax, 'name', ''))) }}:
+                                            {{ number_format((float) (string) data_get($tax, 'amount', 0), 2, '.', '') }}
+                                            {{ data_get($tax, 'currency_code', '') }}
+                                            <small class="text-muted">(to be paid at hotel)</small>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        @if (!empty($policies))
+                            <div class="mt-2 text-start">
+                                <strong>Cancellation Policies (UTC+0):</strong>
+                                <ul class="list-unstyled mb-0">
+                                    @foreach ($policies as $p)
+                                        @php
+                                            $start = $p['start_at']
+                                                ? \Carbon\Carbon::parse($p['start_at'])->utc()
+                                                : null;
+                                            $end = $p['end_at'] ? \Carbon\Carbon::parse($p['end_at'])->utc() : null;
+                                            $fee = number_format(
+                                                $p['amount_show'] ?? ($p['amount_charge'] ?? 0),
+                                                2,
+                                                '.',
+                                                '',
+                                            );
+                                        @endphp
+                                        @if (is_null($start) && $end)
+                                            <li>Free cancellation until <strong>{{ $end->format('Y-m-d H:i') }}
+                                                    UTC</strong>.</li>
+                                        @elseif($start && $end)
+                                            <li>From <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong> to
+                                                <strong>{{ $end->format('Y-m-d H:i') }} UTC</strong>: Fee
+                                                {{ $fee }} {{ $currency }}
+                                            </li>
+                                        @elseif($start)
+                                            <li>After <strong>{{ $start->format('Y-m-d H:i') }} UTC</strong>: Fee
+                                                {{ $fee }} {{ $currency }}</li>
+                                        @else
+                                            <li>No free cancellation available. Full charge applies.</li>
+                                        @endif
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        <h4 class="text-primary">Total: {{ number_format((float) $finalPrice, 2, '.', '') }}
+                            {{ $currency }}</h4>
+                        @if (!is_null($comm))
+                            <p class="text-muted mb-0"><small>Net: {{ number_format((float) $net, 2, '.', '') }}
                                     {{ $currency }}</small></p>
-                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2) }}
+                            <p class="text-muted"><small>Commission: {{ number_format((float) $comm, 2, '.', '') }}
                                     {{ $currency }}</small></p>
                         @endif
 
@@ -290,6 +435,8 @@
                             <input type="hidden" name="adults" value="{{ $adults }}">
                             <input type="hidden" name="currency" value="{{ $currency }}">
                             <input type="hidden" name="children_count" value="{{ count($children) }}">
+                            {{-- keep the selected payment type consistent through the flow --}}
+                            <input type="hidden" name="payment_type_id" value="{{ data_get($payment, 'id', '') }}">
                             @foreach ($children as $age)
                                 <input type="hidden" name="children[]" value="{{ $age }}">
                             @endforeach
@@ -328,6 +475,7 @@
                             </td>
                         </tr>
                     @endif
+
                     {{-- Additional Fees --}}
                     @if (!empty($policy['add_fee']))
                         <tr>
@@ -335,7 +483,7 @@
                             <td>
                                 @foreach ($policy['add_fee'] as $fee)
                                     {{ ucfirst(str_replace('_', ' ', $fee['fee_type'] ?? '')) }} —
-                                    {{ number_format((float) $fee['price'], 2) }} {{ $fee['currency'] ?? '' }}
+                                    {{ number_format((float) $fee['price'], 2, '.', '') }} {{ $fee['currency'] ?? '' }}
                                     ({{ ucfirst(str_replace('_', ' ', $fee['inclusion'] ?? '')) }})
                                     <br>
                                 @endforeach
@@ -353,7 +501,8 @@
                                         <li>
                                             {{ $dep['deposit_type'] !== 'unspecified' ? ucfirst($dep['deposit_type']) : 'General' }}
                                             —
-                                            {{ number_format((float) $dep['price'], 2) }} {{ $dep['currency'] ?? '' }}
+                                            {{ number_format((float) $dep['price'], 2, '.', '') }}
+                                            {{ $dep['currency'] ?? '' }}
                                             ({{ ucfirst($dep['payment_type'] ?? 'N/A') }},
                                             {{ ucfirst($dep['pricing_method'] ?? 'N/A') }})
                                         </li>
@@ -373,7 +522,7 @@
                             @if (!empty($policy['children']))
                                 @foreach ($policy['children'] as $ch)
                                     Age {{ $ch['age_start'] }}–{{ $ch['age_end'] }} —
-                                    {{ number_format((float) $ch['price'], 2) }} {{ $ch['currency'] ?? '' }}
+                                    {{ number_format((float) $ch['price'], 2, '.', '') }} {{ $ch['currency'] ?? '' }}
                                     (Extra bed: {{ str_replace('_', ' ', $ch['extra_bed']) }})
                                     <br>
                                 @endforeach
@@ -385,7 +534,7 @@
                             @if (!empty($policy['cot']))
                                 @foreach ($policy['cot'] as $cot)
                                     {{ $cot['amount'] }} cot(s) —
-                                    {{ number_format((float) $cot['price'], 2) }} {{ $cot['currency'] ?? '' }}
+                                    {{ number_format((float) $cot['price'], 2, '.', '') }} {{ $cot['currency'] ?? '' }}
                                     per {{ str_replace('_', ' ', $cot['price_unit']) }}
                                     ({{ ucfirst(str_replace('_', ' ', $cot['inclusion'] ?? 'unspecified')) }})
                                     <br>
@@ -398,7 +547,7 @@
                             @if (!empty($policy['extra_bed']))
                                 @foreach ($policy['extra_bed'] as $eb)
                                     {{ $eb['amount'] }} extra bed(s) —
-                                    {{ number_format((float) $eb['price'], 2) }} {{ $eb['currency'] ?? '' }}
+                                    {{ number_format((float) $eb['price'], 2, '.', '') }} {{ $eb['currency'] ?? '' }}
                                     per {{ str_replace('_', ' ', $eb['price_unit']) }}
                                     ({{ ucfirst(str_replace('_', ' ', $eb['inclusion'] ?? 'unspecified')) }})
                                     <br>
@@ -439,7 +588,7 @@
                             @if (!empty($policy['pets']))
                                 @foreach ($policy['pets'] as $pet)
                                     {{ ucfirst($pet['pets_type'] ?? 'Pet') }} —
-                                    {{ number_format((float) $pet['price'], 2) }} {{ $pet['currency'] ?? '' }}
+                                    {{ number_format((float) $pet['price'], 2, '.', '') }} {{ $pet['currency'] ?? '' }}
                                     ({{ ucfirst(str_replace('_', ' ', $pet['inclusion'])) }})
                                     <br>
                                 @endforeach
@@ -457,7 +606,8 @@
                                 {{ ucfirst($net['work_area']) }} —
                                 {{ ucfirst(str_replace('_', ' ', $net['inclusion'])) }}
                                 @if ($net['price'] > 0)
-                                    – {{ number_format((float) $net['price'], 2) }} {{ $net['currency'] ?? '' }}
+                                    – {{ number_format((float) $net['price'], 2, '.', '') }}
+                                    {{ $net['currency'] ?? '' }}
                                     per {{ str_replace('_', ' ', $net['price_unit']) }}
                                 @endif
                                 <br>
@@ -466,7 +616,7 @@
                     </tr>
 
                     {{-- No-show --}}
-                    @if (!empty($policy['no_show']) && $policy['no_show']['availability'] === 'available')
+                    @if (!empty($policy['no_show']) && $policy['availability'] === 'available')
                         <tr>
                             <th>No-show Policy</th>
                             <td>
@@ -485,7 +635,7 @@
                                 {{ $park['territory_type'] !== 'unspecified' ? ucfirst($park['territory_type']) : 'General' }}
                                 —
                                 {{ ucfirst(str_replace('_', ' ', $park['inclusion'])) }}
-                                – {{ number_format((float) $park['price'], 2) }} {{ $park['currency'] ?? '' }}
+                                – {{ number_format((float) $park['price'], 2, '.', '') }} {{ $park['currency'] ?? '' }}
                                 per {{ str_replace('_', ' ', $park['price_unit']) }}<br>
                             @endforeach
                         </td>
@@ -499,7 +649,8 @@
                                 {{ ucfirst(str_replace('_', ' ', $shuttle['destination_type'])) }} —
                                 {{ ucfirst(str_replace('_', ' ', $shuttle['inclusion'])) }}
                                 @if ($shuttle['price'] > 0)
-                                    – {{ number_format((float) $shuttle['price'], 2) }} {{ $shuttle['currency'] ?? '' }}
+                                    – {{ number_format((float) $shuttle['price'], 2, '.', '') }}
+                                    {{ $shuttle['currency'] ?? '' }}
                                 @endif
                                 ({{ ucfirst(str_replace('_', ' ', $shuttle['shuttle_type'])) }})
                                 <br>
@@ -514,7 +665,8 @@
                             @foreach ($policy['meal'] ?? [] as $meal)
                                 {{ ucfirst($meal['meal_type']) }} —
                                 {{ ucfirst(str_replace('_', ' ', $meal['inclusion'])) }} –
-                                {{ number_format((float) $meal['price'], 2) }} {{ $meal['currency'] ?? '' }}<br>
+                                {{ number_format((float) $meal['price'], 2, '.', '') }}
+                                {{ $meal['currency'] ?? '' }}<br>
                             @endforeach
                         </td>
                     </tr>
@@ -527,7 +679,7 @@
                                 Age {{ $cm['age_start'] }}–{{ $cm['age_end'] }}:
                                 {{ ucfirst($cm['meal_type']) }},
                                 {{ ucfirst(str_replace('_', ' ', $cm['inclusion'])) }} –
-                                {{ number_format((float) $cm['price'], 2) }} {{ $cm['currency'] ?? '' }}<br>
+                                {{ number_format((float) $cm['price'], 2, '.', '') }} {{ $cm['currency'] ?? '' }}<br>
                             @endforeach
                         </td>
                     </tr>
@@ -536,7 +688,7 @@
                     <tr>
                         <th>Visa</th>
                         <td>
-                            {{ $policy['visa']['visa_support'] === 'support_enable' ? 'Visa support available' : 'No visa support' }}
+                            {{ data_get($policy, 'visa.visa_support') === 'support_enable' ? 'Visa support available' : 'No visa support' }}
                         </td>
                     </tr>
 
@@ -600,18 +752,14 @@
             top: 50%;
             transform: translateY(-50%);
             background: transparent;
-            /* remove background */
             border: none;
             font-size: 3rem;
             color: #fff;
-            /* or #000 depending on your image */
             padding: 0;
             cursor: pointer;
             z-index: 10;
             transition: color 0.3s;
         }
-
-
 
         .prev-btn {
             left: 15px;
@@ -696,7 +844,6 @@
         }
     </style>
 
-
     <script>
         let currentSlide = 0;
         const slides = document.querySelectorAll('.slide-img');
@@ -704,9 +851,7 @@
         function showSlide(index) {
             slides.forEach((slide, i) => {
                 slide.classList.remove('active');
-                if (i === index) {
-                    slide.classList.add('active');
-                }
+                if (i === index) slide.classList.add('active');
             });
         }
 
