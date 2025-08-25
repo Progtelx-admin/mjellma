@@ -102,6 +102,75 @@ class HotelHController extends Controller
         'not_allowed_host', 'overdue_debt', 'unexpected_method',
     ];
 
+    /**
+     * Global booking process timeout in seconds.  This defines the total time window
+     * during which the booking form, finish and finish/status calls may
+     * collectively execute.  By enforcing a single timeout across all
+     * booking steps we avoid situations where the status polling stops too
+     * early and a booking completes on the ETG side after our client has
+     * given up, leading to "ghost bookings".  Adjust this value via
+     * configuration or environment variables as needed.
+     *
+     * @var int
+     */
+    private int $bookingProcessTimeout = 300; // 5 minutes by default
+
+    /**
+     * Retrieve or initialize the booking deadline for a given partner_order_id.
+     * The deadline is stored in the session under the key `booking_deadlines`.
+     * If no deadline exists for the provided id, a new one is created by
+     * adding $bookingProcessTimeout seconds to the current time.  Once the
+     * booking completes or fails, the deadline entry should be cleared via
+     * clearBookingDeadline().
+     *
+     * @param string $partnerOrderId  Unique partner order id for the booking
+     * @return int Unix timestamp representing the deadline
+     */
+    private function getBookingDeadline(string $partnerOrderId): int
+    {
+        $map = session('booking_deadlines', []);
+        if (!isset($map[$partnerOrderId])) {
+            $map[$partnerOrderId] = time() + $this->bookingProcessTimeout;
+            session(['booking_deadlines' => $map]);
+        }
+        return $map[$partnerOrderId];
+    }
+
+    /**
+     * Compute the remaining time, in seconds, before the booking deadline is
+     * reached for a specific partner_order_id.  Returns zero if the
+     * deadline has passed.  Consumers should use this value to bound
+     * polling intervals so that all booking steps collectively honour the
+     * configured timeout window.
+     *
+     * @param string $partnerOrderId
+     * @return int Remaining seconds until the deadline, or zero if expired
+     */
+    private function getRemainingBookingTime(string $partnerOrderId): int
+    {
+        $deadline = $this->getBookingDeadline($partnerOrderId);
+        $remaining = $deadline - time();
+        return $remaining > 0 ? $remaining : 0;
+    }
+
+    /**
+     * Remove the booking deadline entry for a given partner_order_id.  Should
+     * be invoked once a final status (either success or failure) has been
+     * obtained from the finish/status endpoint.  Clearing the deadline
+     * prevents stale entries from accumulating in the session.
+     *
+     * @param string $partnerOrderId
+     * @return void
+     */
+    private function clearBookingDeadline(string $partnerOrderId): void
+    {
+        $map = session('booking_deadlines', []);
+        if (isset($map[$partnerOrderId])) {
+            unset($map[$partnerOrderId]);
+            session(['booking_deadlines' => $map]);
+        }
+    }
+
     public function showHotels()
     {
         Log::info('Rendering hotel search form.');
@@ -661,12 +730,31 @@ class HotelHController extends Controller
      */
     private function pollFinishStatus(string $partnerOrderId, int $timeout = 300, int $interval = 5): array
     {
+        /**
+         * Polls the finish/status endpoint until either a final status is returned
+         * or the timeout is reached.  The timeout is implicitly bounded by the
+         * remaining booking window configured via $bookingProcessTimeout.  If
+         * the remaining time for this booking is shorter than the provided
+         * $timeout, the smaller value is used so that the entire booking flow
+         * respects the agreed time limit.
+         */
+
+        // Adjust timeout based on the remaining booking window
+        $remaining = $this->getRemainingBookingTime($partnerOrderId);
+        if ($remaining > 0) {
+            $timeout = min($timeout, $remaining);
+        }
+        // If no time remains, return immediately with a timeout error
+        if ($timeout <= 0) {
+            return ['status' => 'error', 'error' => 'timeout'];
+        }
+
         $startTime    = time();
         $lastResponse = ['status' => null, 'error' => null];
 
         // Keep polling until we hit a terminal condition or time runs out.  We
-        // consider a terminal condition to be a successful status (`status` ===
-        // `ok`) or the `error` field containing one of the final status errors.
+        // consider a terminal condition to be a successful status (status === 'ok')
+        // or the error field containing one of the final status errors.
         do {
             try {
                 $resp = Http::withBasicAuth($this->username, $this->password)
@@ -683,13 +771,13 @@ class HotelHController extends Controller
                     $status = data_get($json, 'status');
                     $error  = data_get($json, 'error');
 
-                    // When the booking has completed successfully (`status: ok`) or
+                    // When the booking has completed successfully (status = 'ok') or
                     // when a final error appears, break out of the loop.
                     if ($status === 'ok' || ($error && in_array($error, $this->finalStatusErrors, true))) {
                         break;
                     }
                 } else {
-                    // Non‑200 response: treat 5xx as temporary errors.  Record
+                    // Non-200 response: treat 5xx as temporary errors.  Record
                     // status code so the caller can inspect it.  Only break
                     // immediately on 4xx because these are usually contract errors.
                     $statusCode = $resp->status();
@@ -710,7 +798,7 @@ class HotelHController extends Controller
                 ];
             }
 
-            // Sleep before the next poll.  Use PHP's sleep() to avoid busy‑waiting.
+            // Sleep before the next poll.  Use PHP's sleep() to avoid busy-waiting.
             sleep($interval);
         } while ((time() - $startTime) < $timeout);
 
@@ -966,6 +1054,10 @@ class HotelHController extends Controller
                 'booking.children'         => json_decode($request->input('children', '[]'), true),
             ]);
 
+            // Initialize the booking deadline for this order so that all subsequent
+            // steps (form, finish, status) share a single timeout window.
+            $this->getBookingDeadline($partnerOrderId);
+
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
                 'book_hash'        => $bookHash,
@@ -1051,13 +1143,17 @@ class HotelHController extends Controller
 
             // 3. Poll finish/status if required
             if ($shouldPoll) {
-                // Poll using the same finish status endpoint.  Even though the finish call
+                // Poll using the same finish/status endpoint.  Even though the finish call
                 // has not yet been sent, RateHawk may still return a status for the order
-                // if the booking has been created internally.
-                $statusData = $this->pollFinishStatus($partnerOrderId);
+                // if the booking has been created internally.  Respect the remaining
+                // booking window so as not to exceed the global timeout.
+                $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('bookRoom finish/status response', ['status' => $statusData]);
 
                 if (data_get($statusData, 'status') === 'ok') {
+                    // Note: do not clear the booking deadline here; final success
+                    // is still determined during the finish/finish status calls.
                     // If status returns ok, treat as successful booking and go to confirmation
                     return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
                 }
@@ -1111,6 +1207,13 @@ class HotelHController extends Controller
         try {
             $orderId         = $request->input('order_id');
             $partnerOrderId  = $request->input('partner_order_id');
+
+            // Ensure a booking deadline exists for this partner order id so that
+            // all subsequent polling respects a single timeout window across
+            // booking finish and status calls.  If the deadline is already
+            // present from the form step, this call will return the existing
+            // value; otherwise it will initialise one.
+            $this->getBookingDeadline($partnerOrderId);
             $pmIndex         = $request->input('payment_method');
             $guests          = $request->input('guests');
 
@@ -1239,13 +1342,13 @@ class HotelHController extends Controller
 
             if ($shouldPoll) {
                 // Poll the finish/status endpoint repeatedly until a final
-                // response.  The helper below uses a default timeout of 300
-                // seconds and polls every 5 seconds, which reflects the
-                // guidelines given by ETG【788235750464074†L491-L501】.
-                $statusData = $this->pollFinishStatus($partnerOrderId);
+                // response or until the remaining booking window expires.
+                $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('processPayment: finish/status response after polling', ['statusData' => $statusData]);
                 if (data_get($statusData, 'status') === 'ok') {
-                    // Booking confirmed after polling.  Redirect to success.
+                    // Booking confirmed after polling.  Clear the deadline and redirect.
+                    $this->clearBookingDeadline($partnerOrderId);
                     return redirect()->route('hotel.payment.success');
                 }
                 // Otherwise, display the pending page with the last status or
@@ -1262,6 +1365,10 @@ class HotelHController extends Controller
             // booking immediately and returns a final `ok` status from
             // /booking/finish/.  If status is not ok, fall back to pending.
             if ($status === 'ok') {
+                // In the unlikely event that the finish call immediately returns
+                // a final ok status and no polling was deemed necessary,
+                // clear the booking deadline and treat the booking as complete.
+                $this->clearBookingDeadline($partnerOrderId);
                 return redirect()->route('hotel.payment.success');
             }
 
@@ -1776,6 +1883,11 @@ class HotelHController extends Controller
         ]);
 
         $partnerOrderId = $request->input('partner_order_id');
+
+        // Ensure a booking deadline exists so that all subsequent polling
+        // shares a single timeout window.  If a deadline already exists (for
+        // example, from the form step) it will not be overwritten.
+        $this->getBookingDeadline($partnerOrderId);
         $existing = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
 
         if ($existing) {
@@ -1788,19 +1900,17 @@ class HotelHController extends Controller
 
             if ($existing->api_status === 'processing') {
                 Log::info('📡 Existing booking is still processing — skipping re-call to /finish/');
-
-                $statusResp = Http::withBasicAuth($this->username, $this->password)
-                    ->withHeaders(['Content-Type' => 'application/json'])
-                    ->timeout(30)
-                    ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
-                        'partner_order_id' => $partnerOrderId
-                    ]);
-
-                $statusData = $statusResp->successful() ? $statusResp->json() : ['status' => 'error'];
+                // Poll finish/status using the remaining booking window.  This
+                // ensures we respect the same timeout across all steps and
+                // avoid ghost bookings.
+                $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('⏳ Polled finish/status during retry', ['status' => $statusData]);
 
                 if (data_get($statusData, 'status') === 'ok') {
+                    // Mark the booking as completed and clear the deadline
                     $existing->update(['api_status' => 'ok']);
+                    $this->clearBookingDeadline($partnerOrderId);
                     return view('Hotel::frontend.payment-success', [
                         'order_id' => $existing->order_id,
                         'partner_order_id' => $existing->partner_order_id,
@@ -1896,7 +2006,15 @@ class HotelHController extends Controller
             }
         }
 
-        // If the finish call is ok or processing, persist it to our DB
+        // If the finish call is ok or processing, persist it to our DB as
+        // "processing".  According to ETG, a status of "ok" returned from
+        // /booking/finish/ does not mean the booking has fully completed
+        //【995068486253864†L492-L501】.  We therefore treat both "ok" and
+        // "processing" as transient states that require polling the
+        // /booking/finish/status/ endpoint until a final ok is obtained.  By
+        // storing "processing" in the database for both cases we ensure
+        // subsequent calls to finishBooking() will continue polling rather
+        // than assuming success prematurely.
         if ($status === 'ok' || $status === 'processing') {
             MjellmaBooking::updateOrCreate(
                 ['partner_order_id' => $partnerOrderId],
@@ -1905,26 +2023,33 @@ class HotelHController extends Controller
                     'payment_type'   => $payload['payment_type']['type'],
                     'payment_amount' => $payload['payment_type']['amount'],
                     'currency_code'  => $payload['payment_type']['currency_code'],
-                    'api_status'     => $status,
+                    // Always store "processing" here so later calls know to poll
+                    'api_status'     => 'processing',
                 ]
             );
         }
 
         if ($shouldPoll) {
-            // Poll the finish/status endpoint until a final status or final error.  Use the
-            // default timeout (configured longer than the previous 60s limit) and
-            // the default interval.  Do not restrict polling to 60s as RateHawk
-            // recommends continuing until the general booking timeout expires.
-            $statusData = $this->pollFinishStatus($partnerOrderId);
+            // Poll the finish/status endpoint until a final status or final error.
+            // Respect the remaining booking window so that all steps share
+            // a common timeout and we avoid ghost bookings.  The remaining
+            // time is computed from the booking deadline created earlier.
+            $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+            $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
             Log::info('finishBooking status response', ['status' => $statusData]);
 
             if (data_get($statusData, 'status') === 'ok') {
+                // Final success: mark as completed in DB and clear deadline
+                MjellmaBooking::where('partner_order_id', $partnerOrderId)
+                    ->update(['api_status' => 'ok']);
+                $this->clearBookingDeadline($partnerOrderId);
                 return view('Hotel::frontend.payment-success', [
                     'order_id'         => $payload['order_id'],
                     'partner_order_id' => $partnerOrderId,
                 ]);
             }
 
+            // Booking not completed yet; return pending with the last status
             return view('Hotel::frontend.booking-pending', [
                 'status'   => $statusData,
                 'order_id' => $payload['order_id'],
@@ -1932,8 +2057,13 @@ class HotelHController extends Controller
         }
 
         // If we reach here it means there was no need to poll and no unrecoverable
-        // error was encountered.  In most cases this will be because the finish call
-        // returned `ok` and the booking was completed instantly.  Display success.
+        // error was encountered.  In practice this branch is rare but can
+        // happen if RateHawk returns a non-`ok` non-`processing` status without
+        // errors.  Treat it as final success.  Update the booking record to
+        // 'ok' and clear the deadline to avoid leaving stale entries.
+        MjellmaBooking::where('partner_order_id', $partnerOrderId)
+            ->update(['api_status' => 'ok']);
+        $this->clearBookingDeadline($partnerOrderId);
         return view('Hotel::frontend.payment-success', [
             'order_id'         => $payload['order_id'],
             'partner_order_id' => $partnerOrderId,
@@ -1945,6 +2075,11 @@ class HotelHController extends Controller
     {
         $booking = MjellmaBooking::findOrFail($request->input('booking_id'));
         $partnerId = $request->input('partner_order_id', $booking->partner_order_id);
+
+        // Ensure a booking deadline exists for this order id so that all steps
+        // share the same timeout window.  If a deadline was already set in a
+        // prior step, this call will simply return the existing value.
+        $this->getBookingDeadline($partnerId);
 
         // Build the finish payload according to the booking record and request
         $finishPayload = [
@@ -2008,18 +2143,26 @@ class HotelHController extends Controller
                 }
             }
 
-            // Persist booking status if finish returned ok or processing
+            // Persist booking status if finish returned ok or processing.  Do not
+            // record 'ok' here because the booking may still be settling.  We
+            // instead record 'processing' for both statuses so later calls know
+            // to continue polling until the final ok status is returned【995068486253864†L492-L501】.
             if ($status === 'ok' || $status === 'processing') {
-                $booking->update(['status' => $status]);
+                $booking->update(['status' => 'processing']);
             }
 
             if ($shouldPoll) {
-                // Poll using the default timeout and interval.  We avoid hard‑coding
-                // a short 60‑second window so that temporary errors can be retried
-                // until the general booking timeout expires.
-                $statusData = $this->pollFinishStatus($partnerId);
+                // Poll using the remaining booking window so that all steps
+                // collectively respect a single timeout.  We avoid a fixed
+                // short window to allow recovery from transient issues until
+                // the overall booking timeout expires.
+                $remainingTime = $this->getRemainingBookingTime($partnerId);
+                $statusData    = $this->pollFinishStatus($partnerId, $remainingTime);
                 Log::info('completeBooking status response', ['status' => $statusData]);
                 if (data_get($statusData, 'status') === 'ok') {
+                    // Mark final success and clear the deadline
+                    $booking->update(['status' => 'ok']);
+                    $this->clearBookingDeadline($partnerId);
                     return view('Hotel::frontend.payment-success', [
                         'booking'    => $booking,
                         'statusData' => $statusData,
@@ -2031,7 +2174,10 @@ class HotelHController extends Controller
                 ]);
             }
 
-            // If no polling is needed and no unrecoverable error, return success
+            // If no polling is needed and no unrecoverable error, treat as final
+            // success.  Update the booking to 'ok' and clear the deadline.
+            $booking->update(['status' => 'ok']);
+            $this->clearBookingDeadline($partnerId);
             return view('Hotel::frontend.payment-success', [
                 'booking'    => $booking,
                 'statusData' => $json,
