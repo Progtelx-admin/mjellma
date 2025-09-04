@@ -21,10 +21,17 @@ use Carbon\Carbon;
 
 class HotelHController extends Controller
 {
-    private $apiUrl = "https://api.worldota.net/api/b2b/v3/";
-    private $username = "8166";
-    private $password = "028c1cb6-c2e7-4ce2-9ace-1bba8aec92a6";
+    private $apiUrl;
+    private $username;
+    private $password;
 
+    public function __construct()
+    {
+        // Pull from .env; keep a safe default for API_URL only
+        $this->apiUrl   = env('API_URL', 'https://api.worldota.net/api/b2b/v3/');
+        $this->username = env('API_USERNAME');
+        $this->password = env('API_PASSWORD');
+    }
     /**
      * List of errors returned from the booking finish call that should be treated
      * as final.  When one of these errors is encountered, we will not attempt
