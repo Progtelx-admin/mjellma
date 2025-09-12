@@ -55,7 +55,7 @@
                         <div id="dateErrorAlert" class="alert alert-danger d-none" role="alert">
                         </div>
 
-                        <form method="GET" action="{{ route('hotel.search') }}">
+                        <form id="hotel-search-form" method="GET" action="{{ route('hotel.search') }}">
                             @csrf
 
                             @if ($errors->any())
@@ -149,7 +149,7 @@
                             {{-- Row 4: Full-width Search --}}
                             <div class="row mt-4">
                                 <div class="col">
-                                    <button type="submit" class="btn btn-primary w-100">Search</button>
+                                    <button type="submit" class="btn btn-blue w-100">Search</button>
                                 </div>
                             </div>
 
@@ -167,6 +167,195 @@
             </div>
         </div>
     </div>
+
+    <div class="section-offers py-5">
+        <div class="container">
+            <h2 class="text-center mb-5">Hot Offers for Your Summer Getaway</h2>
+
+            <div class="row g-5 justify-content-center">
+                <!-- Card 1 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
+                        <span class="deal-caption">Milano, Italy</span>
+                    </a>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
+                        <span class="deal-caption">Santorini, Greece</span>
+                    </a>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
+                        <span class="deal-caption">Miami, USA</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
+                    Explore More – Rent a Car Today
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- About Us -->
+    <div id="about-us" class="section-about py-5">
+        <div class="text-center">
+            <h2 class="section-title mb-4">About Us</h2>
+
+            <div class="shadow p-3 mb-5 bg-body">
+                <div class="container">
+                    <p class="mb-5 px-2 px-md-5">
+                        Rezervo24, powered by MJELLMA TRAVEL, makes booking flights, hotels and car rentals fast and simple.
+                        With local expertise and global connections, we offer reliable service, competitive prices and
+                        friendly
+                        24/7
+                        support
+                        to help you plan your next trip with confidence.
+                    </p>
+
+                    <div class="row align-items-start justify-content-center g-5">
+                        <!-- IATA -->
+                        <div class="col-10 col-md-4 text-center">
+                            <div class="logo-wrap d-flex align-items-end justify-content-center">
+                                <img src="{{ asset('uploads/iata.png') }}" alt="IATA"
+                                    class="partner-logo img-fluid">
+                            </div>
+                            <small class="text-muted d-inline-block mt-2">(Accreditation No: 95-21245-6)</small>
+                        </div>
+
+                        <!-- Amadeus -->
+                        <div class="col-10 col-md-4 text-center">
+                            <div class="logo-wrap d-flex align-items-end justify-content-center">
+                                <img src="{{ asset('uploads/amadeus.png') }}" alt="Amadeus"
+                                    class="partner-logo img-fluid" style="margin-bottom: 20px;">
+                            </div>
+                            <small class="text-muted d-inline-block mt-2">(Partner ID: PRNK03320)</small>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="section-offers py-5">
+        <div class="container text-center">
+            <h2 class="section-title mb-4">Our Services</h2>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <img src="{{ asset('uploads/flight.png') }}" class="img-fluid rounded shadow" alt="Flight">
+                    <h5 class="mt-3">Book a Flight</h5>
+                </div>
+                <div class="col-md-4">
+                    <img src="{{ asset('uploads/hotel.png') }}" class="img-fluid rounded shadow" alt="hotel">
+                    <h5 class="mt-3">Book a Hotel</h5>
+                </div>
+                <div class="col-md-4">
+                    <img src="{{ asset('uploads/car.png') }}" class="img-fluid rounded shadow" alt="Rent a Car">
+                    <h5 class="mt-3">Rent a Car</h5>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Amazing Holiday Deals -->
+    <div class="section-offers py-5">
+        <div class="container">
+            <h2 class="text-center mb-5">Amazing Holiday Deals</h2>
+
+            <div class="row g-5 justify-content-center">
+                <!-- Card 1 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
+                        <span class="deal-caption">Milano, Italy</span>
+                    </a>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
+                        <span class="deal-caption">Santorini, Greece</span>
+                    </a>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
+                        {{-- <span class="deal-caption">Miami, USA</span> --}}
+                    </a>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
+                    Explore More – Book A Flight Today
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="section-offers py-5">
+        <div class="container">
+            <h2 class="text-center mb-5">Rent a Car for Your Trip</h2>
+
+            <div class="row g-5 justify-content-center">
+                <!-- Card 1 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
+                        <span class="deal-caption">Milano, Italy</span>
+                    </a>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
+                        <span class="deal-caption">Santorini, Greece</span>
+                    </a>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a href="#hotel-search-form"
+                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
+                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
+                        {{-- <span class="deal-caption">Miami, USA</span> --}}
+                    </a>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
+                    Explore More – Rent a Car Today
+                </a>
+            </div>
+        </div>
+    </div>
+
 
     {{-- Bootstrap JS --}}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -320,8 +509,16 @@
         });
     </script>
 
-
-
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener("click", function(e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute("href")).scrollIntoView({
+                    behavior: "smooth"
+                });
+            });
+        });
+    </script>
 
     <style>
         .carousel-item {
@@ -342,7 +539,7 @@
         }
 
         .carousel-indicators .active {
-            background: #007bff;
+            background: #F27625;
         }
 
         .carousel-indicators {
@@ -357,22 +554,120 @@
             text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
         }
 
-        .btn-primary {
-            background: #007bff;
+        .btn-color {
+            background-color: #F27625;
             border: none;
+            color: white;
         }
 
-        .btn-primary:hover {
-            background: #0056b3;
+        .btn-blue {
+            background-color: #0B0B45;
+            color: white
+        }
+
+        .btn-blue:hover {
+            color: white
         }
 
         .nav-tabs .nav-link.active {
-            border-bottom: 3px solid #007bff;
+            border-bottom: 3px solid #F27625;
             font-weight: bold;
         }
 
         .form-label {
             font-weight: bold;
+        }
+
+        .section-title {
+            position: relative;
+            display: inline-block;
+            color: #0B0B45;
+        }
+
+        .section-title::after {
+            content: "";
+            display: block;
+            width: 140px;
+            height: 3px;
+            background: #F27625;
+            margin: 10px auto 0;
+            border-radius: 2px;
+        }
+
+        .partner-logo {
+            filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .08));
+        }
+
+        /* Section title (navy with orange underline) */
+        .deals-title {
+            color: #0B0B45;
+            font-weight: 700;
+            letter-spacing: .3px;
+        }
+
+        .deals-title::after {
+            content: "";
+            display: block;
+            width: 260px;
+            height: 3px;
+            background: #F27625;
+            margin: 12px auto 0;
+            border-radius: 2px;
+        }
+
+        /* Card images with fixed aspect & overlay caption */
+        .deal-img {
+            aspect-ratio: 4 / 3;
+            /* keeps all cards same height */
+            object-fit: cover;
+            display: block;
+        }
+
+        .deal-card::after {
+            /* bottom gradient like the mock */
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 42%;
+            pointer-events: none;
+        }
+
+        .deal-caption {
+            position: absolute;
+            left: 22px;
+            bottom: 18px;
+            color: #fff;
+            font-weight: 700;
+            font-size: clamp(1.1rem, 1.6vw + .6rem, 1.8rem);
+            text-shadow: 0 2px 10px rgba(0, 0, 0, .45);
+            z-index: 1;
+        }
+
+        /* Orange CTA */
+        .btn-cta {
+            background: #F27625;
+            color: #fff;
+            border: none;
+            border-radius: .35rem;
+        }
+
+        .btn-cta:hover {
+            color: #fff;
+            background: #d5651d;
+        }
+
+        .logo-wrap {
+            height: 100px;
+            /* same visual box for both logos */
+        }
+
+        .partner-logo {
+            max-height: 80px;
+            /* scale logos consistently */
+            width: auto;
+            /* keep aspect ratio */
         }
     </style>
 @endsection
