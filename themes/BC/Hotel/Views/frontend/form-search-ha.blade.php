@@ -148,10 +148,12 @@
 
                             {{-- Row 4: Full-width Search --}}
                             <div class="row mt-4">
-                                <div class="col">
-                                    <button type="submit" class="btn btn-blue w-100">Search</button>
+                                <div class="col d-flex justify-content-center">
+                                    <button type="submit" class="btn btn-blue w-25">Search</button>
                                 </div>
                             </div>
+
+
 
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
@@ -570,9 +572,12 @@
         }
 
         .nav-tabs .nav-link.active {
-            border-bottom: 3px solid #F27625;
+            border-bottom: 3px solid #0B0B45F0;
             font-weight: bold;
+            color: #0B0B45F0;
+            /* optional: make the text match */
         }
+
 
         .form-label {
             font-weight: bold;

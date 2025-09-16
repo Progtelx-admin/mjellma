@@ -137,7 +137,10 @@
             <input type="hidden" id="payment_type_is_need_credit_card_data"
                 name="payment_type[is_need_credit_card_data]">
 
-            <button type="submit" class="btn btn-primary w-100 mt-3">Finish Booking</button>
+            <button type="submit" class="btn w-50 mt-3 d-block mx-auto" style="background:#F27625; color:white;">
+                Finish Booking
+            </button>
+
         </form>
     </div>
 

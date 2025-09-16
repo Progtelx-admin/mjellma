@@ -375,9 +375,12 @@ class HotelHController extends Controller
                 ]);
             }
 
+            $totalHotels = $allHotels->count();
+
             // 10) Full page response
             return view('Hotel::frontend.results-ha',[
                 'hotels'   => $pagedHotels,
+                'totalHotels'=> $totalHotels,
                 'checkin'  => $request->checkin,
                 'checkout' => $request->checkout,
                 'adults'   => $request->adults,

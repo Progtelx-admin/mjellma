@@ -2,6 +2,7 @@
 
 @section('content')
     <div class="container">
+        {{-- Page heading --}}
         <h3 class="text-center mt-5 fw-bold">
             @if (request('location'))
                 Hotels near {{ request('location') }}
@@ -12,13 +13,15 @@
         <hr class="w-25 mx-auto mb-4">
 
         <div class="row mt-4">
-            {{-- ──────────────────────────────────────────────────────────────────────── --}}
-            {{-- FILTERS SIDEBAR                                                      --}}
-            {{-- ──────────────────────────────────────────────────────────────────────── --}}
+            {{-- ================================================================
+                 FILTERS
+            ================================================================= --}}
             <div class="col-md-3 mb-5 filter-section sticky-top" style="top:1rem;">
                 <h5 class="fw-bold">Filters</h5>
                 <hr>
+
                 <form method="GET" action="{{ route('hotel.search') }}">
+                    {{-- Preserve query --}}
                     <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
                     <input type="hidden" name="location" value="{{ request('location') }}">
                     <input type="hidden" name="checkin" value="{{ request('checkin') }}">
@@ -33,7 +36,7 @@
                         <input type="hidden" name="children[]" value="{{ $age }}">
                     @endforeach
 
-                    {{-- Price Filter --}}
+                    {{-- Price --}}
                     <div class="mb-4">
                         <h6 class="fw-bold">Price Range</h6>
                         <label for="min_price" class="form-label">Min Price (€{{ $minPrice }})</label>
@@ -45,7 +48,7 @@
                     </div>
                     <hr>
 
-                    {{-- Star Rating --}}
+                    {{-- Stars --}}
                     <div class="mb-4">
                         <h6 class="fw-bold">Hotel Star</h6>
                         @for ($i = 5; $i >= 1; $i--)
@@ -80,19 +83,32 @@
                 </button>
             </div>
 
-            {{-- ──────────────────────────────────────────────────────────────────────── --}}
-            {{-- HOTEL LIST                                                           --}}
-            {{-- ──────────────────────────────────────────────────────────────────────── --}}
+            {{-- ================================================================
+                 RESULTS
+            ================================================================= --}}
             <div class="col-md-9">
-                <div class="view-toggle mb-3 text-end">
-                    <button id="list-view-btn" class="btn btn-outline-primary active"><i class="fa fa-list"></i></button>
-                    <button id="grid-view-btn" class="btn btn-outline-secondary"><i class="fa fa-th"></i></button>
+                {{-- Header --}}
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <span class="text-muted">Among <span
+                                class="fw-semibold">{{ $totalHotels ?? $hotels->count() }}</span> accommodations</span>
+                    </div>
+
+                    {{-- View toggle --}}
+                    <div class="view-toggle d-flex">
+                        <button id="extended-view-btn" type="button" class="view-tab active">
+                            <i class="fa fa-list me-2"></i> Extended
+                        </button>
+                        <button id="compact-view-btn" type="button" class="view-tab ms-4">
+                            <i class="fa fa-th me-2"></i> Compact
+                        </button>
+                    </div>
                 </div>
+
                 @if ($hotels->count())
-                    <div id="hotel-list">
+                    <div id="hotel-list" class="extended-view">
                         @foreach ($hotels as $hotel)
                             @php
-                                // build the full query payload for the detail link
                                 $query = array_merge(
                                     ['id' => $hotel->hotel_id],
                                     request()->only([
@@ -109,56 +125,95 @@
                                     ['children_count' => request('children_count', 0)],
                                     ['children' => request('children', [])],
                                 );
+
+                                $currencySym = match (request('currency', 'EUR')) {
+                                    'USD' => '$',
+                                    'GBP' => '£',
+                                    'EUR' => '€',
+                                    default => request('currency', '€'),
+                                };
                             @endphp
 
-                            <a href="{{ route('hotel.info', $query) }}"
-                                class="text-decoration-none text-dark mb-4 d-block">
-                                <div class="card hotel-list-item border-0 shadow-sm">
-                                    <div class="row g-0">
-                                        <div class="col-md-4">
-                                            <div class="hotel-image">
-                                                <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}"
-                                                    class="img-fluid" style="height:200px;object-fit:cover;"
-                                                    onerror="this.src='{{ asset('images/default-image.jpg') }}'">
+                            <a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link">
+                                <article class="hotel-listcard">
+                                    {{-- IMAGE --}}
+                                    <div class="hotel-listcard__media">
+                                        @if ($hotel->image_url)
+                                            <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}">
+                                        @else
+                                            <span class="no-image">No image available</span>
+                                        @endif
+
+                                        {{-- grid-only price badge --}}
+                                        @if ($hotel->daily_price)
+                                            <span class="grid-price-badge">
+                                                {{ number_format($hotel->daily_price, 0) }}{{ $currencySym }}
+                                            </span>
+                                        @endif
+                                    </div>
+
+
+                                    {{-- CONTENT --}}
+                                    <div class="hotel-listcard__content">
+                                        <div class="mb-2">
+                                            <h4 class="hotel-listcard__title mb-1">{{ $hotel->name }}</h4>
+                                            <div class="hotel-listcard__stars">
+                                                @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
+                                                    <i class="fa fa-star"></i>
+                                                @endfor
                                             </div>
                                         </div>
-                                        <div class="col-md-8">
-                                            <div class="card-body d-flex flex-column justify-content-between h-100">
-                                                <h5 class="fw-bold text-primary">{{ $hotel->name }}</h5>
-                                                <p class="text-warning mb-2">
-                                                    @for ($i = 0; $i < floor($hotel->star_rating); $i++)
-                                                        <i class="fa fa-star"></i>
-                                                    @endfor
-                                                </p>
-                                                <p class="text-muted">{{ $hotel->address }}</p>
-                                                @if ($hotel->daily_price)
-                                                    <p class="fs-5 text-primary">
-                                                        From <strong>{{ $hotel->daily_price }}</strong> / night
-                                                    </p>
-                                                @else
-                                                    <p class="fs-6 text-danger">
-                                                        No room available
-                                                    </p>
-                                                @endif
 
-                                                <p class="text-success">
-                                                    Breakfast: {{ $hotel->has_breakfast ? 'Yes' : 'No' }}
-                                                </p>
+
+
+                                        <div class="hotel-listcard__location mb-3">
+                                            {{ \Illuminate\Support\Str::before($hotel->address ?? '', ',') }}
+                                            @if (!empty($hotel->distance_from_center))
+                                                – <span>{{ $hotel->distance_from_center }} from Center</span>
+                                            @endif
+                                        </div>
+
+                                        <p class="hotel-listcard__desc mb-4">
+                                            With a stay at {{ \Illuminate\Support\Str::limit($hotel->name, 28) }}, you’ll
+                                            be centrally located…
+                                        </p>
+
+                                        {{-- LIST-ONLY footer (left perks / right price+btn) --}}
+                                        <div class="hotel-listcard__footer">
+                                            <div class="hotel-listcard__perk">
+                                                @if ($hotel->has_breakfast)
+                                                    Breakfast included
+                                                @endif
+                                            </div>
+
+                                            <div class="d-flex flex-column align-items-end gap-2">
+                                                <div class="hotel-listcard__price">
+                                                    @if ($hotel->daily_price)
+                                                        From {{ number_format($hotel->daily_price, 0) }}
+                                                        {{ $currencySym }} / night
+                                                    @else
+                                                        No rooms available
+                                                    @endif
+                                                </div>
+                                                <span class="btn btn-cta">See options</span>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+
+                                    {{-- GRID-ONLY footer bar --}}
+                                    <div class="grid-see-footer">See options</div>
+                                </article>
                             </a>
                         @endforeach
                     </div>
                 @else
                     <p class="text-center text-muted fs-5">No hotels found.</p>
                 @endif
-
             </div>
         </div>
     </div>
-    <!-- ✅ Bootstrap Modal for Map -->
+
+    {{-- Map modal --}}
     <div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
@@ -175,221 +230,274 @@
         </div>
     </div>
 
-    <!-- Leaflet.js Map -->
+    {{-- Scripts --}}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- ✅ Bootstrap JS + Popper.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        /* -------------------------
-         *  Map Modal Initialization
-         * ------------------------- */
-        let mapInitialized = false;
+        document.addEventListener('DOMContentLoaded', () => {
+            const list = document.getElementById('hotel-list');
+            const extendedBtn = document.getElementById('extended-view-btn');
+            const compactBtn = document.getElementById('compact-view-btn');
 
-        document.addEventListener("DOMContentLoaded", function() {
-            var mapModal = document.getElementById('mapModal');
-            mapModal.addEventListener('shown.bs.modal', function() {
-                if (!mapInitialized) {
-                    initializeMap();
-                    mapInitialized = true;
-                }
-            });
-        });
+            function setView(mode) {
+                list.classList.toggle('extended-view', mode === 'extended');
+                list.classList.toggle('compact-view', mode === 'compact');
+                extendedBtn.classList.toggle('active', mode === 'extended');
+                compactBtn.classList.toggle('active', mode === 'compact');
+            }
 
-        function initializeMap() {
-            var map = L.map('hotelMap');
-
-            // Load OpenStreetMap tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-
-            var markers = [];
-            var bounds = L.latLngBounds();
-
-            @if ($hotels && $hotels->count() > 0)
-                @foreach ($hotels as $hotel)
-                    @if (!empty($hotel->latitude) && !empty($hotel->longitude))
-                        var hotelUrl =
-                            "{{ route('hotel.info', ['id' => $hotel->hotel_id, 'checkin' => $checkin, 'checkout' => $checkout]) }}";
-                        var imageUrl = "{{ $hotel->image_url }}";
-                        var defaultImage = "{{ asset('images/default-image.jpg') }}";
-
-                        var popupContent = `
-                                <div style="width: 200px; font-family: Arial, sans-serif; text-align: center;">
-                                    <img src="${imageUrl}" onerror="this.src='${defaultImage}'"
-                                        style="width: 100%; height: 80px; object-fit: cover; border-radius: 5px;" />
-                                    <h6 style="margin: 5px 0;">
-                                        <a href="${hotelUrl}" target="_blank" style="color: #007bff; font-weight: bold; text-decoration: none;">
-                                            {{ $hotel->name }}
-                                        </a>
-                                    </h6>
-                                    <p style="margin: 2px 0; font-size: 12px; color: #ffa500;">
-                                        @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
-                                            <i class="fa fa-star" aria-hidden="true" style="color: #FCC737"></i>
-                                        @endfor
-                                    </p>
-                                    <p style="margin: 2px 0; font-size: 13px; color: #28a745;">
-                                        {{ $hotel->daily_price ?? 'N/A' }} EUR
-                                    </p>
-                                </div>
-                            `;
-
-                        var marker = L.marker([{{ $hotel->latitude }}, {{ $hotel->longitude }}])
-                            .addTo(map)
-                            .bindPopup(popupContent);
-
-                        markers.push(marker);
-                        bounds.extend(marker.getLatLng());
-                    @endif
-                @endforeach
-
-                if (markers.length > 0) {
-                    map.fitBounds(bounds, {
-                        padding: [40, 40]
-                    });
-                } else {
-                    map.setView([42.6629, 21.1655], 13); // Default location if no markers
-                }
-
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 500);
-            @endif
-        }
-    </script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const hotelList = document.getElementById('hotel-list');
-            const listBtn = document.getElementById('list-view-btn');
-            const gridBtn = document.getElementById('grid-view-btn');
-
-            listBtn.addEventListener('click', () => {
-                hotelList.classList.remove('grid-view');
-                listBtn.classList.add('active');
-                gridBtn.classList.remove('active');
-            });
-
-            gridBtn.addEventListener('click', () => {
-                hotelList.classList.add('grid-view');
-                gridBtn.classList.add('active');
-                listBtn.classList.remove('active');
-            });
-        });
-
-        let page = 1;
-        let loading = false;
-        let hasMore = true;
-
-        document.getElementById('load-more-btn')?.addEventListener('click', function() {
-            if (loading || !hasMore) return;
-            loading = true;
-            page++;
-
-            const url = new URL(window.location.href);
-            url.searchParams.set('page', page);
-
-            document.getElementById('loading-spinner').style.display = 'block';
-
-            fetch(url.toString(), {
-                    method: 'GET',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.html) {
-                        document.getElementById('hotel-list').insertAdjacentHTML('beforeend', data.html);
-                    }
-                    if (!data.hasMore) {
-                        document.getElementById('load-more-btn')?.remove();
-                    }
-                })
-                .catch(error => console.error('Load More Failed', error))
-                .finally(() => {
-                    loading = false;
-                    document.getElementById('loading-spinner').style.display = 'none';
-                });
+            extendedBtn.addEventListener('click', () => setView('extended'));
+            compactBtn.addEventListener('click', () => setView('compact'));
         });
     </script>
 
+    {{-- Styles --}}
     <style>
-        .hotel-list-item {
-            display: flex;
-            border-radius: 8px;
-        }
-
-        .hotel-image {
-            height: 200px;
-            background-color: #f8f9fa;
+        /* Toggle buttons */
+        .view-tab {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #0d1b50;
             display: flex;
             align-items: center;
-            justify-content: center;
+            gap: .45rem;
+            position: relative;
+            cursor: pointer;
         }
 
-        .hotel-image img {
+        .view-tab i {
+            color: #ff7a1a;
+            font-size: 1.15rem;
+        }
+
+        .view-toggle .view-tab+.view-tab {
+            margin-left: 2rem;
+        }
+
+        .view-tab.active::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -6px;
+            width: 100%;
+            height: 3px;
+            background: #ff7a1a;
+        }
+
+        /* Extended card (list) */
+        .hotel-listcard {
+            display: flex;
+            background: #fff;
+            border: 1px solid #eaeaea;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .04);
+            margin-bottom: 24px;
+        }
+
+        .hotel-listcard__media {
+            width: 44%;
+            min-width: 340px;
+            max-width: 480px;
+        }
+
+        .hotel-listcard__media img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+
+        .hotel-listcard__content {
+            flex: 1;
+            padding: 22px 28px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hotel-listcard__title {
+            color: #0d1b50;
+            font-weight: 800;
+        }
+
+        .hotel-listcard__stars {
+            margin-top: 2px;
+            line-height: 1;
+        }
+
+        .hotel-listcard__stars .fa {
+            color: #ffb02e;
+            margin-right: 2px;
+        }
+
+        .hotel-listcard__location {
+            color: #0d1b50;
+            font-weight: 600;
+        }
+
+        .hotel-listcard__desc {
+            color: #5a6477;
+        }
+
+        .hotel-listcard__footer {
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .hotel-listcard__perk {
+            color: #1ca151;
+            font-weight: 700;
+        }
+
+        .hotel-listcard__price {
+            color: #0d1b50;
+            font-weight: 800;
+        }
+
+        .btn-cta {
+            background: #f47b2d;
+            color: #fff;
+            font-weight: 700;
+            padding: .6rem 1.1rem;
+            line-height: 1;
+            box-shadow: 0 4px 12px rgba(244, 123, 45, .25);
+        }
+
+        .btn-cta:hover {
+            color: #fff;
+            filter: brightness(.95);
+        }
+
+        /* Compact grid */
+        #hotel-list.compact-view {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 28px;
+
+            /* Ensure grid items stretch */
+            align-items: stretch;
+        }
+
+        /* Make the anchor fill the grid cell so the card can be 100% height */
+        #hotel-list.compact-view .hotel-card-link {
+            display: block;
+            height: 100%;
+        }
+
+        #hotel-list.compact-view .hotel-listcard {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            border: 1px solid #e6e6e6;
+            overflow: hidden;
+
+            /* <-- equal heights */
+            height: 100%;
+        }
+
+        #hotel-list.compact-view .hotel-listcard__media {
+            position: relative;
+            width: 100%;
+            min-width: auto;
+            max-width: none;
+            height: 190px;
+            border-bottom: 1px solid #ececec;
+            flex: 0 0 190px;
+            /* fixed image height for consistency */
+        }
+
+        #hotel-list.compact-view .hotel-listcard__media img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
         }
 
-        #hotel-list.grid-view {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
+        /* price badge on image (grid only) */
+        #hotel-list.compact-view .grid-price-badge {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #F27625A3;
+            color: #0B0B45;
+            font-weight: 800;
+            padding: 6px 12px;
+            font-size: 0.95rem;
         }
 
-        #hotel-list.grid-view .hotel-list-item {
-            flex-direction: column;
-            flex: 0 0 calc(33.3333% - 20px);
-            max-width: calc(33.3333% - 20px);
-            margin: 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-        }
-
-        #hotel-list.grid-view .row.g-0 {
+        #hotel-list.compact-view .hotel-listcard__content {
             display: flex;
             flex-direction: column;
-            margin: 0;
+            padding: 14px 14px 12px;
+
+            /* grow to fill leftover space so footer stays bottom */
+            flex: 1 1 auto;
+            min-height: 0;
+            /* allow flex to shrink if needed */
         }
 
-        #hotel-list.grid-view .col-md-4,
-        #hotel-list.grid-view .col-md-8 {
+        /* Clamp description lines to keep heights uniform */
+        #hotel-list.compact-view .hotel-listcard__desc {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            /* maintains visual height approx 3 lines even if fonts differ slightly */
+            min-height: calc(1.15em * 3);
+        }
+
+        /* hide list-only footer (price + button) in grid */
+        #hotel-list.compact-view .hotel-listcard__footer,
+        #hotel-list.compact-view .btn-cta {
+            display: none !important;
+        }
+
+        /* grid "See options" bar pinned to bottom */
+        #hotel-list.compact-view .grid-see-footer {
+            margin-top: auto;
+            background: #EF7F44;
+            color: #fff;
+            text-align: center;
+            font-weight: 700;
+            padding: 10px 0;
             width: 100%;
-            max-width: 100%;
-            flex: none;
+            flex: 0 0 auto;
         }
 
-        #hotel-list.grid-view .hotel-image {
-            height: 200px;
-            border-bottom: 1px solid #ddd;
+        /* keep badge/footer hidden in extended list */
+        #hotel-list.extended-view .grid-price-badge,
+        #hotel-list.extended-view .grid-see-footer {
+            display: none !important;
         }
 
-        #hotel-list.grid-view .card-body {
-            padding: 15px;
-            background-color: #fff;
-        }
-
-        @media (max-width: 992px) {
-            #hotel-list.grid-view .hotel-list-item {
-                flex: 0 0 calc(50% - 20px);
-                max-width: calc(50% - 20px);
+        /* Responsive */
+        @media (max-width: 1200px) {
+            #hotel-list.compact-view {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
-        @media (max-width: 576px) {
-            #hotel-list.grid-view .hotel-list-item {
-                flex: 0 0 100%;
-                max-width: 100%;
+        @media (max-width: 991.98px) {
+            .hotel-listcard {
+                flex-direction: column;
+            }
+
+            .hotel-listcard__media {
+                width: 100%;
+                min-width: auto;
+                max-width: none;
+                height: 210px;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            #hotel-list.compact-view {
+                grid-template-columns: 1fr;
             }
         }
     </style>
