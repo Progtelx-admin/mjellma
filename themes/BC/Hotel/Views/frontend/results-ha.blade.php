@@ -138,8 +138,12 @@
                                 <article class="hotel-listcard">
                                     {{-- IMAGE --}}
                                     <div class="hotel-listcard__media">
-                                        <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}"
-                                            onerror="this.src='{{ asset('images/default-image.jpg') }}'">
+                                        @if ($hotel->image_url)
+                                            <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}">
+                                        @else
+                                            <span class="no-image">No image available</span>
+                                        @endif
+
                                         {{-- grid-only price badge --}}
                                         @if ($hotel->daily_price)
                                             <span class="grid-price-badge">
@@ -147,6 +151,7 @@
                                             </span>
                                         @endif
                                     </div>
+
 
                                     {{-- CONTENT --}}
                                     <div class="hotel-listcard__content">
@@ -283,7 +288,6 @@
             width: 100%;
             height: 3px;
             background: #ff7a1a;
-            border-radius: 2px;
         }
 
         /* Extended card (list) */
@@ -291,7 +295,6 @@
             display: flex;
             background: #fff;
             border: 1px solid #eaeaea;
-            border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 2px 12px rgba(0, 0, 0, .04);
             margin-bottom: 24px;
@@ -361,7 +364,6 @@
             background: #f47b2d;
             color: #fff;
             font-weight: 700;
-            border-radius: 8px;
             padding: .6rem 1.1rem;
             line-height: 1;
             box-shadow: 0 4px 12px rgba(244, 123, 45, .25);
@@ -393,7 +395,6 @@
             flex-direction: column;
             margin: 0;
             border: 1px solid #e6e6e6;
-            border-radius: 6px;
             overflow: hidden;
 
             /* <-- equal heights */
@@ -426,7 +427,6 @@
             color: #0B0B45;
             font-weight: 800;
             padding: 6px 12px;
-            border-bottom-right-radius: 6px;
             font-size: 0.95rem;
         }
 

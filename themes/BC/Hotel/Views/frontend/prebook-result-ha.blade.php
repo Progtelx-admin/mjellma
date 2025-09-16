@@ -2,8 +2,8 @@
 
 @section('content')
     <div class="container mt-5 mb-5">
-        <h1 class="fw-bold text-center">Prebooking Confirmation</h1>
-        <hr class="w-50 mx-auto mb-4">
+        <h1 class="fw-bold text-left">Prebooking Confirmation</h1>
+        {{-- <hr class="w-50 mx-auto mb-4"> --}}
 
         @if (isset($prebookData['data']['hotels'][0]))
             @php
@@ -14,7 +14,8 @@
             <div class="row align-items-stretch">
                 <!-- Hotel Information -->
                 <div class="col-md-6 d-flex">
-                    <div class="card shadow-sm border-0 w-100 d-flex flex-column">
+                    <div class="card border-0 w-100 d-flex flex-column"
+                        style="box-shadow: 0 4px 4px 0 rgba(242, 118, 37, 0.35);">
                         <img src="{{ $hotelImage ?? asset('images/default-hotel.jpg') }}" class="card-img-top"
                             alt="{{ $hotelDetails['name'] }}">
 
@@ -37,8 +38,9 @@
 
                 <!-- Booking Details -->
                 <div class="col-md-6 d-flex">
-                    <div class="card shadow-sm border-0 w-100 p-4 d-flex flex-column">
-                        <h5 class="fw-bold">Booking Summary</h5>
+                    <div class="card border-0 w-100 p-4 d-flex flex-column"
+                        style="box-shadow: 0 4px 4px 0 rgba(242, 118, 37, 0.35);">
+                        <h5 class="fw-bold text-center">Booking Summary</h5>
                         <hr>
                         <p><strong>Check-in:</strong> {{ $checkin ?? 'N/A' }}</p>
                         <p><strong>Check-out:</strong> {{ $checkout ?? 'N/A' }}</p>
@@ -69,8 +71,11 @@
                                 {{ $rate['meal_data']['has_breakfast'] ? 'Yes' : 'No' }}
                             </p>
                             <h4 class="fw-bold text-success">Total Price:
-                                {{ $rate['payment_options']['payment_types'][0]['amount'] ?? 'N/A' }}
-                                {{ $rate['payment_options']['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                                <br>
+                                <span style="color:#0B0B45EB">
+                                    {{ $rate['payment_options']['payment_types'][0]['amount'] ?? 'N/A' }}
+                                    {{ $rate['payment_options']['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                                </span>
                             </h4>
 
                             <!-- Book Now Button -->
@@ -90,7 +95,9 @@
                                 <input type="hidden" name="adults" value="{{ session('adults', 1) }}">
                                 <input type="hidden" name="children" value="{{ json_encode(session('children', [])) }}">
 
-                                <button type="submit" class="btn btn-primary w-100 py-2 mt-3">Confirm Booking</button>
+                                <button type="submit" class="btn w-100 py-2 mt-3"
+                                    style="background: #F27625; color: white;">Confirm
+                                    Booking</button>
                             </form>
                         @else
                             <p class="text-danger">No rate information available. Please select another room.</p>
