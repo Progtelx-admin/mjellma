@@ -538,27 +538,6 @@
 
 
     <style>
-        #carouselBackground,
-        #carouselBackground .carousel-inner,
-        #carouselBackground .carousel-item {
-            z-index: 0 !important;
-        }
-
-        /* force the site topbar/header + dropdowns above everything */
-        header,
-        .bc-topbar,
-        .bravo_topbar,
-        .navbar {
-            position: relative;
-            /* creates a stacking context */
-            z-index: 2000 !important;
-        }
-
-        /* sometimes the menu itself needs a bump, esp. over carousels */
-        .dropdown-menu {
-            z-index: 2001 !important;
-        }
-
         .carousel-item {
             background-size: cover;
             background-position: center;
