@@ -512,15 +512,28 @@
     </script>
 
     <script>
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener("click", function(e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute("href")).scrollIntoView({
-                    behavior: "smooth"
-                });
+        // Smooth-scroll only for real in-page anchors, not tabs or "#"
+        document.addEventListener("click", function(e) {
+            const link = e.target.closest('a[href^="#"]');
+            if (!link) return;
+
+            // Ignore Bootstrap tabs and other BS toggles
+            if (link.hasAttribute("data-bs-toggle")) return;
+
+            const href = link.getAttribute("href");
+            if (!href || href === "#" || href.length <= 1) return;
+
+            const target = document.querySelector(href);
+            if (!target) return; // no scroll; avoids TypeError
+
+            e.preventDefault();
+            target.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
             });
         });
     </script>
+
 
     <style>
         .carousel-item {
