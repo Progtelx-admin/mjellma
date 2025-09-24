@@ -358,9 +358,11 @@
         </div>
     </div>
 
+    <!-- Bootstrap 4.6 (includes Popper) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
 
-    {{-- Bootstrap JS --}}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -536,6 +538,27 @@
 
 
     <style>
+        #carouselBackground,
+        #carouselBackground .carousel-inner,
+        #carouselBackground .carousel-item {
+            z-index: 0 !important;
+        }
+
+        /* force the site topbar/header + dropdowns above everything */
+        header,
+        .bc-topbar,
+        .bravo_topbar,
+        .navbar {
+            position: relative;
+            /* creates a stacking context */
+            z-index: 2000 !important;
+        }
+
+        /* sometimes the menu itself needs a bump, esp. over carousels */
+        .dropdown-menu {
+            z-index: 2001 !important;
+        }
+
         .carousel-item {
             background-size: cover;
             background-position: center;
