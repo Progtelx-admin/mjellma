@@ -209,9 +209,10 @@ return [
         Custom\ServiceProvider::class,
         App\Providers\AdminRouteServiceProvider::class,
         Propaganistas\LaravelPhone\PhoneServiceProvider::class,
-        Pro\ServiceProvider::class
+        Pro\ServiceProvider::class,
 
 
+        Modules\Offers\ModuleProvider::class,
     ],
 
     /*
