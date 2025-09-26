@@ -17,6 +17,7 @@
         $defaultNameParts = explode(' ', $user->name ?? '');
         $defaultFirstName = $defaultNameParts[0] ?? '';
         $defaultLastName = $defaultNameParts[1] ?? '';
+        
     @endphp
 
     <div class="container mt-5 mb-5">
@@ -115,20 +116,69 @@
             <!-- Payment Section -->
             <h3 class="fw-bold">Payment</h3>
             <div class="mb-3">
-                <label class="form-label">Payment Type</label>
-                <select class="form-select" id="payment_type" required>
-                    @foreach ($bookingData['payment_types'] as $payment)
-                        <option value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
-                            data-type="{{ $payment['type'] }}" data-currency="{{ $payment['currency_code'] }}"
-                            data-amount="{{ $payment['amount'] }}"
-                            data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}">
-                            {{ ucfirst($payment['type']) }} - {{ $payment['amount'] }} {{ $payment['currency_code'] }}
-                            @if ($payment['is_need_credit_card_data'])
-                                (Pay with Card)
-                            @endif
-                        </option>
+                <label class="form-label">Select Payment Method</label>
+                <div class="gateways-table accordion" id="accordionExample">
+                    @foreach ($bookingData['payment_types'] as $index => $payment)
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="mb-0">
+                                    <label class="" data-toggle="collapse" data-target="#gateway_{{ $index }}">
+                                        <input type="radio" name="payment_method" 
+                                               id="payment_method_{{ $index }}" 
+                                               value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
+                                               data-type="{{ $payment['type'] }}" 
+                                               data-currency="{{ $payment['currency_code'] }}"
+                                               data-amount="{{ $payment['amount'] }}"
+                                               data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}"
+                                               {{ $index === 0 ? 'checked' : '' }}>
+                                        {{ ucfirst($payment['type']) }} - {{ $payment['amount'] }} {{ $payment['currency_code'] }}
+                                        @if ($payment['is_need_credit_card_data'])
+                                            (Pay with Card)
+                                        @endif
+                                    </label>
+                                </h4>
+                            </div>
+                            <div id="gateway_{{ $index }}" class="collapse" aria-labelledby="headingOne" data-parent="#accordionExample">
+                                <div class="card-body">
+                                    <div class="gateway_name">
+                                        {{ ucfirst($payment['type']) }} Payment
+                                    </div>
+                                    <p>Amount: {{ $payment['amount'] }} {{ $payment['currency_code'] }}</p>
+                                    @if ($payment['is_need_credit_card_data'])
+                                        <p class="text-info">This payment method requires credit card information.</p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
                     @endforeach
-                </select>
+                    
+                    <!-- PCB Bank Payment Method -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0">
+                                <label class="" data-toggle="collapse" data-target="#gateway_pcb">
+                                    <input type="radio" name="payment_method" 
+                                           id="payment_method_pcb" 
+                                           value="pcb_bank|{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
+                                           data-type="pcb_bank" 
+                                           data-currency="{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
+                                           data-amount="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}"
+                                           data-need-card="1">
+                                    PCB Bank Payment - {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                                </label>
+                            </h4>
+                        </div>
+                        <div id="gateway_pcb" class="collapse" aria-labelledby="headingOne" data-parent="#accordionExample">
+                            <div class="card-body">
+                                <div class="gateway_name">
+                                    PCB Bank Payment
+                                </div>
+                                <p>Amount: {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}</p>
+                                <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to enter your card information.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <input type="hidden" id="payment_type_amount" name="payment_type[amount]">
@@ -147,7 +197,7 @@
     <!-- Scripts -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const paymentTypeSelect = document.getElementById('payment_type');
+            const paymentMethodRadios = document.querySelectorAll('input[name="payment_method"]');
             const paymentAmountInput = document.getElementById('payment_type_amount');
             const paymentCurrencyInput = document.getElementById('payment_type_currency_code');
             const paymentTypeHiddenInput = document.getElementById('payment_type_type');
@@ -195,14 +245,26 @@
 
             // Payment field sync
             function updatePaymentFields() {
-                const selected = paymentTypeSelect.options[paymentTypeSelect.selectedIndex];
-                paymentAmountInput.value = selected.dataset.amount;
-                paymentCurrencyInput.value = selected.dataset.currency;
-                paymentTypeHiddenInput.value = selected.dataset.type;
-                creditCardRequiredInput.value = selected.dataset.needCard === '1' ? '1' : '0';
+                const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
+                if (selectedRadio) {
+                    paymentAmountInput.value = selectedRadio.dataset.amount;
+                    paymentCurrencyInput.value = selectedRadio.dataset.currency;
+                    paymentTypeHiddenInput.value = selectedRadio.dataset.type;
+                    creditCardRequiredInput.value = selectedRadio.dataset.needCard === '1' ? '1' : '0';
+                    
+                    // Handle PCB Bank payment type
+                    if (selectedRadio.dataset.type === 'pcb_bank') {
+                        paymentTypeHiddenInput.value = 'now'; // Set the underlying type to 'now' for PCB
+                    }
+                }
             }
 
-            paymentTypeSelect.addEventListener('change', updatePaymentFields);
+            // Add event listeners to all radio buttons
+            paymentMethodRadios.forEach(radio => {
+                radio.addEventListener('change', updatePaymentFields);
+            });
+            
+            // Initialize with the first selected option
             updatePaymentFields();
 
             // Add guest dynamically

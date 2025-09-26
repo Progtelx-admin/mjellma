@@ -1582,7 +1582,10 @@ class HotelHController extends Controller
             'requires_card' => $requiresCard,
         ]);
 
-        if ($paymentType === 'now' && $requiresCard) {
+        // Check if PCB Bank payment is selected (from the dropdown)
+        $isPcbPayment = $request->input('payment_type.type') === 'pcb_bank';
+        
+        if (($paymentType === 'now' && $requiresCard) || $isPcbPayment) {
             // ✅ Generate token to store booking
             $token = Str::random(32);
             Cache::put("pending_booking_{$token}", $request->all(), now()->addMinutes(10));
