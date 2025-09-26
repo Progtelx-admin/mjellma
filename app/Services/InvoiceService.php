@@ -104,71 +104,229 @@ class InvoiceService
     <meta charset='UTF-8'>
     <title>Invoice {$invoice->invoice_number}</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .invoice-details { margin-bottom: 20px; }
-        .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .table th { background-color: #f2f2f2; }
-        .total { font-weight: bold; }
-        .footer { margin-top: 30px; font-size: 12px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 40px; 
+            border-bottom: 2px solid #eee;
+            padding-bottom: 20px;
+        }
+        .merchant-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .merchant-address {
+            color: #7f8c8d;
+            line-height: 1.6;
+        }
+        .order-details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        .order-details-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .order-details-table .label {
+            font-weight: bold;
+            width: 30%;
+        }
+        .products-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .products-table th,
+        .products-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .products-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .totals-table {
+            width: 50%;
+            margin-left: auto;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        .totals-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .totals-table .label {
+            font-weight: bold;
+        }
+        .totals-table .total-row {
+            font-weight: bold;
+            font-size: 16px;
+            background-color: #f8f9fa;
+        }
+        .payment-section {
+            margin-bottom: 30px;
+        }
+        .payment-section h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .payment-details {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .payment-details ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .addresses-section {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .address-column {
+            flex: 1;
+        }
+        .address-column h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .address-content {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .address-content p {
+            margin: 5px 0;
+            font-style: italic;
+            color: #555;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #7f8c8d;
+            text-align: center;
+        }
+        .footer a {
+            color: #3498db;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-    <div class='header'>
-        <h1>Merchant Name, Logo</h1>
-        <p>Address: xxx<br>10 000 Pristina, Kosovo<br>Website, email, phone</p>
-    </div>
+    <div class='invoice-container'>
+        <div class='header'>
+            <div class='merchant-name'>" . config('invoice.merchant.name') . "</div>
+            <div class='merchant-address'>
+                Address: " . config('invoice.merchant.address') . "<br>
+                " . config('invoice.merchant.city') . "<br>
+                Website: " . config('invoice.merchant.website') . " | Email: " . config('invoice.merchant.email') . " | Phone: " . config('invoice.merchant.phone') . "
+            </div>
+        </div>
 
-    <div class='invoice-details'>
-        <h2>Order Details:</h2>
-        <p><strong>Order ID:</strong> #{$invoice->gateway_order_id}</p>
-        <p><strong>Order Date:</strong> {$invoice->transaction_datetime}</p>
-        <p><strong>Invoice Number:</strong> {$invoice->invoice_number}</p>
-    </div>
-
-    <table class='table'>
-        <thead>
+        <table class='order-details-table'>
             <tr>
-                <th>Product</th>
-                <th>Quantity</th>
-                <th>Price</th>
+                <td class='label'>Order ID:</td>
+                <td>#{$invoice->gateway_order_id}</td>
             </tr>
-        </thead>
-        <tbody>
             <tr>
-                <td>{$bookingData['service_title']}</td>
-                <td>1</td>
-                <td>{$invoice->amount} €</td>
+                <td class='label'>Order Date:</td>
+                <td>" . date('d-m-Y H:i:s', strtotime($invoice->transaction_datetime)) . "</td>
             </tr>
-        </tbody>
-    </table>
+            <tr>
+                <td class='label'>Invoice Number:</td>
+                <td>{$invoice->invoice_number}</td>
+            </tr>
+        </table>
 
-    <div class='total'>
-        <p>Nëntotali: {$invoice->amount}€</p>
-        <p>Transporti: 0.00€ - Standard</p>
-        <p>Totali: {$invoice->amount}€</p>
-    </div>
+        <table class='products-table'>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{$bookingData['service_title']}</td>
+                    <td>1</td>
+                    <td>{$invoice->amount} €</td>
+                </tr>
+            </tbody>
+        </table>
 
-    <div class='payment-details'>
-        <h3>Payment Method: By Card</h3>
-        <p>• Approval Code: {$invoice->approval_code}</p>
-        <p>• Transaction date: {$invoice->transaction_datetime}</p>
-        <p>• Card: {$invoice->card_brand}, {$invoice->card_pan}</p>
-    </div>
+        <table class='totals-table'>
+            <tr>
+                <td class='label'>Nëntotali:</td>
+                <td>{$invoice->amount}€</td>
+            </tr>
+            <tr>
+                <td class='label'>Transporti:</td>
+                <td>0.00€ - Standard</td>
+            </tr>
+            <tr class='total-row'>
+                <td class='label'>Totali:</td>
+                <td>{$invoice->amount}€</td>
+            </tr>
+        </table>
 
-    <div class='billing-address'>
-        <h3>Billing Address:</h3>
-        <p>Card holder name: {$bookingData['first_name']} {$bookingData['last_name']}</p>
-        <p>Address: {$bookingData['address']}</p>
-        <p>Email: {$bookingData['email']}</p>
-        <p>Phone: {$bookingData['phone']}</p>
-    </div>
+        <div class='payment-section'>
+            <h3>Payment Method: By Card</h3>
+            <div class='payment-details'>
+                <ul>
+                    <li>Approval Code: {$invoice->approval_code}</li>
+                    <li>Transaction date: " . date('d-m-Y H:i:s', strtotime($invoice->transaction_datetime)) . "</li>
+                    <li>Card: {$invoice->card_brand}, {$invoice->card_pan}</li>
+                </ul>
+            </div>
+        </div>
 
-    <div class='footer'>
-        <p>No Refunds after 30 days, see our Return Policy.</p>
-        <p>email: xxx</p>
-        <p>Customer Service: +383 38 123 123</p>
+        <div class='addresses-section'>
+            <div class='address-column'>
+                <h3>Billing Address</h3>
+                <div class='address-content'>
+                    <p><strong>Card holder name:</strong> {$bookingData['first_name']} {$bookingData['last_name']}</p>
+                    <p><strong>Address:</strong> {$bookingData['address']}</p>
+                    <p><strong>Email:</strong> {$bookingData['email']}</p>
+                    <p><strong>Phone:</strong> {$bookingData['phone']}</p>
+                </div>
+            </div>
+            <div class='address-column'>
+                <h3>Shipping Address</h3>
+                <div class='address-content'>
+                    <p><strong>Client Name:</strong> {$bookingData['first_name']} {$bookingData['last_name']}</p>
+                    <p><strong>Address:</strong> {$bookingData['address']}</p>
+                    <p><strong>Email:</strong> {$bookingData['email']}</p>
+                    <p><strong>Phone:</strong> {$bookingData['phone']}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class='footer'>
+            <p>No Refunds after 30 days, see our <a href='#'>Return Policy</a>.</p>
+            <p>Email: " . config('invoice.merchant.email') . " | Customer Service: " . config('invoice.merchant.phone') . "</p>
+        </div>
     </div>
 </body>
 </html>";
@@ -191,9 +349,38 @@ class InvoiceService
                 $this->generatePdf($invoice);
             }
 
-            // Send email with PDF attachment
-            // You would implement your email sending logic here
-            // For example, using Laravel Mail with PDF attachment
+            // Send email with invoice attachment
+            $booking = $invoice->booking;
+            $invoiceHtml = $this->generateInvoiceHtml($invoice);
+            
+            // Create email content
+            $subject = config('invoice.email.subject_prefix') . " #{$invoice->invoice_number} - " . config('invoice.merchant.name');
+            $emailContent = "
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <h2 style='color: #2c3e50;'>Thank you for your booking!</h2>
+                    <p>Dear {$booking->first_name} {$booking->last_name},</p>
+                    <p>Your booking has been confirmed and payment processed successfully.</p>
+                    <p><strong>Invoice Number:</strong> {$invoice->invoice_number}</p>
+                    <p><strong>Amount:</strong> {$invoice->amount} {$invoice->currency}</p>
+                    <p><strong>Payment Method:</strong> {$invoice->card_brand} ending in " . substr($invoice->card_pan, -4) . "</p>
+                    <p>Please find your invoice attached below.</p>
+                    <hr style='margin: 20px 0;'>
+                    <p>If you have any questions, please contact us at:</p>
+                    <p>Email: " . config('invoice.merchant.email') . "<br>
+                    Phone: " . config('invoice.merchant.phone') . "</p>
+                    <p>Best regards,<br>" . config('invoice.merchant.name') . " Team</p>
+                </div>
+            ";
+            
+            // Send email using Laravel's Mail facade
+            \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($email, $subject, $emailContent, $invoiceHtml, $invoice) {
+                $message->to($email)
+                        ->subject($subject)
+                        ->html($emailContent)
+                        ->attachData($invoiceHtml, "invoice_{$invoice->invoice_number}.html", [
+                            'mime' => 'text/html'
+                        ]);
+            });
             
             $invoice->markAsSent();
             
