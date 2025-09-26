@@ -78,6 +78,12 @@ class PcbBankGateway extends BaseGateway
 
 
         $service = new PcbBankService();
+        
+        // Check if certificates are configured
+        if (!$service->isConfigured()) {
+            throw new \Exception(__('PCB Bank certificates are not configured. Please contact administrator.'));
+        }
+        
         $redirectUrl = route('gateway.confirm', ['gateway' => 'pcb_bank']) . '?c=' . $booking->code;
 
         $order = $service->createOrder($booking->pay_now, "Booking #{$booking->id}", $redirectUrl);
@@ -220,21 +226,58 @@ class PcbBankGateway extends BaseGateway
         $password = $payment->getMeta('pcb_order_password');
 
         $service = new \App\Services\PcbBankService();
+        
+        // Check if certificates are configured
+        if (!$service->isConfigured()) {
+            Log::error('❌ PCB Bank certificates not configured during payment confirmation');
+            $payment->status = 'fail';
+            $payment->logs = json_encode(['error' => 'Certificates not configured']);
+            $payment->save();
+            return redirect($booking->getDetailUrl(false))->with('error', __('Payment system configuration error.'));
+        }
+        
         $details = $service->getOrderDetails($orderId, $password);
 
-        $status = strtolower($details['status'] ?? '');
+        // Handle different status formats from PCB Bank
+        $status = $details['status'] ?? '';
+        $statusLower = strtolower($status);
 
-        if (in_array($status, ['success', 'fullypaid', 'paid'])) {
+        Log::info('🔍 PCB Bank order status check', [
+            'orderId' => $orderId,
+            'status' => $status,
+            'details' => $details
+        ]);
+
+        // Check for successful payment statuses
+        $successStatuses = config('pcb_bank.success_statuses');
+        
+        if (in_array($statusLower, $successStatuses)) {
             $booking->paid += (float) $booking->pay_now;
             $booking->markAsPaid();
 
             $payment->status = 'completed';
             $payment->logs = json_encode($details);
             $payment->save();
+
+            Log::info('✅ Payment completed successfully', [
+                'booking_id' => $booking->id,
+                'amount' => $booking->pay_now,
+                'status' => $status
+            ]);
         } else {
             $payment->status = 'fail';
-            $payment->logs = json_encode(['payment_failed' => true, 'details' => $details]);
+            $payment->logs = json_encode([
+                'payment_failed' => true, 
+                'status' => $status,
+                'details' => $details
+            ]);
             $payment->save();
+
+            Log::warning('❌ Payment failed', [
+                'booking_id' => $booking->id,
+                'status' => $status,
+                'details' => $details
+            ]);
         }
 
         return redirect($booking->getDetailUrl(false));
