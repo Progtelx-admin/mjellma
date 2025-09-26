@@ -1551,24 +1551,140 @@ class HotelHController extends Controller
                 ->withErrors(['error' => 'Session expired. Please try again.']);
         }
 
-        // 2. Mark that we do NOT want to send credit card details to RateHawk
+        // 2. Check if payment was successful
+        if (strtolower($status) !== 'fullypaid') {
+            \Log::error('PCB Bank payment was not successful', ['status' => $status]);
+            return redirect()->route('hotel.search')
+                ->withErrors(['error' => 'Payment was not successful.']);
+        }
+
+        // 3. Store PCB Bank order details in cache for later saving to MjellmaBooking
+        $pcbService = new \App\Services\PcbBankService();
+        $orderDetails = $pcbService->getOrderDetails($pcbOrder['id'], $pcbOrder['password']);
+        
+        if ($orderDetails) {
+            // Store PCB Bank response in cache to save later when MjellmaBooking is created
+            \Cache::put("pcb_response_{$bookingData['partner_order_id']}", $orderDetails, now()->addMinutes(30));
+            \Log::info('💾 PCB Bank response cached for later saving', [
+                'partner_order_id' => $bookingData['partner_order_id'],
+                'pcb_status' => $orderDetails['status'] ?? 'Unknown'
+            ]);
+        }
+
+        // 4. Create local Payment record and Invoice for successful PCB Bank payment
+        try {
+            $this->createPaymentRecordAndInvoice($bookingData, $pcbOrder, $orderId);
+        } catch (\Exception $e) {
+            \Log::warning('⚠️ Failed to create payment record and invoice', [
+                'error' => $e->getMessage(),
+                'booking_data' => $bookingData
+            ]);
+            // Continue with booking completion even if invoice creation fails
+        }
+
+        // 5. Mark that we do NOT want to send credit card details to RateHawk
         //    We simply treat it like "deposit" or "offline" in RateHawk terms
         $bookingData['payment_type']['type'] = 'deposit';
         $bookingData['payment_type']['is_need_credit_card_data'] = false;
 
-        // 3. Ensure phone is valid for RateHawk's validation (min length 5)
+        // 6. Ensure phone is valid for RateHawk's validation (min length 5)
         if (empty($bookingData['phone']) || strlen($bookingData['phone']) < 5) {
             $bookingData['phone'] = '+0000000000'; // fallback
         }
 
-        // 4. Optionally, store or override any needed user details to pass to RateHawk
+        // 7. Optionally, store or override any needed user details to pass to RateHawk
         $bookingData['first_name'] = $bookingData['first_name'] ?? 'Guest';
         $bookingData['last_name']  = $bookingData['last_name']  ?? 'User';
 
         \Log::info('Confirming booking after PCB as a deposit booking', ['payload' => $bookingData]);
 
-        // 5. Call finishBooking with the updated data
+        // 8. Call finishBooking with the updated data
         return app()->call([$this, 'finishBooking'], ['request' => new Request($bookingData)]);
+    }
+
+    /**
+     * Create local Payment record and Invoice for successful PCB Bank payment
+     */
+    private function createPaymentRecordAndInvoice($bookingData, $pcbOrder, $orderId)
+    {
+        // Get PCB Bank service to retrieve order details
+        $pcbService = new \App\Services\PcbBankService();
+        $orderDetails = $pcbService->getOrderDetails($pcbOrder['id'], $pcbOrder['password']);
+
+        if (!$orderDetails) {
+            throw new \Exception('Could not retrieve PCB Bank order details');
+        }
+
+        // Create a local booking record for invoice purposes
+        $booking = new \Modules\Booking\Models\Booking();
+        $booking->code = 'PCB-' . $orderId . '-' . time();
+        $booking->status = \Modules\Booking\Models\Booking::PAID;
+        $booking->first_name = $bookingData['first_name'] ?? 'Guest';
+        $booking->last_name = $bookingData['last_name'] ?? 'User';
+        $booking->email = $bookingData['email'] ?? 'customer@example.com';
+        $booking->phone = $bookingData['phone'] ?? '+0000000000';
+        $booking->pay_now = $bookingData['payment_type']['amount'] ?? 0;
+        $booking->paid = $bookingData['payment_type']['amount'] ?? 0;
+        $booking->save();
+
+        // Create payment record
+        $payment = new \Modules\Booking\Models\Payment();
+        $payment->booking_id = $booking->id;
+        $payment->payment_gateway = 'pcb_bank';
+        $payment->status = 'completed';
+        $payment->amount = $bookingData['payment_type']['amount'] ?? 0;
+        
+        // Store comprehensive payment data for invoice generation
+        // Structure the data to match what PcbBankGateway::getInvoiceData expects
+        $invoiceData = [
+            'pcb_gateway_response' => $orderDetails,
+            'pcb_order_id' => $orderId,
+            'pcb_type_rid' => $orderDetails['typeRid'] ?? null,
+            'pcb_status' => $orderDetails['status'] ?? null,
+            'pcb_create_time' => $orderDetails['createTime'] ?? null,
+            'pcb_last_status_login' => $orderDetails['lastStatusLogin'] ?? null,
+            'pcb_transaction_id' => $orderDetails['trans'][0]['actionId'] ?? null,
+            'pcb_approval_code' => $orderDetails['trans'][0]['approvalCode'] ?? null,
+            'pcb_rid_by_pmo' => $orderDetails['trans'][0]['ridByPmo'] ?? null,
+            'pcb_approved_partial' => $orderDetails['trans'][0]['approvedPartial'] ?? false,
+            'pcb_payment_method' => $orderDetails['srcToken']['paymentMethod'] ?? 'Card',
+            'pcb_card_last4' => substr($orderDetails['srcToken']['displayName'] ?? '', -4),
+            'pcb_card_pan' => 'XXXXXXXXXXXX' . substr($orderDetails['srcToken']['displayName'] ?? '', -4),
+            'pcb_card_brand' => $orderDetails['srcToken']['card']['brand'] ?? 'Visa',
+            'pcb_cvv2_auth_status' => $orderDetails['srcToken']['card']['authentication']['needCvv2'] ?? false,
+            'pcb_amount_eur' => number_format($bookingData['payment_type']['amount'] ?? 0, 2),
+            'pcb_amount_cents' => ($bookingData['payment_type']['amount'] ?? 0) * 100,
+            'pcb_currency' => $bookingData['payment_type']['currency_code'] ?? 'EUR',
+            'pcb_currency_code' => '978',
+            'pcb_transaction_datetime' => $orderDetails['createTime'] ?? now()->toDateTimeString(),
+            'pcb_order_type_title' => $orderDetails['type']['title'] ?? null,
+            'pcb_allow_void' => false,
+            'pcb_allow_cvv2' => $orderDetails['srcToken']['card']['authentication']['needCvv2'] ?? false,
+            'pcb_payment_time' => $orderDetails['createTime'] ?? now()->toDateTimeString(),
+            'pcb_processor_response' => 'Approved',
+        ];
+
+        $payment->logs = json_encode($invoiceData);
+        $payment->save();
+
+        // Create invoice using InvoiceService
+        $invoiceService = new \App\Services\InvoiceService();
+        $invoice = $invoiceService->createInvoice($payment);
+        
+        // Generate PDF
+        $invoiceService->generatePdf($invoice);
+        
+        // Send invoice via email
+        $invoiceService->sendInvoice($invoice);
+        
+        \Log::info('📄 Invoice created and sent for PCB Bank payment', [
+            'invoice_id' => $invoice->id,
+            'invoice_number' => $invoice->invoice_number,
+            'booking_id' => $booking->id,
+            'pcb_order_id' => $orderId
+        ]);
+
+        return $invoice;
     }
 
 
@@ -2095,16 +2211,31 @@ class HotelHController extends Controller
         // subsequent calls to finishBooking() will continue polling rather
         // than assuming success prematurely.
         if ($status === 'ok' || $status === 'processing') {
+            // Get cached PCB Bank response if available
+            $pcbResponse = \Cache::get("pcb_response_{$partnerOrderId}");
+            
+            $bookingData = [
+                'order_id'       => $payload['order_id'],
+                'payment_type'   => $payload['payment_type']['type'],
+                'payment_amount' => $payload['payment_type']['amount'],
+                'currency_code'  => $payload['payment_type']['currency_code'],
+                // Always store "processing" here so later calls know to poll
+                'api_status'     => 'processing',
+            ];
+            
+            // Add PCB Bank response if available
+            if ($pcbResponse) {
+                $bookingData['pcb_bank_response'] = $pcbResponse;
+                $bookingData['pcb_status'] = $pcbResponse['status'] ?? 'Unknown';
+                \Log::info('💾 PCB Bank response saved to MjellmaBooking', [
+                    'partner_order_id' => $partnerOrderId,
+                    'pcb_status' => $pcbResponse['status'] ?? 'Unknown'
+                ]);
+            }
+            
             MjellmaBooking::updateOrCreate(
                 ['partner_order_id' => $partnerOrderId],
-                [
-                    'order_id'       => $payload['order_id'],
-                    'payment_type'   => $payload['payment_type']['type'],
-                    'payment_amount' => $payload['payment_type']['amount'],
-                    'currency_code'  => $payload['payment_type']['currency_code'],
-                    // Always store "processing" here so later calls know to poll
-                    'api_status'     => 'processing',
-                ]
+                $bookingData
             );
         }
 

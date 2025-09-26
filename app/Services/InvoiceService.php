@@ -92,7 +92,7 @@ class InvoiceService
             'email' => $booking->email ?? 'customer@example.com',
             'phone' => $booking->phone ?? 'N/A',
             'address' => $booking->address ?? 'N/A',
-            'service_title' => $booking->service_title ?? 'Service'
+            'service_title' => 'Hotel Booking - Order #' . ($booking->code ?? 'Unknown')
         ];
         
         $invoiceData = $invoice->invoice_data;
