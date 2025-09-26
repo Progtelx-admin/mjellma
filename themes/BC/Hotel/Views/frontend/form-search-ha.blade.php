@@ -171,7 +171,7 @@
 
     <!-- About Us -->
     <div id="about-us" class="section-about py-5">
-        <div class="text-center">12
+        <div class="text-center">
             <h2 class="section-title mb-4">About Us</h2>
 
             <div class="shadow p-3 mb-5 bg-body">
