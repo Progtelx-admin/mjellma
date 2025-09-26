@@ -25,7 +25,7 @@
                             <th>Slug</th>
                             <th style="width:120px">Active</th>
                             <th style="width:100px">Order</th>
-                            <th class="text-end" style="width:280px">Actions</th>
+                            <th class="text-end" style="width:320px">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -41,33 +41,23 @@
                                     {{-- Cards list --}}
                                     @if (Route::has('offers.admin.cards.index.by_section'))
                                         <a href="{{ route('offers.admin.cards.index.by_section', ['section_id' => $s->id]) }}"
-                                            class="btn btn-sm btn-primary">
-                                            Cards
-                                        </a>
+                                            class="btn btn-sm btn-primary">Cards</a>
                                     @else
                                         <a href="{{ route('offers.admin.cards.index', ['section_id' => $s->id]) }}"
-                                            class="btn btn-sm btn-primary">
-                                            Cards
-                                        </a>
+                                            class="btn btn-sm btn-primary">Cards</a>
                                     @endif
 
                                     {{-- New card --}}
                                     @if (Route::has('offers.admin.cards.create.by_section'))
                                         <a href="{{ route('offers.admin.cards.create.by_section', ['section_id' => $s->id]) }}"
-                                            class="btn btn-sm btn-success">
-                                            New Card
-                                        </a>
+                                            class="btn btn-sm btn-success">New Card</a>
                                     @else
                                         <a href="{{ route('offers.admin.cards.create', ['section_id' => $s->id]) }}"
-                                            class="btn btn-sm btn-success">
-                                            New Card
-                                        </a>
+                                            class="btn btn-sm btn-success">New Card</a>
                                     @endif
 
                                     <a href="{{ route('offers.admin.sections.edit', $s->id) }}"
-                                        class="btn btn-sm btn-outline-primary">
-                                        Edit
-                                    </a>
+                                        class="btn btn-sm btn-outline-primary">Edit</a>
 
                                     <form action="{{ route('offers.admin.sections.destroy', $s->id) }}" method="POST"
                                         class="d-inline" onsubmit="return confirm('Delete this section?');">

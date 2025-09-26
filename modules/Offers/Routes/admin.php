@@ -16,11 +16,11 @@ Route::delete('/delete/{id}', 'OfferSectionController@destroy')->name('offers.ad
  * Cards (query-param style)  -> /admin/module/offers/cards?section_id=1
  */
 Route::prefix('cards')->group(function () {
-    Route::get('/',                'OfferCardController@index')->name('offers.admin.cards.index');        // ?section_id=
-    Route::get('/create',          'OfferCardController@create')->name('offers.admin.cards.create');      // ?section_id=
-    Route::get('/edit/{card}',     'OfferCardController@edit')->name('offers.admin.cards.edit');
-    Route::post('/store/{id?}',    'OfferCardController@store')->name('offers.admin.cards.store');
-    Route::delete('/delete/{card}','OfferCardController@destroy')->name('offers.admin.cards.destroy');
+    Route::get('/',                    'OfferCardController@index')->name('offers.admin.cards.index');   // ?section_id=
+    Route::get('/create',              'OfferCardController@create')->name('offers.admin.cards.create'); // ?section_id=
+    Route::get('/edit/{card}',         'OfferCardController@edit')->name('offers.admin.cards.edit');     // implicit model
+    Route::post('/store/{id?}',        'OfferCardController@store')->name('offers.admin.cards.store');   // create & update
+    Route::delete('/delete/{card}',    'OfferCardController@destroy')->name('offers.admin.cards.destroy'); // implicit model
 });
 
 /**

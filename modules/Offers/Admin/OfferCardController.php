@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Route;
 use Modules\Offers\Models\OfferCard;
 use Modules\Offers\Models\OfferSection;
 
@@ -13,7 +14,7 @@ class OfferCardController extends Controller
 {
     public function index(Request $request, $section_id = null)
     {
-        // accept either /cards?section_id=1 or /card/1/index
+        // Accept either: /cards?section_id=1  OR  /card/1/index
         $sectionId = $section_id ?? (int) $request->query('section_id');
         $section   = OfferSection::findOrFail($sectionId);
 
@@ -33,18 +34,26 @@ class OfferCardController extends Controller
         return view('offers::admin.cards.form', compact('section','card'));
     }
 
-    public function edit(OfferCard $card)
+    /**
+     * Accepts either an ID or an implicitly-bound OfferCard (prevents 500s).
+     */
+    public function edit($card)
     {
+        $card = $card instanceof OfferCard ? $card : OfferCard::findOrFail($card);
         $section = $card->section;
+
         return view('offers::admin.cards.form', compact('section','card'));
     }
 
+    /**
+     * Unified create/update via POST /store or POST /store/{id}
+     */
     public function store(Request $request, $id = null)
     {
         $rules = [
             'offer_section_id' => 'required|exists:offer_sections,id',
             'title'            => 'nullable|string|max:255',
-            'link'             => 'nullable|string|max:2000',
+            'link'             => 'nullable|string|max:2000', // allow #anchors too
             'image'            => 'nullable|image|max:4096',
             'sort_order'       => 'nullable|integer|min:0',
             'show_caption'     => 'nullable|boolean',
@@ -61,16 +70,20 @@ class OfferCardController extends Controller
         $card->show_caption     = $request->boolean('show_caption');
         $card->is_active        = $request->boolean('is_active', true);
 
-        // save into /public/uploads/offer-cards (as you already implemented)
+        // Save image into /public/uploads/offer-cards
         if ($request->hasFile('image')) {
             $dir = 'uploads/offer-cards';
             $abs = public_path($dir);
-            if (!is_dir($abs)) @mkdir($abs, 0775, true);
+            if (!is_dir($abs)) {
+                @mkdir($abs, 0775, true);
+            }
 
+            // delete previous local upload
             if ($card->exists && $card->image_path && str_starts_with($card->image_path, 'uploads/')) {
                 $old = public_path($card->image_path);
                 if (is_file($old)) @unlink($old);
             }
+            // delete legacy file on public disk if any
             if ($card->exists && $card->image_path && Storage::disk('public')->exists($card->image_path)) {
                 @Storage::disk('public')->delete($card->image_path);
             }
@@ -79,32 +92,56 @@ class OfferCardController extends Controller
             $name = Str::random(40).'.'.$file->getClientOriginalExtension();
             $file->move($abs, $name);
 
-            $card->image_path = $dir.'/'.$name;
+            $card->image_path = $dir.'/'.$name; // e.g. uploads/offer-cards/xxx.png
         }
 
         $card->save();
 
-        // Redirect to the path-param version so URLs look like /card/{section_id}/index
-        return redirect()
-            ->route('offers.admin.cards.index.by_section', ['section_id' => $card->offer_section_id])
+        return $this->redirectToSectionCards($card->offer_section_id)
             ->with('success', $id ? __('Card updated') : __('Card created'));
     }
 
+    /**
+     * Delete a card and its local image (uploads or legacy storage),
+     * then redirect to the section's cards list (path-param if available).
+     */
     public function destroy(OfferCard $card)
     {
-        if ($card->image_path && str_starts_with($card->image_path, 'uploads/')) {
-            $fp = public_path($card->image_path);
-            if (is_file($fp)) @unlink($fp);
-        }
-        if ($card->image_path && Storage::disk('public')->exists($card->image_path)) {
-            @Storage::disk('public')->delete($card->image_path);
+        $sectionId = $card->offer_section_id;
+        $path      = $card->image_path;
+
+        if ($path && !filter_var($path, FILTER_VALIDATE_URL)) {
+            // local upload under /public/uploads/...
+            if (str_starts_with($path, 'uploads/')) {
+                $abs = public_path($path);
+                if (is_file($abs)) {
+                    try { @unlink($abs); } catch (\Throwable $e) { /* ignore */ }
+                }
+            }
+            // legacy on 'public' disk
+            if (Storage::disk('public')->exists($path)) {
+                try { Storage::disk('public')->delete($path); } catch (\Throwable $e) { /* ignore */ }
+            }
         }
 
-        $sectionId = $card->offer_section_id;
         $card->delete();
 
-        return redirect()
-            ->route('offers.admin.cards.index.by_section', ['section_id' => $sectionId])
+        return $this->redirectToSectionCards($sectionId)
             ->with('success', __('Card deleted'));
+    }
+
+    /**
+     * Prefer path-param route (/card/{section_id}/index), else query-param route (/cards?section_id=1),
+     * else fallback to sections index.
+     */
+    protected function redirectToSectionCards(int $sectionId)
+    {
+        if (Route::has('offers.admin.cards.index.by_section')) {
+            return redirect()->route('offers.admin.cards.index.by_section', ['section_id' => $sectionId]);
+        }
+        if (Route::has('offers.admin.cards.index')) {
+            return redirect()->route('offers.admin.cards.index', ['section_id' => $sectionId]);
+        }
+        return redirect()->route('offers.admin.sections.index');
     }
 }
