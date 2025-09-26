@@ -175,6 +175,17 @@
                                 </div>
                                 <p>Amount: {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}</p>
                                 <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to enter your card information.</p>
+                                
+                                <!-- Terms and Conditions Checkbox -->
+                                <div class="mt-3">
+                                    <label style="display: flex; align-items: center; cursor: pointer;">
+                                        <input type="checkbox" id="pcb_terms_checkbox" style="margin-right: 8px;">
+                                        I have read and accept the <a href="#" data-toggle="modal" data-target="#termsModal" style="color: #007bff; text-decoration: underline; margin-left: 4px;">terms and conditions</a>
+                                    </label>
+                                    <div class="invalid-feedback" style="display: none; margin-top: 0.25rem;">
+                                        You must accept the terms and conditions to proceed with PCB Bank payment.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -192,6 +203,37 @@
             </button>
 
         </form>
+    </div>
+
+    <!-- Terms and Conditions Modal -->
+    <div class="modal fade" id="termsModal" tabindex="-1" role="dialog" aria-labelledby="termsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="termsModalLabel">Terms and Conditions</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <h6>Payment Terms and Conditions</h6>
+                    <p>By proceeding with PCB Bank payment, you agree to the following terms:</p>
+                    <ul>
+                        <li>Payment will be processed securely through PCB Bank gateway</li>
+                        <li>All transactions are encrypted and secure</li>
+                        <li>Refunds are subject to our cancellation policy</li>
+                        <li>You are responsible for providing accurate payment information</li>
+                        <li>Failed payments may result in booking cancellation</li>
+                    </ul>
+                    <h6>Privacy Policy</h6>
+                    <p>Your payment information is processed securely and is not stored on our servers. PCB Bank handles all payment processing according to their security standards.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="acceptTerms()">I Accept</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -246,6 +288,9 @@
             // Payment field sync
             function updatePaymentFields() {
                 const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
+                const finishButton = document.querySelector('button[type="submit"]');
+                const termsCheckbox = document.getElementById('pcb_terms_checkbox');
+                
                 if (selectedRadio) {
                     paymentAmountInput.value = selectedRadio.dataset.amount;
                     paymentCurrencyInput.value = selectedRadio.dataset.currency;
@@ -255,6 +300,22 @@
                     // Handle PCB Bank payment type
                     if (selectedRadio.dataset.type === 'pcb_bank') {
                         paymentTypeHiddenInput.value = 'now'; // Set the underlying type to 'now' for PCB
+                        
+                        // Disable finish button if PCB Bank is selected but terms not accepted
+                        if (!termsCheckbox.checked) {
+                            finishButton.disabled = true;
+                            finishButton.style.opacity = '0.5';
+                            finishButton.style.cursor = 'not-allowed';
+                        } else {
+                            finishButton.disabled = false;
+                            finishButton.style.opacity = '1';
+                            finishButton.style.cursor = 'pointer';
+                        }
+                    } else {
+                        // Enable finish button for other payment methods
+                        finishButton.disabled = false;
+                        finishButton.style.opacity = '1';
+                        finishButton.style.cursor = 'pointer';
                     }
                 }
             }
@@ -264,8 +325,41 @@
                 radio.addEventListener('change', updatePaymentFields);
             });
             
+            // Add event listener for terms checkbox
+            const termsCheckbox = document.getElementById('pcb_terms_checkbox');
+            if (termsCheckbox) {
+                termsCheckbox.addEventListener('change', updatePaymentFields);
+            }
+            
             // Initialize with the first selected option
             updatePaymentFields();
+
+            // Form submission validation
+            const bookingForm = document.getElementById('bookingForm');
+            bookingForm.addEventListener('submit', function(e) {
+                const selectedPayment = document.querySelector('input[name="payment_method"]:checked');
+                const termsCheckbox = document.getElementById('pcb_terms_checkbox');
+                
+                // Check if PCB Bank is selected
+                if (selectedPayment && selectedPayment.dataset.type === 'pcb_bank') {
+                    // Check if terms are accepted
+                    if (!termsCheckbox.checked) {
+                        e.preventDefault();
+                        termsCheckbox.classList.add('is-invalid');
+                        termsCheckbox.focus();
+                        
+                        // Show error message
+                        const invalidFeedback = termsCheckbox.parentNode.nextElementSibling;
+                        invalidFeedback.style.display = 'block';
+                        
+                        return false;
+                    } else {
+                        termsCheckbox.classList.remove('is-invalid');
+                        const invalidFeedback = termsCheckbox.parentNode.nextElementSibling;
+                        invalidFeedback.style.display = 'none';
+                    }
+                }
+            });
 
             // Add guest dynamically
             let guestIndex = 1;
@@ -288,5 +382,17 @@
                 guestIndex++;
             });
         });
+
+        // Function to accept terms from modal
+        function acceptTerms() {
+            const termsCheckbox = document.getElementById('pcb_terms_checkbox');
+            termsCheckbox.checked = true;
+            termsCheckbox.classList.remove('is-invalid');
+            const invalidFeedback = termsCheckbox.parentNode.nextElementSibling;
+            invalidFeedback.style.display = 'none';
+            
+            // Update payment fields to enable the button
+            updatePaymentFields();
+        }
     </script>
 @endsection
