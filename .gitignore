@@ -38,6 +38,3 @@ storage/framework/cache/data
 /storage/framework/cache
 /storage/framework/cache
 /storage/framework
-storage/certs/ca.pem
-storage/certs/cert.pem
-storage/certs/key.pem
