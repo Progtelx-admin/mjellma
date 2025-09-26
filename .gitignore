@@ -36,5 +36,8 @@ storage/framework/cache/data
 /storage/framework/views
 /storage/logs
 /storage/framework/cache
+/storage/framework/cache
 /storage/framework
-/storage/certs
+storage/certs/ca.pem
+storage/certs/cert.pem
+storage/certs/key.pem
