@@ -167,7 +167,12 @@
         </div>
     </div>
 
-    @include('offers::public.index', ['anchor' => '#hotel-search-form', 'cols' => 3, 'limit' => 0])
+    @include('offers::public.index', [
+        'anchor' => '#hotel-search-form',
+        'cols' => 3,
+        'limit' => 0,
+        'only_first' => true,
+    ])
 
     <!-- About Us -->
     <div id="about-us" class="section-about py-5">
