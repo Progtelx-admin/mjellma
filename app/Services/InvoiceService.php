@@ -64,7 +64,7 @@ class InvoiceService
         // For now, we'll create a simple HTML file
         // In production, you'd use a PDF library like DomPDF or TCPDF
         $htmlPath = "invoices/{$invoice->invoice_number}.html";
-        Storage::put($htmlPath, $html);
+        Storage::disk('local')->put($htmlPath, $html);
         
         // Store PDF path (in production, this would be the actual PDF)
         if ($invoice->exists) {
@@ -84,14 +84,15 @@ class InvoiceService
      */
     private function generateInvoiceHtml(Invoice $invoice): string
     {
-        // Get booking data from invoice_data if booking relationship is not available
-        $bookingData = $invoice->invoice_data['booking'] ?? [
-            'first_name' => 'Customer',
-            'last_name' => 'Name',
-            'email' => 'customer@example.com',
-            'phone' => 'N/A',
-            'address' => 'N/A',
-            'service_title' => 'Service'
+        // Get actual booking data
+        $booking = $invoice->booking;
+        $bookingData = [
+            'first_name' => $booking->first_name ?? 'Customer',
+            'last_name' => $booking->last_name ?? 'Name',
+            'email' => $booking->email ?? 'customer@example.com',
+            'phone' => $booking->phone ?? 'N/A',
+            'address' => $booking->address ?? 'N/A',
+            'service_title' => $booking->service_title ?? 'Service'
         ];
         
         $invoiceData = $invoice->invoice_data;

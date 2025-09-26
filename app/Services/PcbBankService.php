@@ -105,8 +105,14 @@ class PcbBankService
         $response = $this->makeAuthenticatedRequest('GET', $url);
 
         if ($response && $response->successful()) {
-            Log::info('✅ PCB getOrderDetails success', ['response' => $response->json()]);
-            return $response->json('order');
+            $responseData = $response->json('order');
+            Log::info('✅ PCB getOrderDetails success', ['response' => $responseData]);
+            
+            // Extract invoice data from response
+            $invoiceData = $this->extractInvoiceData($responseData);
+            
+            // Merge invoice data with original response
+            return array_merge($responseData, ['invoice_data' => $invoiceData]);
         }
 
         Log::error('❌ PCB getOrderDetails failed', [
@@ -116,6 +122,61 @@ class PcbBankService
         ]);
 
         return null;
+    }
+
+    /**
+     * Extract invoice data from PCB Bank response
+     *
+     * @param array $responseData
+     * @return array
+     */
+    private function extractInvoiceData($responseData)
+    {
+        $invoiceData = [];
+        
+        // Extract approval code (from XML response if available)
+        if (isset($responseData['approvalCode'])) {
+            $invoiceData['approval_code'] = $responseData['approvalCode'];
+        }
+        
+        // Extract transaction date/time
+        if (isset($responseData['createTime'])) {
+            $invoiceData['transaction_datetime'] = $responseData['createTime'];
+        }
+        
+        // Extract card information
+        if (isset($responseData['cardLast4'])) {
+            $invoiceData['card_last4'] = $responseData['cardLast4'];
+            $invoiceData['card_pan'] = 'XXXXXXXXXXXX' . $responseData['cardLast4'];
+        }
+        
+        // Extract card brand
+        if (isset($responseData['cardType'])) {
+            $invoiceData['card_brand'] = strtoupper($responseData['cardType']);
+        }
+        
+        // Extract amount (convert from cents to EUR)
+        if (isset($responseData['amount'])) {
+            $amount = $responseData['amount'];
+            // If amount is in cents (like 500 for 5.00 EUR), convert it
+            if ($amount > 100) {
+                $invoiceData['amount_cents'] = $amount;
+                $invoiceData['amount_eur'] = number_format($amount / 100, 2);
+            } else {
+                $invoiceData['amount_eur'] = number_format($amount, 2);
+                $invoiceData['amount_cents'] = $amount * 100;
+            }
+        }
+        
+        // Currency is always EUR
+        $invoiceData['currency'] = 'EUR';
+        $invoiceData['currency_code'] = '978';
+        
+        // Order information
+        $invoiceData['order_id'] = $responseData['id'] ?? null;
+        $invoiceData['status'] = $responseData['status'] ?? null;
+        
+        return $invoiceData;
     }
 
     /**
