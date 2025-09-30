@@ -6,13 +6,19 @@
         data-bs-ride="carousel" data-bs-interval="4000">
         <div class="carousel-inner w-100 h-100">
             <div class="carousel-item active"
-                style="background-image: url('https://images.bubbleup.com/width1920/quality35/mville2017/1-brand/1-margaritaville.com/gallery-media/220803-compasshotel-medford-pool-73868-1677873697-78625-1694019828.jpg');">
+                style="background-image: url('/storage/slider/CHICAGO.jpg');">
             </div>
             <div class="carousel-item"
-                style="background-image: url('https://digital.ihg.com/is/image/ihg/ihgor-member-rate-web-offers-1440x720');">
+                style="background-image: url('/storage/slider/LONDRA.jpg');">
             </div>
             <div class="carousel-item"
-                style="background-image: url('https://hoteldel.com/wp-content/uploads/2021/01/hotel-del-coronado-views-suite-K1TOS1-K1TOJ1-1600x900-1.jpg');">
+                style="background-image: url('/storage/slider/ROMA.jpg');">
+            </div>
+            <div class="carousel-item"
+                style="background-image: url('/storage/slider/STAMBOLLI.jpg');">
+            </div>
+            <div class="carousel-item"
+                style="background-image: url('/storage/slider/VIENA.jpg');">
             </div>
         </div>
 
@@ -21,6 +27,8 @@
                 aria-current="true" aria-label="Slide 1"></button>
             <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="1" aria-label="Slide 2"></button>
             <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="2" aria-label="Slide 3"></button>
+            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="3" aria-label="Slide 4"></button>
+            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="4" aria-label="Slide 5"></button>
         </div>
 
         <div class="w-75 position-absolute" style="z-index: 1">
