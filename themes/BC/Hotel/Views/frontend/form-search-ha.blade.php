@@ -19,8 +19,8 @@
 
 
         <div class="carousel-indicators">
-            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active"
-                aria-current="true" aria-label="Slide 1"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active" aria-current="true"
+                aria-label="Slide 1"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="1" aria-label="Slide 2"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="2" aria-label="Slide 3"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="3" aria-label="Slide 4"></button>
@@ -239,6 +239,14 @@
             </div>
         </div>
     </div>
+
+    @include('offers::public.index', [
+        'anchor' => '#hotel-search-form',
+        'cols' => 3,
+        'limit' => 0,
+        'only_first' => true,
+    ])
+
     {{--
     @include('offers::widgets.async-section', [
         'slug' => 'amazing-holiday-deals',
