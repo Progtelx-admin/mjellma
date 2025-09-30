@@ -171,6 +171,7 @@
         </div>
     </div>
 
+    <!-- First Offer Section (before About Us) -->
     @include('offers::public.index', [
         'anchor' => '#hotel-search-form',
         'cols' => 3,
@@ -240,27 +241,27 @@
         </div>
     </div>
 
-    @include('offers::public.index', [
-        'anchor' => '#hotel-search-form',
-        'cols' => 3,
-        'limit' => 0,
-        'only_first' => true,
-    ])
-
-    {{--
-    @include('offers::widgets.async-section', [
-        'slug' => 'amazing-holiday-deals',
-        'heading' => 'Amazing Holiday Deals',
-        'anchor' => '#hotel-search-form',
-        'cols' => 3,
-    ])
-
-    @include('offers::widgets.async-section', [
-        'slug' => 'rent-a-car',
-        'heading' => 'Rent a Car for Your Trip',
-        'anchor' => '#hotel-search-form',
-        'cols' => 3,
-    ]) --}}
+    <!-- Remaining Offer Sections (after About Us) -->
+    @php
+        use Modules\Offers\Models\OfferSection;
+        $allSections = OfferSection::active()
+            ->orderBy('sort_order')
+            ->with(['cards' => fn($q) => $q->active()->orderBy('sort_order')])
+            ->get();
+        
+        // Remove the first section (already shown above)
+        $remainingSections = $allSections->slice(1);
+    @endphp
+    
+    @foreach ($remainingSections as $section)
+        @include('offers::front.section', [
+            'section' => $section,
+            'heading' => $section->title,
+            'anchor' => '#hotel-search-form',
+            'cols' => 3,
+            'limit' => 0,
+        ])
+    @endforeach
 
     <!-- Bootstrap 4.6 (includes Popper) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
