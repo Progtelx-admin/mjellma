@@ -180,11 +180,80 @@
                                 <div class="mt-3">
                                     <label style="display: flex; align-items: center; cursor: pointer;">
                                         <input type="checkbox" id="pcb_terms_checkbox" style="margin-right: 8px;">
-                                        I have read and accept the <a href="#" data-toggle="modal" data-target="#termsModal" style="color: #007bff; text-decoration: underline; margin-left: 4px;">terms and conditions</a>
+                                        I have read and accept the <a href="#" onclick="toggleTermsDiv(); return false;" style="color: #F27625; text-decoration: underline; margin-left: 4px;">terms and conditions</a>
                                     </label>
                                     <div class="invalid-feedback" style="display: none; margin-top: 0.25rem;">
                                         You must accept the terms and conditions to proceed with PCB Bank payment.
                                     </div>
+                                </div>
+
+                                <!-- Hidden Terms and Conditions Div -->
+                                <div id="terms-div" style="display: none; margin-top: 15px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+                                    <h5 style="color: #F27625; margin-bottom: 15px;">Terms and Conditions</h5>
+                                    <p><strong>Welcome to Rezervo24!</strong></p>
+                                    <p>By using this website and/or making a reservation through our platform, you agree to the following terms and conditions. Please read them carefully before proceeding.</p>
+                                    
+                                    <h6>1. Use of the Platform</h6>
+                                    <ul>
+                                        <li>Rezervo24 is an online platform that facilitates hotel and accommodation bookings.</li>
+                                        <li>We do not own or operate the listed properties and are not directly responsible for their management. We simply display the information and booking conditions provided by the hotels.</li>
+                                    </ul>
+                                    
+                                    <h6>2. Reservations</h6>
+                                    <ul>
+                                        <li>All reservations made through Rezervo24 are in real-time and are considered valid only after confirmation is received via email or your user account.</li>
+                                        <li>Users are responsible for providing accurate and complete information during the booking process.</li>
+                                    </ul>
+                                    
+                                    <h6>3. Payments</h6>
+                                    <ul>
+                                        <li>Payments can be made securely through the online payment methods we offer.</li>
+                                        <li>All prices are displayed transparently and include applicable taxes unless otherwise stated.</li>
+                                    </ul>
+                                    
+                                    <h6>4. Cancellation Policy</h6>
+                                    <p>Before completing a booking, users must read and agree to the cancellation policy, which may vary depending on the selected hotel. The full cancellation policy is outlined below in this document and also displayed during the booking process on each hotel's page.</p>
+                                    
+                                    <h6>5. Hotel-Initiated Changes or Cancellations</h6>
+                                    <p>In exceptional cases, the hotel may modify or cancel a reservation. We will do our best to assist you in finding an appropriate alternative or to provide a full refund, depending on the situation.</p>
+                                    
+                                    <h6>6. Privacy</h6>
+                                    <p>Your personal data will be handled in accordance with our Privacy Policy, in compliance with data protection regulations.</p>
+                                    
+                                    <h6>7. Dispute Resolution</h6>
+                                    <p>Any disputes will be resolved in accordance with the applicable laws of the Republic of Albania / Republic of Kosovo (depending on the company's legal base).</p>
+                                    
+                                    <hr style="margin: 20px 0;">
+                                    
+                                    <h5 style="color: #F27625; margin-bottom: 15px;">Cancellation Policy</h5>
+                                    <p>The cancellation policy depends on each specific hotel and is clearly outlined during the booking process. However, the following general rules may apply:</p>
+                                    
+                                    <h6>1. Free Cancellation</h6>
+                                    <ul>
+                                        <li>Some hotels offer free cancellation up to a certain deadline (e.g., 24 to 72 hours before the check-in date).</li>
+                                        <li>If you cancel within this period, you will not be charged and any payments will be fully refunded.</li>
+                                    </ul>
+                                    
+                                    <h6>2. Cancellation Fee</h6>
+                                    <ul>
+                                        <li>If you cancel after the free cancellation period, a fee may apply—usually equivalent to the price of one night or more, depending on the hotel's individual policy.</li>
+                                    </ul>
+                                    
+                                    <h6>3. No-Show</h6>
+                                    <ul>
+                                        <li>If you fail to check in without prior cancellation (no-show), you may be charged the full reservation amount.</li>
+                                    </ul>
+                                    
+                                    <h6>4. Booking Modifications</h6>
+                                    <ul>
+                                        <li>Changes to booking dates, guest numbers, or room types are subject to availability and may involve a price adjustment or additional fees.</li>
+                                    </ul>
+                                    
+                                    <h6>5. Cancellation Process</h6>
+                                    <ul>
+                                        <li>Cancellations can be made directly from your account on Rezervo24 or by contacting our customer support team.</li>
+                                        <li>If eligible, refunds will be processed within 5–10 business days.</li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
@@ -205,36 +274,6 @@
         </form>
     </div>
 
-    <!-- Terms and Conditions Modal -->
-    <div class="modal fade" id="termsModal" tabindex="-1" role="dialog" aria-labelledby="termsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="termsModalLabel">Terms and Conditions</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <h6>Payment Terms and Conditions</h6>
-                    <p>By proceeding with PCB Bank payment, you agree to the following terms:</p>
-                    <ul>
-                        <li>Payment will be processed securely through PCB Bank gateway</li>
-                        <li>All transactions are encrypted and secure</li>
-                        <li>Refunds are subject to our cancellation policy</li>
-                        <li>You are responsible for providing accurate payment information</li>
-                        <li>Failed payments may result in booking cancellation</li>
-                    </ul>
-                    <h6>Privacy Policy</h6>
-                    <p>Your payment information is processed securely and is not stored on our servers. PCB Bank handles all payment processing according to their security standards.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="acceptTerms()">I Accept</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Scripts -->
     <script>
@@ -383,16 +422,15 @@
             });
         });
 
-        // Function to accept terms from modal
-        function acceptTerms() {
-            const termsCheckbox = document.getElementById('pcb_terms_checkbox');
-            termsCheckbox.checked = true;
-            termsCheckbox.classList.remove('is-invalid');
-            const invalidFeedback = termsCheckbox.parentNode.nextElementSibling;
-            invalidFeedback.style.display = 'none';
+        // Function to toggle terms and conditions div
+        function toggleTermsDiv() {
+            const termsDiv = document.getElementById('terms-div');
             
-            // Update payment fields to enable the button
-            updatePaymentFields();
+            if (termsDiv.style.display === 'none' || termsDiv.style.display === '') {
+                termsDiv.style.display = 'block';
+            } else {
+                termsDiv.style.display = 'none';
+            }
         }
     </script>
 @endsection
