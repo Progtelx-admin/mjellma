@@ -3,24 +3,28 @@
 @section('content')
     <div id="carouselBackground"
         class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-center"
-        data-bs-ride="carousel" data-bs-interval="4000">
+        data-ride="carousel" data-interval="4000">
         <div class="carousel-inner w-100 h-100">
-            <div class="carousel-item active"
-                style="background-image: url('https://images.bubbleup.com/width1920/quality35/mville2017/1-brand/1-margaritaville.com/gallery-media/220803-compasshotel-medford-pool-73868-1677873697-78625-1694019828.jpg');">
+            <div class="carousel-item active" style="background-image: url('{{ asset('uploads/chicago.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('https://digital.ihg.com/is/image/ihg/ihgor-member-rate-web-offers-1440x720');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/londra.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('https://hoteldel.com/wp-content/uploads/2021/01/hotel-del-coronado-views-suite-K1TOS1-K1TOJ1-1600x900-1.jpg');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/roma.jpg') }}');">
+            </div>
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/stambolli.jpg') }}');">
+            </div>
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/viena.jpg') }}');">
             </div>
         </div>
 
+
         <div class="carousel-indicators">
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="0" class="active"
+            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active"
                 aria-current="true" aria-label="Slide 1"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="1" aria-label="Slide 2"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="2" aria-label="Slide 3"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="1" aria-label="Slide 2"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="2" aria-label="Slide 3"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="3" aria-label="Slide 4"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="4" aria-label="Slide 5"></button>
         </div>
 
         <div class="w-75 position-absolute" style="z-index: 1">
@@ -153,12 +157,9 @@
                                 </div>
                             </div>
 
-
-
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
                             <input type="hidden" id="locationSelected" name="locationSelected" value="false">
-
                         </form>
                     </div>
 
@@ -170,47 +171,12 @@
         </div>
     </div>
 
-    <div class="section-offers py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">Hot Offers for Your Summer Getaway</h2>
-
-            <div class="row g-5 justify-content-center">
-                <!-- Card 1 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
-                        <span class="deal-caption">Milano, Italy</span>
-                    </a>
-                </div>
-
-                <!-- Card 2 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
-                        <span class="deal-caption">Santorini, Greece</span>
-                    </a>
-                </div>
-
-                <!-- Card 3 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
-                        <span class="deal-caption">Miami, USA</span>
-                    </a>
-                </div>
-            </div>
-
-            <div class="text-center mt-4">
-                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
-                    Explore More – Rent a Car Today
-                </a>
-            </div>
-        </div>
-    </div>
-
+    @include('offers::public.index', [
+        'anchor' => '#hotel-search-form',
+        'cols' => 3,
+        'limit' => 0,
+        'only_first' => true,
+    ])
 
     <!-- About Us -->
     <div id="about-us" class="section-about py-5">
@@ -273,90 +239,20 @@
             </div>
         </div>
     </div>
+    {{--
+    @include('offers::widgets.async-section', [
+        'slug' => 'amazing-holiday-deals',
+        'heading' => 'Amazing Holiday Deals',
+        'anchor' => '#hotel-search-form',
+        'cols' => 3,
+    ])
 
-    <!-- Amazing Holiday Deals -->
-    <div class="section-offers py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">Amazing Holiday Deals</h2>
-
-            <div class="row g-5 justify-content-center">
-                <!-- Card 1 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
-                        <span class="deal-caption">Milano, Italy</span>
-                    </a>
-                </div>
-
-                <!-- Card 2 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
-                        <span class="deal-caption">Santorini, Greece</span>
-                    </a>
-                </div>
-
-                <!-- Card 3 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
-                        {{-- <span class="deal-caption">Miami, USA</span> --}}
-                    </a>
-                </div>
-            </div>
-
-            <div class="text-center mt-4">
-                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
-                    Explore More – Book A Flight Today
-                </a>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="section-offers py-5">
-        <div class="container">
-            <h2 class="text-center mb-5">Rent a Car for Your Trip</h2>
-
-            <div class="row g-5 justify-content-center">
-                <!-- Card 1 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/milano.png') }}" alt="Milano, Italy" class="deal-img w-100">
-                        <span class="deal-caption">Milano, Italy</span>
-                    </a>
-                </div>
-
-                <!-- Card 2 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/santorini.png') }}" alt="Santorini, Greece" class="deal-img w-100">
-                        <span class="deal-caption">Santorini, Greece</span>
-                    </a>
-                </div>
-
-                <!-- Card 3 -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <a href="#hotel-search-form"
-                        class="deal-card d-block position-relative rounded-3 overflow-hidden shadow-sm">
-                        <img src="{{ asset('uploads/sea.png') }}" alt="Miami, USA" class="deal-img w-100">
-                        {{-- <span class="deal-caption">Miami, USA</span> --}}
-                    </a>
-                </div>
-            </div>
-
-            <div class="text-center mt-4">
-                <a href="#hotel-search-form" class="btn btn-cta px-4 py-2">
-                    Explore More – Rent a Car Today
-                </a>
-            </div>
-        </div>
-    </div>
+    @include('offers::widgets.async-section', [
+        'slug' => 'rent-a-car',
+        'heading' => 'Rent a Car for Your Trip',
+        'anchor' => '#hotel-search-form',
+        'cols' => 3,
+    ]) --}}
 
     <!-- Bootstrap 4.6 (includes Popper) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
@@ -366,8 +262,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Carousel
-            new bootstrap.Carousel(document.getElementById('carouselBackground'), {
+            // Carousel - Bootstrap 4 syntax
+            $('#carouselBackground').carousel({
                 interval: 2000,
                 ride: 'carousel',
                 pause: false,
@@ -536,7 +432,6 @@
         });
     </script>
 
-
     <style>
         .carousel-item {
             background-size: cover;
@@ -590,9 +485,7 @@
             border-bottom: 3px solid #0B0B45F0;
             font-weight: bold;
             color: #0B0B45F0;
-            /* optional: make the text match */
         }
-
 
         .form-label {
             font-weight: bold;
@@ -618,7 +511,6 @@
             filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .08));
         }
 
-        /* Section title (navy with orange underline) */
         .deals-title {
             color: #0B0B45;
             font-weight: 700;
@@ -635,16 +527,13 @@
             border-radius: 2px;
         }
 
-        /* Card images with fixed aspect & overlay caption */
         .deal-img {
             aspect-ratio: 4 / 3;
-            /* keeps all cards same height */
             object-fit: cover;
             display: block;
         }
 
         .deal-card::after {
-            /* bottom gradient like the mock */
             content: "";
             position: absolute;
             left: 0;
@@ -665,7 +554,6 @@
             z-index: 1;
         }
 
-        /* Orange CTA */
         .btn-cta {
             background: #F27625;
             color: #fff;
@@ -680,14 +568,11 @@
 
         .logo-wrap {
             height: 100px;
-            /* same visual box for both logos */
         }
 
         .partner-logo {
             max-height: 80px;
-            /* scale logos consistently */
             width: auto;
-            /* keep aspect ratio */
         }
     </style>
 @endsection

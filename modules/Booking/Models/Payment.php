@@ -192,6 +192,14 @@ class Payment extends BaseModel
 
     }
 
+    /**
+     * Get the booking that owns the payment
+     */
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class, 'booking_id');
+    }
+
     public function sendNewPurchaseEmail(){
 
         switch ($this->object_model) {

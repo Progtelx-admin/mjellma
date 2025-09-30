@@ -22,6 +22,11 @@ class MjellmaBooking  extends Bookable
         'pcb_status',
         'api_status',
         'api_error',
+        'pcb_bank_response',
+    ];
+
+    protected $casts = [
+        'pcb_bank_response' => 'array',
     ];
 
     public function save(array $options = [])
