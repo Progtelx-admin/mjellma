@@ -19,8 +19,8 @@
 
 
         <div class="carousel-indicators">
-            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active"
-                aria-current="true" aria-label="Slide 1"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active" aria-current="true"
+                aria-label="Slide 1"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="1" aria-label="Slide 2"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="2" aria-label="Slide 3"></button>
             <button type="button" data-target="#carouselBackground" data-slide-to="3" aria-label="Slide 4"></button>
@@ -171,6 +171,7 @@
         </div>
     </div>
 
+    <!-- First Offer Section (before About Us) -->
     @include('offers::public.index', [
         'anchor' => '#hotel-search-form',
         'cols' => 3,
@@ -239,20 +240,28 @@
             </div>
         </div>
     </div>
-    {{--
-    @include('offers::widgets.async-section', [
-        'slug' => 'amazing-holiday-deals',
-        'heading' => 'Amazing Holiday Deals',
-        'anchor' => '#hotel-search-form',
-        'cols' => 3,
-    ])
 
-    @include('offers::widgets.async-section', [
-        'slug' => 'rent-a-car',
-        'heading' => 'Rent a Car for Your Trip',
-        'anchor' => '#hotel-search-form',
-        'cols' => 3,
-    ]) --}}
+    <!-- Remaining Offer Sections (after About Us) -->
+    @php
+        use Modules\Offers\Models\OfferSection;
+        $allSections = OfferSection::active()
+            ->orderBy('sort_order')
+            ->with(['cards' => fn($q) => $q->active()->orderBy('sort_order')])
+            ->get();
+        
+        // Remove the first section (already shown above)
+        $remainingSections = $allSections->slice(1);
+    @endphp
+    
+    @foreach ($remainingSections as $section)
+        @include('offers::front.section', [
+            'section' => $section,
+            'heading' => $section->title,
+            'anchor' => '#hotel-search-form',
+            'cols' => 3,
+            'limit' => 0,
+        ])
+    @endforeach
 
     <!-- Bootstrap 4.6 (includes Popper) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
