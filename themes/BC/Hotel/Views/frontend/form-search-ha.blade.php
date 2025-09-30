@@ -3,7 +3,7 @@
 @section('content')
     <div id="carouselBackground"
         class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-center"
-        data-bs-ride="carousel" data-bs-interval="4000">
+        data-ride="carousel" data-interval="4000">
         <div class="carousel-inner w-100 h-100">
             <div class="carousel-item active" style="background-image: url('{{ asset('uploads/chicago.jpg') }}');">
             </div>
@@ -19,12 +19,12 @@
 
 
         <div class="carousel-indicators">
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="0" class="active"
+            <button type="button" data-target="#carouselBackground" data-slide-to="0" class="active"
                 aria-current="true" aria-label="Slide 1"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="1" aria-label="Slide 2"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="2" aria-label="Slide 3"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="3" aria-label="Slide 4"></button>
-            <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="4" aria-label="Slide 5"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="1" aria-label="Slide 2"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="2" aria-label="Slide 3"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="3" aria-label="Slide 4"></button>
+            <button type="button" data-target="#carouselBackground" data-slide-to="4" aria-label="Slide 5"></button>
         </div>
 
         <div class="w-75 position-absolute" style="z-index: 1">
@@ -262,8 +262,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Carousel
-            new bootstrap.Carousel(document.getElementById('carouselBackground'), {
+            // Carousel - Bootstrap 4 syntax
+            $('#carouselBackground').carousel({
                 interval: 2000,
                 ride: 'carousel',
                 pause: false,
