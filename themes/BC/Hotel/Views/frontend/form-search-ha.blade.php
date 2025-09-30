@@ -5,22 +5,18 @@
         class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-center"
         data-bs-ride="carousel" data-bs-interval="4000">
         <div class="carousel-inner w-100 h-100">
-            <div class="carousel-item active"
-                style="background-image: url('/storage/slider/CHICAGO.jpg');">
+            <div class="carousel-item active" style="background-image: url('{{ asset('uploads/chicago.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('/storage/slider/LONDRA.jpg');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/londra.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('/storage/slider/ROMA.jpg');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/roma.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('/storage/slider/STAMBOLLI.jpg');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/stambolli.jpg') }}');">
             </div>
-            <div class="carousel-item"
-                style="background-image: url('/storage/slider/VIENA.jpg');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/viena.jpg') }}');">
             </div>
         </div>
+
 
         <div class="carousel-indicators">
             <button type="button" data-bs-target="#carouselBackground" data-bs-slide-to="0" class="active"
@@ -243,7 +239,7 @@
             </div>
         </div>
     </div>
-    {{-- 
+    {{--
     @include('offers::widgets.async-section', [
         'slug' => 'amazing-holiday-deals',
         'heading' => 'Amazing Holiday Deals',
