@@ -37,7 +37,7 @@ class PcbBankService
     {
         $payload = [
             "order" => [
-                "typeRid" => "1", // Use "1" for purchase as per documentation
+                "typeRid" => "225", // Use "1" for purchase as per documentation
                 "amount" => number_format($amount, 2, '.', ''),
                 "currency" => $currency ?: config('pcb_bank.default_currency'),
                 "description" => $description,
@@ -69,7 +69,7 @@ class PcbBankService
             if ($response->successful()) {
                 $responseData = $response->json();
                 Log::info('✅ PCB createOrder success', ['response' => $responseData]);
-                
+
                 if (isset($responseData['order'])) {
                     return $responseData['order'];
                 } else {
@@ -107,10 +107,10 @@ class PcbBankService
         if ($response && $response->successful()) {
             $responseData = $response->json('order');
             Log::info('✅ PCB getOrderDetails success', ['response' => $responseData]);
-            
+
             // Extract invoice data from response
             $invoiceData = $this->extractInvoiceData($responseData);
-            
+
             // Merge invoice data with original response
             return array_merge($responseData, ['invoice_data' => $invoiceData]);
         }
@@ -133,28 +133,28 @@ class PcbBankService
     private function extractInvoiceData($responseData)
     {
         $invoiceData = [];
-        
+
         // Extract approval code (from XML response if available)
         if (isset($responseData['approvalCode'])) {
             $invoiceData['approval_code'] = $responseData['approvalCode'];
         }
-        
+
         // Extract transaction date/time
         if (isset($responseData['createTime'])) {
             $invoiceData['transaction_datetime'] = $responseData['createTime'];
         }
-        
+
         // Extract card information
         if (isset($responseData['cardLast4'])) {
             $invoiceData['card_last4'] = $responseData['cardLast4'];
             $invoiceData['card_pan'] = 'XXXXXXXXXXXX' . $responseData['cardLast4'];
         }
-        
+
         // Extract card brand
         if (isset($responseData['cardType'])) {
             $invoiceData['card_brand'] = strtoupper($responseData['cardType']);
         }
-        
+
         // Extract amount (convert from cents to EUR)
         if (isset($responseData['amount'])) {
             $amount = $responseData['amount'];
@@ -167,15 +167,15 @@ class PcbBankService
                 $invoiceData['amount_cents'] = $amount * 100;
             }
         }
-        
+
         // Currency is always EUR
         $invoiceData['currency'] = 'EUR';
         $invoiceData['currency_code'] = '978';
-        
+
         // Order information
         $invoiceData['order_id'] = $responseData['id'] ?? null;
         $invoiceData['status'] = $responseData['status'] ?? null;
-        
+
         return $invoiceData;
     }
 
@@ -194,7 +194,7 @@ class PcbBankService
             $certPath = str_replace('\\', '/', $this->certPath);
             $keyPath = str_replace('\\', '/', $this->keyPath);
             $caPath = str_replace('\\', '/', $this->caPath);
-            
+
             Log::info('🔧 PCB Bank TLS Configuration', [
                 'cert_path' => $certPath,
                 'key_path' => $keyPath,
@@ -220,7 +220,7 @@ class PcbBankService
             ]);
 
             $url = $this->apiUrl . $endpoint;
-            
+
             Log::info('🌐 PCB Bank Request', [
                 'method' => $method,
                 'url' => $url,
@@ -232,15 +232,15 @@ class PcbBankService
             } else {
                 $response = $client->post($url, $data);
             }
-            
+
             Log::info('📡 PCB Bank Response', [
                 'status' => $response->status(),
                 'successful' => $response->successful(),
                 'body' => $response->body()
             ]);
-            
+
             return $response;
-            
+
         } catch (\Exception $e) {
             Log::error('❌ PCB Bank TLS request failed', [
                 'error' => $e->getMessage(),
@@ -332,8 +332,8 @@ class PcbBankService
      */
     public function isConfigured()
     {
-        return file_exists($this->certPath) && 
-               file_exists($this->keyPath) && 
+        return file_exists($this->certPath) &&
+               file_exists($this->keyPath) &&
                file_exists($this->caPath);
     }
 }
