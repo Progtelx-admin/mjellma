@@ -1,6 +1,28 @@
 @extends('layouts.app')
 
 @section('content')
+    <style>
+        /* Accordion collapse styling */
+        .accordion .collapse {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .accordion .collapse.show {
+            max-height: 2000px;
+            transition: max-height 0.5s ease-in;
+        }
+
+        .payment-method-label {
+            width: 100%;
+            display: block;
+        }
+
+        .accordion .card {
+            margin-bottom: 0.5rem;
+        }
+    </style>
     @php
         use Illuminate\Support\Str;
 
@@ -17,7 +39,7 @@
         $defaultNameParts = explode(' ', $user->name ?? '');
         $defaultFirstName = $defaultNameParts[0] ?? '';
         $defaultLastName = $defaultNameParts[1] ?? '';
-        
+
     @endphp
 
     <div class="container mt-5 mb-5">
@@ -122,11 +144,11 @@
                         <div class="card">
                             <div class="card-header">
                                 <h4 class="mb-0">
-                                    <label class="" data-toggle="collapse" data-target="#gateway_{{ $index }}">
-                                        <input type="radio" name="payment_method" 
-                                               id="payment_method_{{ $index }}" 
+                                    <label class="payment-method-label" data-collapse-target="gateway_{{ $index }}" style="cursor: pointer;">
+                                        <input type="radio" name="payment_method"
+                                               id="payment_method_{{ $index }}"
                                                value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
-                                               data-type="{{ $payment['type'] }}" 
+                                               data-type="{{ $payment['type'] }}"
                                                data-currency="{{ $payment['currency_code'] }}"
                                                data-amount="{{ $payment['amount'] }}"
                                                data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}"
@@ -138,7 +160,7 @@
                                     </label>
                                 </h4>
                             </div>
-                            <div id="gateway_{{ $index }}" class="collapse" aria-labelledby="headingOne" data-parent="#accordionExample">
+                            <div id="gateway_{{ $index }}" class="collapse {{ $index === 0 ? 'show' : '' }}" data-parent="#accordionExample">
                                 <div class="card-body">
                                     <div class="gateway_name">
                                         {{ ucfirst($payment['type']) }} Payment
@@ -151,16 +173,16 @@
                             </div>
                         </div>
                     @endforeach
-                    
+
                     <!-- PCB Bank Payment Method -->
                     <div class="card">
                         <div class="card-header">
                             <h4 class="mb-0">
-                                <label class="" data-toggle="collapse" data-target="#gateway_pcb">
-                                    <input type="radio" name="payment_method" 
-                                           id="payment_method_pcb" 
+                                <label class="payment-method-label" data-collapse-target="gateway_pcb" style="cursor: pointer;">
+                                    <input type="radio" name="payment_method"
+                                           id="payment_method_pcb"
                                            value="pcb_bank|{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
-                                           data-type="pcb_bank" 
+                                           data-type="pcb_bank"
                                            data-currency="{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
                                            data-amount="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}"
                                            data-need-card="1">
@@ -168,14 +190,14 @@
                                 </label>
                             </h4>
                         </div>
-                        <div id="gateway_pcb" class="collapse" aria-labelledby="headingOne" data-parent="#accordionExample">
+                        <div id="gateway_pcb" class="collapse" data-parent="#accordionExample">
                             <div class="card-body">
                                 <div class="gateway_name">
                                     PCB Bank Payment
                                 </div>
                                 <p>Amount: {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}</p>
                                 <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to enter your card information.</p>
-                                
+
                                 <!-- Terms and Conditions Checkbox -->
                                 <div class="mt-3">
                                     <label style="display: flex; align-items: center; cursor: pointer;">
@@ -192,63 +214,63 @@
                                     <h5 style="color: #F27625; margin-bottom: 15px;">Terms and Conditions</h5>
                                     <p><strong>Welcome to Rezervo24!</strong></p>
                                     <p>By using this website and/or making a reservation through our platform, you agree to the following terms and conditions. Please read them carefully before proceeding.</p>
-                                    
+
                                     <h6>1. Use of the Platform</h6>
                                     <ul>
                                         <li>Rezervo24 is an online platform that facilitates hotel and accommodation bookings.</li>
                                         <li>We do not own or operate the listed properties and are not directly responsible for their management. We simply display the information and booking conditions provided by the hotels.</li>
                                     </ul>
-                                    
+
                                     <h6>2. Reservations</h6>
                                     <ul>
                                         <li>All reservations made through Rezervo24 are in real-time and are considered valid only after confirmation is received via email or your user account.</li>
                                         <li>Users are responsible for providing accurate and complete information during the booking process.</li>
                                     </ul>
-                                    
+
                                     <h6>3. Payments</h6>
                                     <ul>
                                         <li>Payments can be made securely through the online payment methods we offer.</li>
                                         <li>All prices are displayed transparently and include applicable taxes unless otherwise stated.</li>
                                     </ul>
-                                    
+
                                     <h6>4. Cancellation Policy</h6>
                                     <p>Before completing a booking, users must read and agree to the cancellation policy, which may vary depending on the selected hotel. The full cancellation policy is outlined below in this document and also displayed during the booking process on each hotel's page.</p>
-                                    
+
                                     <h6>5. Hotel-Initiated Changes or Cancellations</h6>
                                     <p>In exceptional cases, the hotel may modify or cancel a reservation. We will do our best to assist you in finding an appropriate alternative or to provide a full refund, depending on the situation.</p>
-                                    
+
                                     <h6>6. Privacy</h6>
                                     <p>Your personal data will be handled in accordance with our Privacy Policy, in compliance with data protection regulations.</p>
-                                    
+
                                     <h6>7. Dispute Resolution</h6>
                                     <p>Any disputes will be resolved in accordance with the applicable laws of the Republic of Albania / Republic of Kosovo (depending on the company's legal base).</p>
-                                    
+
                                     <hr style="margin: 20px 0;">
-                                    
+
                                     <h5 style="color: #F27625; margin-bottom: 15px;">Cancellation Policy</h5>
                                     <p>The cancellation policy depends on each specific hotel and is clearly outlined during the booking process. However, the following general rules may apply:</p>
-                                    
+
                                     <h6>1. Free Cancellation</h6>
                                     <ul>
                                         <li>Some hotels offer free cancellation up to a certain deadline (e.g., 24 to 72 hours before the check-in date).</li>
                                         <li>If you cancel within this period, you will not be charged and any payments will be fully refunded.</li>
                                     </ul>
-                                    
+
                                     <h6>2. Cancellation Fee</h6>
                                     <ul>
                                         <li>If you cancel after the free cancellation period, a fee may apply—usually equivalent to the price of one night or more, depending on the hotel's individual policy.</li>
                                     </ul>
-                                    
+
                                     <h6>3. No-Show</h6>
                                     <ul>
                                         <li>If you fail to check in without prior cancellation (no-show), you may be charged the full reservation amount.</li>
                                     </ul>
-                                    
+
                                     <h6>4. Booking Modifications</h6>
                                     <ul>
                                         <li>Changes to booking dates, guest numbers, or room types are subject to availability and may involve a price adjustment or additional fees.</li>
                                     </ul>
-                                    
+
                                     <h6>5. Cancellation Process</h6>
                                     <ul>
                                         <li>Cancellations can be made directly from your account on Rezervo24 or by contacting our customer support team.</li>
@@ -284,6 +306,58 @@
             const paymentTypeHiddenInput = document.getElementById('payment_type_type');
             const creditCardRequiredInput = document.getElementById('payment_type_is_need_credit_card_data');
             const guestsContainer = document.getElementById('guests-container');
+
+            // Custom accordion collapse handler (works with any Bootstrap version)
+            document.querySelectorAll('.payment-method-label').forEach(function(label) {
+                label.addEventListener('click', function(e) {
+                    // Prevent double-triggering if clicking directly on radio
+                    if (e.target.tagName !== 'INPUT') {
+                        const radio = this.querySelector('input[type="radio"]');
+                        if (radio) {
+                            radio.checked = true;
+                            radio.dispatchEvent(new Event('change'));
+                        }
+                    }
+
+                    const targetId = this.getAttribute('data-collapse-target');
+                    const targetElement = document.getElementById(targetId);
+
+                    if (targetElement) {
+                        // Close all other collapse items
+                        document.querySelectorAll('.accordion .collapse').forEach(function(collapse) {
+                            if (collapse.id !== targetId) {
+                                collapse.classList.remove('show');
+                            }
+                        });
+
+                        // Toggle the clicked one
+                        targetElement.classList.add('show');
+                    }
+                });
+            });
+
+            // Also handle radio button changes
+            paymentMethodRadios.forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    const label = this.closest('.payment-method-label');
+                    if (label) {
+                        const targetId = label.getAttribute('data-collapse-target');
+                        const targetElement = document.getElementById(targetId);
+
+                        if (targetElement) {
+                            // Close all other collapse items
+                            document.querySelectorAll('.accordion .collapse').forEach(function(collapse) {
+                                if (collapse.id !== targetId) {
+                                    collapse.classList.remove('show');
+                                }
+                            });
+
+                            // Show the selected one
+                            targetElement.classList.add('show');
+                        }
+                    }
+                });
+            });
 
             // Admin autofill logic
             const agentSelect = document.getElementById('agent_id');
@@ -329,17 +403,17 @@
                 const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
                 const finishButton = document.querySelector('button[type="submit"]');
                 const termsCheckbox = document.getElementById('pcb_terms_checkbox');
-                
+
                 if (selectedRadio) {
                     paymentAmountInput.value = selectedRadio.dataset.amount;
                     paymentCurrencyInput.value = selectedRadio.dataset.currency;
                     paymentTypeHiddenInput.value = selectedRadio.dataset.type;
                     creditCardRequiredInput.value = selectedRadio.dataset.needCard === '1' ? '1' : '0';
-                    
+
                     // Handle PCB Bank payment type
                     if (selectedRadio.dataset.type === 'pcb_bank') {
                         paymentTypeHiddenInput.value = 'now'; // Set the underlying type to 'now' for PCB
-                        
+
                         // Disable finish button if PCB Bank is selected but terms not accepted
                         if (!termsCheckbox.checked) {
                             finishButton.disabled = true;
@@ -363,13 +437,13 @@
             paymentMethodRadios.forEach(radio => {
                 radio.addEventListener('change', updatePaymentFields);
             });
-            
+
             // Add event listener for terms checkbox
             const termsCheckbox = document.getElementById('pcb_terms_checkbox');
             if (termsCheckbox) {
                 termsCheckbox.addEventListener('change', updatePaymentFields);
             }
-            
+
             // Initialize with the first selected option
             updatePaymentFields();
 
@@ -378,7 +452,7 @@
             bookingForm.addEventListener('submit', function(e) {
                 const selectedPayment = document.querySelector('input[name="payment_method"]:checked');
                 const termsCheckbox = document.getElementById('pcb_terms_checkbox');
-                
+
                 // Check if PCB Bank is selected
                 if (selectedPayment && selectedPayment.dataset.type === 'pcb_bank') {
                     // Check if terms are accepted
@@ -386,11 +460,11 @@
                         e.preventDefault();
                         termsCheckbox.classList.add('is-invalid');
                         termsCheckbox.focus();
-                        
+
                         // Show error message
                         const invalidFeedback = termsCheckbox.parentNode.nextElementSibling;
                         invalidFeedback.style.display = 'block';
-                        
+
                         return false;
                     } else {
                         termsCheckbox.classList.remove('is-invalid');
@@ -425,7 +499,7 @@
         // Function to toggle terms and conditions div
         function toggleTermsDiv() {
             const termsDiv = document.getElementById('terms-div');
-            
+
             if (termsDiv.style.display === 'none' || termsDiv.style.display === '') {
                 termsDiv.style.display = 'block';
             } else {
