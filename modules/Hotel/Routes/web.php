@@ -15,14 +15,15 @@ Route::get('/pcb-return', [HotelHController::class, 'handlePcbReturn'])->name('p
 Route::get('/hotel/payment/confirm', [HotelHController::class, 'confirmAfterPcb'])->name('hotel.payment.confirm');
 
 // list & search
-Route::get('/hotels', [HotelHController::class, 'showHotels'])->name('hotel.show');
+Route::get('/', [HotelHController::class, 'showHotels'])->name('hotel.show');
 Route::get('/hotels/search', [HotelHController::class, 'searchHotels'])->name('hotel.search');
 Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'])->name('hotel.suggestions');
 
 // **PREBOOK** (must come before the wildcard `{id}`)
 Route::post('/hotel/prebook', [HotelHController::class, 'prebookRoom'])->name('hotel.prebook');
 Route::get('/hotel/prebook/result', [HotelHController::class, 'prebookResult'])->name('hotel.prebook.result');
-Route::get('/hotel/booking/failed', function () {return view('Hotel::frontend.booking-failed');})->name('hotel.booking.failed');
+Route::get('/hotel/booking/failed', function () {
+    return view('Hotel::frontend.booking-failed'); })->name('hotel.booking.failed');
 
 
 // **BOOK** & confirmation

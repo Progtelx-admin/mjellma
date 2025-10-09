@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 Route::get('/intro', 'LandingpageController@index');
-Route::get('/', 'HomeController@index');
+// Route::get('/', 'HomeController@index'); // Disabled - using hotels as homepage
 Route::get('/home', 'HomeController@index')->name('home');
 Route::post('/install/check-db', 'HomeController@checkConnectDatabase');
 
@@ -37,7 +37,7 @@ Route::get('/update/database', 'InstallerController@redirectToHome');
 // PCB Bank Test Routes
 Route::get('/pcb-test', function () {
     $service = new \App\Services\PcbBankService();
-    
+
     $data = [
         'configured' => $service->isConfigured(),
         'merchant_id' => config('pcb_bank.merchant_id'),
@@ -49,19 +49,19 @@ Route::get('/pcb-test', function () {
         'key_exists' => file_exists(config('pcb_bank.certificates.key_path')),
         'ca_exists' => file_exists(config('pcb_bank.certificates.ca_path')),
     ];
-    
+
     return response()->json($data, 200, [], JSON_PRETTY_PRINT);
 })->name('pcb.test');
 
 Route::get('/pcb-test-order', function () {
     $service = new \App\Services\PcbBankService();
-    
+
     if (!$service->isConfigured()) {
         return response()->json(['error' => 'Certificates not configured'], 400);
     }
-    
+
     $order = $service->createOrder(10.00, 'Test Order', url('/pcb-test-redirect'));
-    
+
     return response()->json($order, 200, [], JSON_PRETTY_PRINT);
 })->name('pcb.test.order');
 
