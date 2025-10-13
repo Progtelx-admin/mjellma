@@ -35,9 +35,13 @@
             @endif
 
             {{-- grid-only price badge --}}
-            @if ($hotel->daily_price)
+            @if ($hotel->daily_price && ($hotel->is_available ?? true))
                 <span class="grid-price-badge">
                     {{ number_format($hotel->daily_price, 0) }}{{ $currencySym }}
+                </span>
+            @elseif (isset($hotel->is_available) && !$hotel->is_available)
+                <span class="grid-price-badge bg-secondary">
+                    N/A
                 </span>
             @endif
         </div>
@@ -78,15 +82,15 @@
 
                 <div class="d-flex flex-column align-items-end gap-2">
                     <div class="hotel-listcard__price">
-                        @if ($hotel->daily_price)
+                        @if ($hotel->daily_price && ($hotel->is_available ?? true))
                             From {{ number_format($hotel->daily_price, 0) }}
                             {{ $currencySym }} / night
-                        @elseif ($hotel->daily_price === null)
+                        @elseif (isset($hotel->is_available) && !$hotel->is_available)
+                            <span class="text-warning">No rooms available</span>
+                        @else
                             <span class="text-muted small">
                                 <i class="fa fa-spinner fa-spin"></i> Loading price...
                             </span>
-                        @else
-                            No rooms available
                         @endif
                     </div>
                     <span class="btn btn-cta">See options</span>
