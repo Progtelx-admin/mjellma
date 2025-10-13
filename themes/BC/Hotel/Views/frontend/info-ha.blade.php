@@ -352,7 +352,8 @@
                             $net = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
                             $comm = data_get($payment, 'commission_info.charge.amount_commission', null);
                             $currency = $payment['currency_code'] ?? '';
-                            $finalPrice = $net + ($comm ?? 0);
+                            // Use the final_price from controller (already has 15% markup for guests)
+                            $finalPrice = $rate['final_price'] ?? ($net + ($comm ?? 0));
 
                             $mealData = data_get($rate, 'meal_data', []);
                             $mealValue = $mealData['value'] ?? null;

@@ -140,7 +140,8 @@
             <div class="mb-3">
                 <label class="form-label">Select Payment Method</label>
                 <div class="gateways-table accordion" id="accordionExample">
-                    @foreach ($bookingData['payment_types'] as $index => $payment)
+                    {{-- COMMENTED OUT: RateHawk payment types (deposit, etc.) - Only PCB Bank is available now --}}
+                    {{-- @foreach ($bookingData['payment_types'] as $index => $payment)
                         <div class="card">
                             <div class="card-header">
                                 <h4 class="mb-0">
@@ -172,30 +173,31 @@
                                 </div>
                             </div>
                         </div>
-                    @endforeach
+                    @endforeach --}}
 
-                    <!-- PCB Bank Payment Method -->
+                    <!-- PCB Bank Payment Method (ONLY OPTION) -->
                     <div class="card">
                         <div class="card-header">
                             <h4 class="mb-0">
                                 <label class="payment-method-label" data-collapse-target="gateway_pcb" style="cursor: pointer;">
                                     <input type="radio" name="payment_method"
                                            id="payment_method_pcb"
-                                           value="pcb_bank|{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
+                                           value="pcb_bank|{{ $displayCurrency ?? 'EUR' }}"
                                            data-type="pcb_bank"
-                                           data-currency="{{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}"
-                                           data-amount="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}"
-                                           data-need-card="1">
-                                    PCB Bank Payment - {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                                           data-currency="{{ $displayCurrency ?? 'EUR' }}"
+                                           data-amount="{{ $displayFinalPrice ?? '0' }}"
+                                           data-need-card="1"
+                                           checked>
+                                    PCB Bank Payment - {{ number_format($displayFinalPrice ?? 0, 2) }} {{ $displayCurrency ?? 'EUR' }}
                                 </label>
                             </h4>
                         </div>
-                        <div id="gateway_pcb" class="collapse" data-parent="#accordionExample">
+                        <div id="gateway_pcb" class="collapse show" data-parent="#accordionExample">
                             <div class="card-body">
                                 <div class="gateway_name">
                                     PCB Bank Payment
                                 </div>
-                                <p>Amount: {{ $bookingData['payment_types'][0]['amount'] ?? '0' }} {{ $bookingData['payment_types'][0]['currency_code'] ?? 'EUR' }}</p>
+                                <p>Amount: {{ number_format($displayFinalPrice ?? 0, 2) }} {{ $displayCurrency ?? 'EUR' }}</p>
                                 <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to enter your card information.</p>
 
                                 <!-- Terms and Conditions Checkbox -->
@@ -283,11 +285,15 @@
                 </div>
             </div>
 
-            <input type="hidden" id="payment_type_amount" name="payment_type[amount]">
+            <input type="hidden" id="payment_type_amount" name="payment_type[amount]" value="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}">
             <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
             <input type="hidden" id="payment_type_type" name="payment_type[type]">
             <input type="hidden" id="payment_type_is_need_credit_card_data"
                 name="payment_type[is_need_credit_card_data]">
+
+            <!-- Display final price (with 15% markup for guests) - used for customer payment -->
+            <input type="hidden" name="display_final_price" value="{{ $displayFinalPrice ?? '0' }}">
+            <input type="hidden" name="display_currency" value="{{ $displayCurrency ?? 'EUR' }}">
 
             <button type="submit" class="btn w-50 mt-3 d-block mx-auto" style="background:#F27625; color:white;">
                 Finish Booking

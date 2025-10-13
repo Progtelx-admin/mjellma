@@ -4,17 +4,21 @@ use Modules\Core\Helpers\SitemapHelper;
 use Modules\ModuleServiceProvider;
 use Modules\Hotel\Models\Hotel;
 use Modules\User\Helpers\PermissionHelper;
+use Illuminate\Support\Facades\Event;
+use Modules\Hotel\Events\MjellmaBookingCreatedEvent;
+use Modules\Hotel\Listeners\MjellmaBookingCreatedListen;
 
 class ModuleProvider extends ModuleServiceProvider
 {
 
-    public function boot(SitemapHelper $sitemapHelper){
+    public function boot(SitemapHelper $sitemapHelper)
+    {
 
         $this->loadMigrationsFrom(__DIR__ . '/Migrations');
 
-        if(is_installed() and Hotel::isEnable()){
+        if (is_installed() and Hotel::isEnable()) {
 
-            $sitemapHelper->add("hotel",[app()->make(Hotel::class),'getForSitemap']);
+            $sitemapHelper->add("hotel", [app()->make(Hotel::class), 'getForSitemap']);
         }
         PermissionHelper::add([
             // Hotel
@@ -25,6 +29,9 @@ class ModuleProvider extends ModuleServiceProvider
             'hotel_manage_others',
             'hotel_manage_attributes',
         ]);
+
+        // Register MjellmaBooking event listener for customer emails
+        Event::listen(MjellmaBookingCreatedEvent::class, MjellmaBookingCreatedListen::class);
     }
     /**
      * Register bindings in the container.
@@ -38,13 +45,14 @@ class ModuleProvider extends ModuleServiceProvider
 
     public static function getAdminMenu()
     {
-        if(!Hotel::isEnable()) return [];
+        if (!Hotel::isEnable())
+            return [];
         return [
-            'hotel'=>[
-                "position"=>32,
-                'url'        => route('hotel.admin.booking.index'),
-                'title'      => __('Hotel Booking'),
-                'icon'       => 'fa fa-building-o',
+            'hotel' => [
+                "position" => 32,
+                'url' => route('hotel.admin.booking.index'),
+                'title' => __('Hotel Booking'),
+                'icon' => 'fa fa-building-o',
                 'permission' => 'hotel_view',
                 // 'children'   => [
                 //     'add'=>[
@@ -79,21 +87,23 @@ class ModuleProvider extends ModuleServiceProvider
 
     public static function getBookableServices()
     {
-        if(!Hotel::isEnable()) return [];
+        if (!Hotel::isEnable())
+            return [];
         return [
-            'hotel'=>Hotel::class
+            'hotel' => Hotel::class
         ];
     }
 
     public static function getMenuBuilderTypes()
     {
-        if(!Hotel::isEnable()) return [];
+        if (!Hotel::isEnable())
+            return [];
         return [
-            'hotel'=>[
+            'hotel' => [
                 'class' => Hotel::class,
-                'name'  => __("Hotel"),
+                'name' => __("Hotel"),
                 'items' => Hotel::searchForMenu(),
-                'position'=>41
+                'position' => 41
             ]
         ];
     }
@@ -130,11 +140,13 @@ class ModuleProvider extends ModuleServiceProvider
     //     return $res;
     // }
 
-    public static function getTemplateBlocks(){
-        if(!Hotel::isEnable()) return [];
+    public static function getTemplateBlocks()
+    {
+        if (!Hotel::isEnable())
+            return [];
         return [
-            'form_search_hotel'=>"\\Modules\\Hotel\\Blocks\\FormSearchHotel",
-            'list_hotel'=>"\\Modules\\Hotel\\Blocks\\ListHotel",
+            'form_search_hotel' => "\\Modules\\Hotel\\Blocks\\FormSearchHotel",
+            'list_hotel' => "\\Modules\\Hotel\\Blocks\\ListHotel",
         ];
     }
 }
