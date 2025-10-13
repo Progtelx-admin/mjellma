@@ -60,7 +60,7 @@
                                 <strong>Notice:</strong> The total price has changed since you last viewed it.
                                 <br>
                                 <strong>Original:</strong> {{ number_format($oldPrice, 2) }} {{ $oldCurrency }}<br>
-                                <strong>Updated:</strong> {{ number_format($newPrice, 2) }} {{ $newCurrency }}
+                                <strong>Updated:</strong> {{ number_format($displayFinalPrice ?? $newPrice, 2) }} {{ $newCurrency }}
                             </div>
                         @endif
 
@@ -73,8 +73,8 @@
                             <h4 class="fw-bold text-success">Total Price:
                                 <br>
                                 <span style="color:#0B0B45EB">
-                                    {{ $rate['payment_options']['payment_types'][0]['amount'] ?? 'N/A' }}
-                                    {{ $rate['payment_options']['payment_types'][0]['currency_code'] ?? 'EUR' }}
+                                    {{ number_format($displayFinalPrice ?? $newPrice, 2) }}
+                                    {{ $newCurrency ?? 'EUR' }}
                                 </span>
                             </h4>
 
@@ -84,6 +84,11 @@
                                 <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
                                 <input type="hidden" name="partner_order_id" value="order_{{ uniqid() }}">
                                 <input type="hidden" name="user_ip" value="{{ request()->ip() }}">
+
+                                <!-- Store display price (with 15% markup for guests) and original price -->
+                                <input type="hidden" name="display_final_price" value="{{ $displayFinalPrice ?? $newPrice }}">
+                                <input type="hidden" name="display_currency" value="{{ $newCurrency ?? 'EUR' }}">
+                                <input type="hidden" name="original_price" value="{{ $newPrice }}">
 
                                 <!-- Add hidden fields needed for finishBooking -->
                                 <input type="hidden" name="hotel_id" value="{{ $hotel['id'] }}">

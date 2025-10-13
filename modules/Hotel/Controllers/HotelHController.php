@@ -513,6 +513,12 @@ class HotelHController extends Controller
                                 $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
                                 return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
                             });
+
+                        // Apply 15% markup for guest users
+                        if ($dailyPrice && !auth()->check()) {
+                            $dailyPrice = round($dailyPrice * 1.15, 2);
+                        }
+
                         $pricesResult[$hid] = compact('dailyPrice', 'hasBreakfast');
                     }
 
@@ -882,7 +888,14 @@ class HotelHController extends Controller
                     // Still attach basic pricing and meal info so UI remains consistent
                     $rate['net_amount'] = $net;
                     $rate['commission_amount'] = $commission;
-                    $rate['final_price'] = round($net + $commission, 2);
+                    $finalPrice = round($net + $commission, 2);
+
+                    // Apply 15% markup for guest users
+                    if (!auth()->check()) {
+                        $finalPrice = round($finalPrice * 1.15, 2);
+                    }
+
+                    $rate['final_price'] = $finalPrice;
                     $rate['meal_type'] = $mealLabel;
                     return $rate;
                 }
@@ -897,7 +910,14 @@ class HotelHController extends Controller
                 // Attach computed fields back to the rate
                 $rate['net_amount'] = $net;
                 $rate['commission_amount'] = $commission;
-                $rate['final_price'] = round($net + $commission, 2);
+                $finalPrice = round($net + $commission, 2);
+
+                // Apply 15% markup for guest users
+                if (!auth()->check()) {
+                    $finalPrice = round($finalPrice * 1.15, 2);
+                }
+
+                $rate['final_price'] = $finalPrice;
                 $rate['meal_type'] = $mealLabel;
                 // Optionally derive a simple meal code based on the first letters of each word
                 $rate['meal_code'] = preg_match_all('/\b(\w)/u', $mealLabel, $m) ? strtoupper(implode('', $m[1])) : null;
@@ -1199,6 +1219,7 @@ class HotelHController extends Controller
         $newPrice = null;
         $newCurrency = '';
         $priceChanged = false;
+        $displayFinalPrice = 0;
 
         if ($rate) {
             $payment = $rate['payment_options']['payment_types'][0] ?? [];
@@ -1207,7 +1228,13 @@ class HotelHController extends Controller
             $newPrice = (float) $net + (float) $commission;
             $newCurrency = $payment['currency_code'] ?? '';
 
-            if ($oldPrice > 0 && abs($newPrice - $oldPrice) > 0.01) {
+            // Apply 15% markup for guest users (what customer will pay)
+            $displayFinalPrice = $newPrice;
+            if (!auth()->check()) {
+                $displayFinalPrice = round($newPrice * 1.15, 2);
+            }
+
+            if ($oldPrice > 0 && abs($displayFinalPrice - $oldPrice) > 0.01) {
                 $priceChanged = true;
             }
         }
@@ -1222,6 +1249,7 @@ class HotelHController extends Controller
             'priceChanged',
             'oldPrice',
             'newPrice',
+            'displayFinalPrice',
             'oldCurrency',
             'newCurrency'
         ));
@@ -1335,6 +1363,9 @@ class HotelHController extends Controller
                 'booking.meal_plan' => $request->input('meal_plan'),
                 'booking.adults' => $request->input('adults', 1),
                 'booking.children' => json_decode($request->input('children', '[]'), true),
+                // Store display price (with 15% markup for guests) from prebook
+                'display_final_price' => $request->input('display_final_price'),
+                'display_currency' => $request->input('display_currency', 'EUR'),
             ]);
 
             // Initialize the booking deadline for this order so that all subsequent
@@ -1392,11 +1423,11 @@ class HotelHController extends Controller
                 }
                 session(['bookingData' => $data]);
 
-                // cache pending booking for PCB callback etc.
-                $token = Str::random(32);
-                Cache::put("pending_booking_{$token}", array_merge($request->all(), [
-                    'order_id' => $data['order_id'],
-                ]), now()->addMinutes(10));
+                // NO CACHE: Store directly in session for immediate access
+                // $token = Str::random(32);
+                // Cache::put("pending_booking_{$token}", array_merge($request->all(), [
+                //     'order_id' => $data['order_id'],
+                // ]), now()->addMinutes(10));
 
                 return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
             }
@@ -1412,7 +1443,14 @@ class HotelHController extends Controller
                 ]);
             }
 
-            // 2. Temporary errors: unknown, timeout or HTTP 5xx
+            // 2. Sandbox restriction error
+            if ($error === 'sandbox_restriction') {
+                return redirect()->route('hotel.booking.failed')->withErrors([
+                    'error' => __('Booking failed: Your RateHawk API credentials are for testing/sandbox only. Please contact support to upgrade to production credentials to make real bookings.'),
+                ]);
+            }
+
+            // 3. Temporary errors: unknown, timeout or HTTP 5xx
             $shouldPoll = false;
             if ($error && in_array($error, ['unknown', 'timeout'], true)) {
                 Log::warning('⏳ Booking form returned temporary error; will poll finish/status', ['error' => $error]);
@@ -1471,8 +1509,12 @@ class HotelHController extends Controller
 
         Log::info('Displaying booking confirmation', ['bookingData' => $bookingData]);
 
-        // Pass $book_hash so we can display it in the Blade
-        return view('Hotel::frontend.booking-confirmation-ha', compact('bookingData', 'vendors', 'book_hash'));
+        // Get display final price (with 15% markup for guests) from session
+        $displayFinalPrice = session('display_final_price', $bookingData['payment_types'][0]['amount'] ?? 0);
+        $displayCurrency = session('display_currency', $bookingData['payment_types'][0]['currency_code'] ?? 'EUR');
+
+        // Pass $book_hash and display prices so we can display them in the Blade
+        return view('Hotel::frontend.booking-confirmation-ha', compact('bookingData', 'vendors', 'book_hash', 'displayFinalPrice', 'displayCurrency'));
     }
 
 
@@ -1751,12 +1793,12 @@ class HotelHController extends Controller
             'token' => $token,
         ]);
 
-        // 1. Retrieve all relevant booking data from cache/session
-        $bookingData = \Cache::get("pending_booking_{$token}");
-        $pcbOrder = \Cache::get("pcb_order_{$token}");
+        // 1. NO CACHE: Retrieve booking data from session instead
+        $bookingData = session("pending_booking_{$token}");
+        $pcbOrder = session("pcb_order_{$token}");
 
         if (!$bookingData || !$pcbOrder) {
-            \Log::error('No booking data found in cache');
+            \Log::error('No booking data found in session');
             return redirect()->route('hotel.search')
                 ->withErrors(['error' => 'Session expired. Please try again.']);
         }
@@ -1773,9 +1815,9 @@ class HotelHController extends Controller
         $orderDetails = $pcbService->getOrderDetails($pcbOrder['id'], $pcbOrder['password']);
 
         if ($orderDetails) {
-            // Store PCB Bank response in cache to save later when MjellmaBooking is created
-            \Cache::put("pcb_response_{$bookingData['partner_order_id']}", $orderDetails, now()->addMinutes(30));
-            \Log::info('💾 PCB Bank response cached for later saving', [
+            // NO CACHE: Store PCB Bank response in session instead
+            session(["pcb_response_{$bookingData['partner_order_id']}" => $orderDetails]);
+            \Log::info('💾 PCB Bank response saved to session', [
                 'partner_order_id' => $bookingData['partner_order_id'],
                 'pcb_status' => $orderDetails['status'] ?? 'Unknown'
             ]);
@@ -1833,8 +1875,11 @@ class HotelHController extends Controller
         $booking->last_name = $bookingData['last_name'] ?? 'User';
         $booking->email = $bookingData['email'] ?? 'customer@example.com';
         $booking->phone = $bookingData['phone'] ?? '+0000000000';
-        $booking->pay_now = $bookingData['payment_type']['amount'] ?? 0;
-        $booking->paid = $bookingData['payment_type']['amount'] ?? 0;
+
+        // Use display_final_price (customer paid amount with 15% markup for guests)
+        $customerPaidAmount = $bookingData['display_final_price'] ?? $bookingData['payment_type']['amount'] ?? 0;
+        $booking->pay_now = $customerPaidAmount;
+        $booking->paid = $customerPaidAmount;
         $booking->save();
 
         // Create payment record
@@ -1842,7 +1887,7 @@ class HotelHController extends Controller
         $payment->booking_id = $booking->id;
         $payment->payment_gateway = 'pcb_bank';
         $payment->status = 'completed';
-        $payment->amount = $bookingData['payment_type']['amount'] ?? 0;
+        $payment->amount = $customerPaidAmount;
 
         // Store comprehensive payment data for invoice generation
         // Structure the data to match what PcbBankGateway::getInvoiceData expects
@@ -1862,8 +1907,8 @@ class HotelHController extends Controller
             'pcb_card_pan' => 'XXXXXXXXXXXX' . substr($orderDetails['srcToken']['displayName'] ?? '', -4),
             'pcb_card_brand' => $orderDetails['srcToken']['card']['brand'] ?? 'Visa',
             'pcb_cvv2_auth_status' => $orderDetails['srcToken']['card']['authentication']['needCvv2'] ?? false,
-            'pcb_amount_eur' => number_format($bookingData['payment_type']['amount'] ?? 0, 2),
-            'pcb_amount_cents' => ($bookingData['payment_type']['amount'] ?? 0) * 100,
+            'pcb_amount_eur' => number_format($customerPaidAmount, 2),
+            'pcb_amount_cents' => $customerPaidAmount * 100,
             'pcb_currency' => $bookingData['payment_type']['currency_code'] ?? 'EUR',
             'pcb_currency_code' => '978',
             'pcb_transaction_datetime' => $orderDetails['createTime'] ?? now()->toDateTimeString(),
@@ -1912,11 +1957,15 @@ class HotelHController extends Controller
         $isPcbPayment = $request->input('payment_type.type') === 'pcb_bank';
 
         if (($paymentType === 'now' && $requiresCard) || $isPcbPayment) {
-            // ✅ Generate token to store booking
+            // NO CACHE: Generate token and store in session
             $token = Str::random(32);
-            Cache::put("pending_booking_{$token}", $request->all(), now()->addMinutes(10));
+            session(["pending_booking_{$token}" => $request->all()]);
 
-            $amount = $request->input('payment_type.amount');
+            // Use display_final_price for customer payment (includes 15% markup for guests)
+            // RateHawk will still receive the original payment_type.amount
+            $displayPrice = $request->input('display_final_price');
+            $amount = $displayPrice ?: $request->input('payment_type.amount');
+
             $description = 'Hotel Booking Pre-Payment';
             $redirectUrl = route('pcb.booking.return', ['token' => $token]);
 
@@ -1924,10 +1973,13 @@ class HotelHController extends Controller
             $order = $pcb->createOrder($amount, $description, $redirectUrl);
 
             if ($order && isset($order['id'], $order['password'], $order['hppUrl'])) {
-                Cache::put("pcb_order_{$token}", [
-                    'id' => $order['id'],
-                    'password' => $order['password'],
-                ], now()->addMinutes(10));
+                // NO CACHE: Store PCB order in session
+                session([
+                    "pcb_order_{$token}" => [
+                        'id' => $order['id'],
+                        'password' => $order['password'],
+                    ]
+                ]);
 
                 Log::info('🔁 Redirecting to PCB Bank', ['url' => $order['hppUrl']]);
                 return redirect($order['hppUrl'] . "?id={$order['id']}&password={$order['password']}");
@@ -1937,8 +1989,13 @@ class HotelHController extends Controller
             return back()->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
         }
 
-        Log::info('✅ No credit card required — calling finishBooking directly');
-        return app()->call([$this, 'finishBooking'], ['request' => $request]);
+        // COMMENTED OUT: Deposit payment flow - Only PCB Bank payment is supported now
+        // Log::info('✅ No credit card required — calling finishBooking directly');
+        // return app()->call([$this, 'finishBooking'], ['request' => $request]);
+
+        // If we reach here, payment method is not supported
+        Log::error('❌ Unsupported payment method');
+        return back()->withErrors(['error' => 'Only PCB Bank payment is supported. Please select PCB Bank payment method.']);
     }
 
     public function confirmAfterPcb(Request $request)
@@ -1948,11 +2005,12 @@ class HotelHController extends Controller
 
         Log::info('📨 PCB Bank returned with', ['ID' => $partnerOrderId, 'STATUS' => $status]);
 
-        $bookingData = Cache::get('booking_' . $partnerOrderId);
-        $pcbData = Cache::get('pcb_order_' . $partnerOrderId);
+        // NO CACHE: Get booking data from session
+        $bookingData = session('booking_' . $partnerOrderId);
+        $pcbData = session('pcb_order_' . $partnerOrderId);
 
         if (!$bookingData || !$pcbData) {
-            Log::error('❌ No booking data found in cache');
+            Log::error('❌ No booking data found in session');
             return redirect()->route('hotel.search')->withErrors(['error' => 'Booking session expired or not found.']);
         }
 
@@ -2421,14 +2479,17 @@ class HotelHController extends Controller
         // subsequent calls to finishBooking() will continue polling rather
         // than assuming success prematurely.
         if ($status === 'ok' || $status === 'processing') {
-            // Get cached PCB Bank response if available
-            $pcbResponse = \Cache::get("pcb_response_{$partnerOrderId}");
+            // NO CACHE: Get PCB Bank response from session if available
+            $pcbResponse = session("pcb_response_{$partnerOrderId}");
 
             $bookingData = [
                 'order_id' => $payload['order_id'],
                 'payment_type' => $payload['payment_type']['type'],
                 'payment_amount' => $payload['payment_type']['amount'],
                 'currency_code' => $payload['payment_type']['currency_code'],
+                // Store customer information for email notifications
+                'user_email' => $payload['user']['email'] ?? null,
+                'user_phone' => $payload['user']['phone'] ?? null,
                 // Always store "processing" here so later calls know to poll
                 'api_status' => 'processing',
             ];
@@ -2460,8 +2521,15 @@ class HotelHController extends Controller
 
             if (data_get($statusData, 'status') === 'ok') {
                 // Final success: mark as completed in DB and clear deadline
-                MjellmaBooking::where('partner_order_id', $partnerOrderId)
-                    ->update(['api_status' => 'ok']);
+                $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+                if ($mjellmaBooking) {
+                    $mjellmaBooking->api_status = 'ok';
+                    $mjellmaBooking->save();
+
+                    // Trigger event to send customer confirmation email
+                    event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+                }
+
                 $this->clearBookingDeadline($partnerOrderId);
                 return view('Hotel::frontend.payment-success', [
                     'order_id' => $payload['order_id'],
