@@ -90,8 +90,12 @@
                 {{-- Header --}}
                 <div class="d-flex align-items-center justify-content-between mb-3">
                     <div>
-                        <span class="text-muted">Among <span
-                                class="fw-semibold">{{ $totalHotels ?? $hotels->count() }}</span> accommodations</span>
+                        <span class="text-muted" id="results-counter">
+                            Among <span class="fw-semibold" id="total-count">{{ $totalHotels ?? $hotels->count() }}</span> accommodations
+                        </span>
+                        <span class="text-primary small ms-2" id="loading-prices-indicator">
+                            <i class="fa fa-spinner fa-spin"></i> Loading prices...
+                        </span>
                     </div>
 
                     {{-- View toggle --}}
@@ -105,110 +109,42 @@
                     </div>
                 </div>
 
-                @if ($hotels->count())
-                    <div id="hotel-list" class="extended-view">
-                        @foreach ($hotels as $hotel)
-                            @php
-                                $query = array_merge(
-                                    ['id' => $hotel->hotel_id],
-                                    request()->only([
-                                        'hotel_name',
-                                        'location',
-                                        'checkin',
-                                        'checkout',
-                                        'adults',
-                                        'rooms',
-                                        'latitude',
-                                        'longitude',
-                                        'currency',
-                                    ]),
-                                    ['children_count' => request('children_count', 0)],
-                                    ['children' => request('children', [])],
-                                );
+                <div id="hotel-list" class="extended-view">
+                    @foreach ($hotels as $hotel)
+                        @include('Hotel::frontend.partials.hotel-card-chunk', [
+                            'hotel' => $hotel,
+                            'query' => array_merge(
+                                ['id' => $hotel->hotel_id],
+                                request()->only([
+                                    'hotel_name',
+                                    'location',
+                                    'checkin',
+                                    'checkout',
+                                    'adults',
+                                    'rooms',
+                                    'latitude',
+                                    'longitude',
+                                    'currency',
+                                ]),
+                                ['children_count' => request('children_count', 0)],
+                                ['children' => request('children', [])],
+                            ),
+                        ])
+                    @endforeach
+                </div>
 
-                                $currencySym = match (request('currency', 'EUR')) {
-                                    'USD' => '$',
-                                    'GBP' => '£',
-                                    'EUR' => '€',
-                                    default => request('currency', '€'),
-                                };
-                            @endphp
-
-                            <a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link">
-                                <article class="hotel-listcard">
-                                    {{-- IMAGE --}}
-                                    <div class="hotel-listcard__media">
-                                        @if ($hotel->image_url)
-                                            <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}">
-                                        @else
-                                            <span class="no-image">No image available</span>
-                                        @endif
-
-                                        {{-- grid-only price badge --}}
-                                        @if ($hotel->daily_price)
-                                            <span class="grid-price-badge">
-                                                {{ number_format($hotel->daily_price, 0) }}{{ $currencySym }}
-                                            </span>
-                                        @endif
-                                    </div>
-
-
-                                    {{-- CONTENT --}}
-                                    <div class="hotel-listcard__content">
-                                        <div class="mb-2">
-                                            <h4 class="hotel-listcard__title mb-1">{{ $hotel->name }}</h4>
-                                            <div class="hotel-listcard__stars">
-                                                @for ($i = 0; $i < floor($hotel->star_rating ?? 0); $i++)
-                                                    <i class="fa fa-star"></i>
-                                                @endfor
-                                            </div>
-                                        </div>
-
-
-
-                                        <div class="hotel-listcard__location mb-3">
-                                            {{ \Illuminate\Support\Str::before($hotel->address ?? '', ',') }}
-                                            @if (!empty($hotel->distance_from_center))
-                                                – <span>{{ $hotel->distance_from_center }} from Center</span>
-                                            @endif
-                                        </div>
-
-                                        <p class="hotel-listcard__desc mb-4">
-                                            With a stay at {{ \Illuminate\Support\Str::limit($hotel->name, 28) }}, you’ll
-                                            be centrally located…
-                                        </p>
-
-                                        {{-- LIST-ONLY footer (left perks / right price+btn) --}}
-                                        <div class="hotel-listcard__footer">
-                                            <div class="hotel-listcard__perk">
-                                                @if ($hotel->has_breakfast)
-                                                    Breakfast included
-                                                @endif
-                                            </div>
-
-                                            <div class="d-flex flex-column align-items-end gap-2">
-                                                <div class="hotel-listcard__price">
-                                                    @if ($hotel->daily_price)
-                                                        From {{ number_format($hotel->daily_price, 0) }}
-                                                        {{ $currencySym }} / night
-                                                    @else
-                                                        No rooms available
-                                                    @endif
-                                                </div>
-                                                <span class="btn btn-cta">See options</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {{-- GRID-ONLY footer bar --}}
-                                    <div class="grid-see-footer">See options</div>
-                                </article>
-                            </a>
-                        @endforeach
+                {{-- Loading more indicator --}}
+                <div id="loading-more" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                @else
-                    <p class="text-center text-muted fs-5">No hotels found.</p>
-                @endif
+                    <p class="mt-2 text-muted">Loading more hotels...</p>
+                </div>
+
+                {{-- No results message --}}
+                <div id="no-results" class="text-center text-muted fs-5 py-5 d-none">
+                    No hotels found matching your criteria.
+                </div>
             </div>
         </div>
     </div>
@@ -250,11 +186,277 @@
 
             extendedBtn.addEventListener('click', () => setView('extended'));
             compactBtn.addEventListener('click', () => setView('compact'));
+
+            // Progressive loading with retry logic
+            @if(isset($searchHash))
+            const searchHash = '{{ $searchHash }}';
+            let currentChunk = 1; // Start from chunk 1 after chunk 0 prices load
+            let activeRequests = 0;
+            let maxParallelRequests = 2; // Load 2 chunks in parallel (reduced for better reliability)
+            let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
+            let totalHotelsCount = {{ $totalHotels ?? 0 }};
+            let loadedChunks = new Set(); // Will add chunk 0 after loading prices
+            let failedChunks = new Map(); // Track failed chunks for retry with exponential backoff
+            let priceUpdateInterval;
+
+            function loadChunk(chunkNumber) {
+                if (loadedChunks.has(chunkNumber)) return;
+                loadedChunks.add(chunkNumber);
+
+                activeRequests++;
+                if (activeRequests === 1) {
+                    document.getElementById('loading-more').classList.remove('d-none');
+                }
+
+                // Get current search parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                urlParams.append('chunk', chunkNumber);
+
+                fetch('{{ route("hotel.search") }}?' + urlParams.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    activeRequests--;
+
+                    if (data.error) {
+                        console.error('Error loading hotels:', data.error);
+                        loadedChunks.delete(chunkNumber); // Allow retry
+                        return;
+                    }
+
+                    // Handle chunk 0 specially - update prices for existing hotels
+                    if (chunkNumber === 0) {
+                        if (data.html) {
+                            const hotelList = document.getElementById('hotel-list');
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(data.html, 'text/html');
+                            const newCards = doc.querySelectorAll('.hotel-listcard');
+                            const existingCards = hotelList.querySelectorAll('.hotel-listcard');
+
+                            // Update existing cards with prices
+                            newCards.forEach((newCard, index) => {
+                                if (existingCards[index]) {
+                                    existingCards[index].replaceWith(newCard);
+                                }
+                            });
+                        }
+
+                        // Hide the "Loading prices..." indicator
+                        const priceIndicator = document.getElementById('loading-prices-indicator');
+                        if (priceIndicator) {
+                            priceIndicator.style.display = 'none';
+                        }
+                    } else {
+                        // Append new hotels for chunks 1+
+                        if (data.html) {
+                            const hotelList = document.getElementById('hotel-list');
+                            hotelList.insertAdjacentHTML('beforeend', data.html);
+                        }
+                    }
+
+                    // Update counter
+                    totalHotelsCount = data.totalCount || 0;
+                    const loadedCount = data.loadedCount || 0;
+
+                    const resultsCounter = document.getElementById('results-counter');
+                    if (totalHotelsCount > 0 && data.hasMore) {
+                        resultsCounter.innerHTML = `Loaded <span class="fw-semibold">${loadedCount}</span> of <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
+                    }
+
+                    // Check if more to load
+                    hasMoreHotels = data.hasMore;
+
+                    if (activeRequests === 0) {
+                        document.getElementById('loading-more').classList.add('d-none');
+                    }
+
+                    // Continue loading more chunks
+                    if (hasMoreHotels) {
+                        scheduleNextBatch();
+                    } else {
+                        // All loaded
+                        if (totalHotelsCount === 0) {
+                            document.getElementById('no-results').classList.remove('d-none');
+                        } else {
+                            resultsCounter.innerHTML = `Among <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading chunk ' + chunkNumber + ':', error);
+                    activeRequests--;
+                    loadedChunks.delete(chunkNumber); // Allow retry
+
+                    if (activeRequests === 0) {
+                        document.getElementById('loading-more').classList.add('d-none');
+                    }
+
+                    // Hide price indicator if chunk 0 failed
+                    if (chunkNumber === 0) {
+                        const priceIndicator = document.getElementById('loading-prices-indicator');
+                        if (priceIndicator) {
+                            priceIndicator.innerHTML = '<i class="fa fa-exclamation-circle"></i> Retrying...';
+                        }
+                    }
+
+                    // Retry with exponential backoff
+                    const retryCount = failedChunks.get(chunkNumber) || 0;
+                    if (retryCount < 3) { // Max 3 retries
+                        const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 8000); // 1s, 2s, 4s, max 8s
+                        failedChunks.set(chunkNumber, retryCount + 1);
+
+                        console.log(`Retrying chunk ${chunkNumber} in ${backoffDelay}ms (attempt ${retryCount + 1}/3)`);
+
+                        setTimeout(() => {
+                            if (!loadedChunks.has(chunkNumber)) {
+                                loadChunk(chunkNumber);
+                            }
+                        }, backoffDelay);
+                    } else {
+                        console.error(`Chunk ${chunkNumber} failed after 3 retries, skipping`);
+
+                        // Update indicator for chunk 0 failure
+                        if (chunkNumber === 0) {
+                            const priceIndicator = document.getElementById('loading-prices-indicator');
+                            if (priceIndicator) {
+                                priceIndicator.style.display = 'none';
+                            }
+                        }
+
+                        // Move to next chunk after max retries
+                        scheduleNextBatch();
+                    }
+                });
+            }
+
+            function scheduleNextBatch() {
+                // Load multiple chunks in parallel with staggered delays
+                while (activeRequests < maxParallelRequests && hasMoreHotels) {
+                    const nextChunk = currentChunk++;
+
+                    // Staggered loading to prevent API overload
+                    if (nextChunk < 3) {
+                        // Quick loading for first 2 chunks
+                        setTimeout(() => loadChunk(nextChunk), 200 * (nextChunk - 1));
+                    } else {
+                        // Progressive delay for subsequent chunks (500ms apart)
+                        setTimeout(() => loadChunk(nextChunk), 500 * (nextChunk - 2));
+                        break;
+                    }
+                }
+            }
+
+            // Function to update prices for existing hotels
+            function updatePrices() {
+                const hotelElements = document.querySelectorAll('.hotel-listcard');
+                hotelElements.forEach(hotelEl => {
+                    const priceEl = hotelEl.querySelector('.hotel-listcard__price');
+                    if (priceEl && priceEl.textContent.includes('Loading price')) {
+                        // Price is still loading, will be updated via chunk loading
+                        return;
+                    }
+                });
+            }
+
+            // Start loading immediately - load chunk 0 and chunk 1 in parallel
+            loadChunk(0); // Load prices for the first 5 hotels already displayed
+
+            if (hasMoreHotels) {
+                // Start loading next chunk immediately (in parallel with chunk 0)
+                setTimeout(() => {
+                    scheduleNextBatch();
+                }, 100); // Small delay to prioritize chunk 0
+            }
+
+            // Start updating prices for loaded hotels
+            priceUpdateInterval = setInterval(() => {
+                updatePrices();
+            }, 2000);
+
+            // Clean up interval after 30 seconds
+            setTimeout(() => {
+                if (priceUpdateInterval) {
+                    clearInterval(priceUpdateInterval);
+                }
+            }, 30000);
+            @endif
         });
     </script>
 
     {{-- Styles --}}
     <style>
+        /* Skeleton Loader */
+        .skeleton-card {
+            display: flex;
+            background: #fff;
+            border: 1px solid #eaeaea;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .04);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-image {
+            width: 44%;
+            min-width: 340px;
+            max-width: 480px;
+            height: 250px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        .skeleton-content {
+            flex: 1;
+            padding: 22px 28px;
+        }
+
+        .skeleton-title {
+            height: 24px;
+            width: 70%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .skeleton-text {
+            height: 16px;
+            width: 90%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        .skeleton-text:last-child {
+            width: 60%;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.8;
+            }
+        }
+
         /* Toggle buttons */
         .view-tab {
             background: none;

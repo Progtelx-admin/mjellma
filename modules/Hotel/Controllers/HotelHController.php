@@ -43,7 +43,7 @@ class HotelHController extends Controller
     public function __construct()
     {
         // Pull from .env; keep a safe default for API_URL only
-        $this->apiUrl   = env('API_URL', 'https://api.worldota.net/api/b2b/v3/');
+        $this->apiUrl = env('API_URL', 'https://api.worldota.net/api/b2b/v3/');
         $this->username = env('API_USERNAME');
         $this->password = env('API_PASSWORD');
 
@@ -99,9 +99,17 @@ class HotelHController extends Controller
         'sandbox_restriction',
         'supplier_data_required',
         // Generic authentication/contract errors
-        'decoding_json', 'endpoint_exceeded_limit', 'endpoint_not_active', 'endpoint_not_found',
-        'incorrect_credentials', 'invalid_auth_header', 'invalid_params', 'no_auth_header',
-        'not_allowed_host', 'overdue_debt', 'unexpected_method',
+        'decoding_json',
+        'endpoint_exceeded_limit',
+        'endpoint_not_active',
+        'endpoint_not_found',
+        'incorrect_credentials',
+        'invalid_auth_header',
+        'invalid_params',
+        'no_auth_header',
+        'not_allowed_host',
+        'overdue_debt',
+        'unexpected_method',
         // booking_finish_did_not_succeed can be returned from the finish call if the
         // API determines that the booking could not be started at all.  Treat it as
         // unrecoverable here as well, although it is more commonly returned from the
@@ -129,12 +137,27 @@ class HotelHController extends Controller
      * @var string[]
      */
     private array $finalStatusErrors = [
-        '3ds', 'block', 'book_limit', 'booking_finish_did_not_succeed',
-        'charge', 'provider', 'soldout', 'not_allowed', 'order_not_found',
+        '3ds',
+        'block',
+        'book_limit',
+        'booking_finish_did_not_succeed',
+        'charge',
+        'provider',
+        'soldout',
+        'not_allowed',
+        'order_not_found',
         // Additional final errors that may appear across endpoints
-        'decoding_json', 'endpoint_exceeded_limit', 'endpoint_not_active', 'endpoint_not_found',
-        'incorrect_credentials', 'invalid_auth_header', 'invalid_params', 'no_auth_header',
-        'not_allowed_host', 'overdue_debt', 'unexpected_method',
+        'decoding_json',
+        'endpoint_exceeded_limit',
+        'endpoint_not_active',
+        'endpoint_not_found',
+        'incorrect_credentials',
+        'invalid_auth_header',
+        'invalid_params',
+        'no_auth_header',
+        'not_allowed_host',
+        'overdue_debt',
+        'unexpected_method',
     ];
 
     /**
@@ -217,23 +240,24 @@ class HotelHController extends Controller
         try {
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
-                'hotel_name'         => 'nullable|string',
-                'location'           => 'nullable|string',
-                'latitude'           => 'nullable|numeric',
-                'longitude'          => 'nullable|numeric',
-                'radius'             => 'nullable|integer|min:1',
-                'checkin'            => 'required|date',
-                'checkout'           => 'required|date|after:checkin',
-                'rooms'              => 'required|integer|min:1',
-                'adults'             => 'required|integer|min:1',
-                'children_count'     => 'required|integer|min:0|max:5',
-                'children'           => 'nullable|array',
-                'children.*'         => 'integer|min:0|max:17',
-                'min_price'          => 'nullable|numeric|min:0',
-                'max_price'          => 'nullable|numeric|min:0',
-                'star_rating'        => 'nullable|array',
-                'star_rating.*'      => 'integer|between:1,5',
+                'hotel_name' => 'nullable|string',
+                'location' => 'nullable|string',
+                'latitude' => 'nullable|numeric',
+                'longitude' => 'nullable|numeric',
+                'radius' => 'nullable|integer|min:1',
+                'checkin' => 'required|date',
+                'checkout' => 'required|date|after:checkin',
+                'rooms' => 'required|integer|min:1',
+                'adults' => 'required|integer|min:1',
+                'children_count' => 'required|integer|min:0|max:5',
+                'children' => 'nullable|array',
+                'children.*' => 'integer|min:0|max:17',
+                'min_price' => 'nullable|numeric|min:0',
+                'max_price' => 'nullable|numeric|min:0',
+                'star_rating' => 'nullable|array',
+                'star_rating.*' => 'integer|between:1,5',
                 'breakfast_included' => 'nullable|boolean',
+                'chunk' => 'nullable|integer',
             ]);
 
             // 2) Build cache key including both count and ages
@@ -249,149 +273,314 @@ class HotelHController extends Controller
                 $request->adults,
                 $request->children_count,
                 $request->children,
-                $request->min_price,
-                $request->max_price,
-                $request->star_rating,
-                $request->breakfast_included,
             ]));
-            $cacheKey = "search_results_{$searchHash}";
 
             // 3) Sanitize child ages (0–17)
-            $childrenCount = (int)$request->input('children_count', 0);
-            $rawAges       = $request->input('children', []);
-            $childAges     = array_values(array_filter(
+            $childrenCount = (int) $request->input('children_count', 0);
+            $rawAges = $request->input('children', []);
+            $childAges = array_values(array_filter(
                 array_map('intval', $rawAges),
                 fn($age) => $age >= 0 && $age <= 17
             ));
 
-            // 4) Fetch & cache if needed
-            if (!Cache::has($cacheKey)) {
-                // — DB query for hotels
-                $hotelQuery = DB::table('hotels')
-                    ->select('hotel_id','name','latitude','longitude','star_rating','address');
-
-                if ($request->filled('hotel_name')) {
-                    $hotelQuery->where('name','like','%'.$request->hotel_name.'%');
-                }
-                if ($request->filled('star_rating')) {
-                    $hotelQuery->whereIn('star_rating',$request->star_rating);
-                }
-                if ($request->filled('latitude') && $request->filled('longitude')) {
-                    $lat    = $request->latitude;
-                    $lng    = $request->longitude;
-                    $radius = $request->radius ?? 10;
-                    $hotelQuery->whereBetween('latitude', [
-                        $lat - ($radius/111), $lat + ($radius/111)
-                    ])->whereBetween('longitude', [
-                        $lng - ($radius/(111*cos(deg2rad($lat)))),
-                        $lng + ($radius/(111*cos(deg2rad($lat))))
-                    ]);
-                }
-
-                $hotels   = $hotelQuery->get();
-                $hotelIds = $hotels->pluck('hotel_id')->toArray();
-
-                // — Attach images
-                $hotelImages = DB::table('hotel_images')
-                    ->whereIn('hotel_id',$hotelIds)
-                    ->groupBy('hotel_id')
-                    ->pluck('image_url','hotel_id');
-
-                foreach($hotels as $hotel) {
-                    $hotel->image_url     = $hotelImages[$hotel->hotel_id]
-                                            ?? asset('images/default-image.jpg');
-                    $hotel->daily_price   = null;
-                    $hotel->has_breakfast = false;
-                }
-
-                // 5) Call ETG API with exact child ages
-                $apiBody = [
-                    'checkin'   => $request->checkin,
-                    'checkout'  => $request->checkout,
-                    'residency' => 'gb',
-                    'language'  => 'en',
-                    'guests'    => [[
-                        'adults'   => (int)$request->adults,
-                        'children' => $childAges,
-                    ]],
-                    'ids'       => $hotelIds,
-                    'currency'  => 'EUR',
-                ];
-
-                $apiData = Http::withOptions($this->httpOptions)
-                    ->withBasicAuth($this->username, $this->password)
-                    ->withHeaders(['Content-Type'=>'application/json'])
-                    ->post($this->apiUrl.'search/serp/hotels',$apiBody)
-                    ->json()['data']['hotels'] ?? [];
-
-                // 6) Map prices & breakfast flags
-                $pricesResult = [];
-                foreach($apiData as $apiHotel){
-                    $hid = $apiHotel['id'] ?? null;
-                    if(!$hid) continue;
-                    $dailyPrice   = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                // Determine if any rate for this hotel includes breakfast without relying on meal_data
-                $hasBreakfast = collect($apiHotel['rates'] ?? [])
-                    ->contains(function ($r) {
-                        // Prefer the newer `meal` field; fall back to the `meal_data.value` if necessary
-                        $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
-                        // Treat any meal plan other than `nomeal` that contains the word "breakfast" as including breakfast
-                        return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
-                    });
-                    $pricesResult[$hid] = compact('dailyPrice','hasBreakfast');
-                }
-                foreach($hotels as $hotel){
-                    $res = $pricesResult[$hotel->hotel_id] ?? null;
-                    $hotel->daily_price   = $res['dailyPrice']   ?? null;
-                    $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
-                }
-
-                // 7) Cache
-                Cache::put($cacheKey, $hotels->toArray(), now()->addMinutes(15));
+            // Handle chunked loading for AJAX requests
+            if ($request->ajax() && $request->has('chunk')) {
+                return $this->loadHotelChunk($request, $searchHash, $childAges);
             }
 
-            // 8) Retrieve & paginate
-            $allHotels = collect(Cache::get($cacheKey, []))
-                ->map(fn($h) => (object)$h)
-                ->sortByDesc(fn($hotel) => !empty($hotel->daily_price))
-                ->values();
+            // 4) Get hotels from database immediately (no API calls)
+            $hotelQuery = DB::table('hotels')
+                ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
 
-            $page        = (int)$request->input('page',1);
-            $perPage     = 10;
-            $pagedHotels = $allHotels->slice(($page-1)*$perPage,$perPage)->values();
-
-            $minPrice = $allHotels->pluck('daily_price')->filter()->min() ?? 0;
-            $maxPrice = $allHotels->pluck('daily_price')->filter()->max() ?? 999;
-
-            // 9) AJAX load more
-            if ($request->ajax()) {
-                $html = '';
-                foreach ($pagedHotels as $hotel) {
-                    $html .= view('Hotel::frontend.partials.hotel-card',compact('hotel'))->render();
-                }
-                return response()->json([
-                    'html'    => $html,
-                    'hasMore' => ($page*$perPage) < $allHotels->count(),
-                ]);
+            if ($request->filled('hotel_name')) {
+                $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
+            }
+            if ($request->filled('star_rating')) {
+                $hotelQuery->whereIn('star_rating', $request->star_rating);
+            }
+            if ($request->filled('latitude') && $request->filled('longitude')) {
+                $lat = $request->latitude;
+                $lng = $request->longitude;
+                $radius = $request->radius ?? 10;
+                $hotelQuery->whereBetween('latitude', [
+                    $lat - ($radius / 111),
+                    $lat + ($radius / 111)
+                ])->whereBetween('longitude', [
+                            $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                            $lng + ($radius / (111 * cos(deg2rad($lat))))
+                        ]);
             }
 
-            $totalHotels = $allHotels->count();
+            $hotels = $hotelQuery->limit(5)->get(); // Show first 5 immediately
 
-            // 10) Full page response
-            return view('Hotel::frontend.results-ha',[
-                'hotels'   => $pagedHotels,
-                'totalHotels'=> $totalHotels,
-                'checkin'  => $request->checkin,
+            // Attach images
+            $hotelImages = DB::table('hotel_images')
+                ->whereIn('hotel_id', $hotels->pluck('hotel_id'))
+                ->groupBy('hotel_id')
+                ->pluck('image_url', 'hotel_id');
+
+            foreach ($hotels as $hotel) {
+                $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
+                $hotel->daily_price = null; // Will be updated via AJAX
+                $hotel->has_breakfast = false;
+            }
+
+            // Cache search params for AJAX
+            $cacheKey = "search_params_{$searchHash}";
+            Cache::put($cacheKey, [
+                'hotel_name' => $request->hotel_name,
+                'location' => $request->location,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'radius' => $request->radius,
+                'star_rating' => $request->star_rating,
+                'checkin' => $request->checkin,
                 'checkout' => $request->checkout,
-                'adults'   => $request->adults,
+                'adults' => $request->adults,
+                'rooms' => $request->rooms,
+                'children_count' => $childrenCount,
+                'children' => $childAges,
+            ], now()->addMinutes(30));
+
+            // Cache total count
+            $totalCount = DB::table('hotels')
+                ->when($request->filled('hotel_name'), function ($q) use ($request) {
+                    return $q->where('name', 'like', '%' . $request->hotel_name . '%');
+                })
+                ->when($request->filled('star_rating'), function ($q) use ($request) {
+                    return $q->whereIn('star_rating', $request->star_rating);
+                })
+                ->when($request->filled('latitude') && $request->filled('longitude'), function ($q) use ($request) {
+                    $lat = $request->latitude;
+                    $lng = $request->longitude;
+                    $radius = $request->radius ?? 10;
+                    return $q->whereBetween('latitude', [
+                        $lat - ($radius / 111),
+                        $lat + ($radius / 111)
+                    ])->whereBetween('longitude', [
+                                $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                                $lng + ($radius / (111 * cos(deg2rad($lat))))
+                            ]);
+                })
+                ->count();
+
+            // Return page with first 10 hotels immediately
+            return view('Hotel::frontend.results-ha', [
+                'hotels' => $hotels,
+                'totalHotels' => $totalCount,
+                'checkin' => $request->checkin,
+                'checkout' => $request->checkout,
+                'adults' => $request->adults,
                 'children' => $childrenCount,
-                'minPrice' => $minPrice,
-                'maxPrice' => $maxPrice,
+                'minPrice' => 0,
+                'maxPrice' => 999,
+                'searchHash' => $searchHash,
+                'isLoading' => false, // Show hotels immediately
+                'loadMore' => $totalCount > 5,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error searching hotels',['message'=>$e->getMessage()]);
-            return back()->with('error','An error occurred: '.$e->getMessage());
+            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+            return back()->with('error', 'An error occurred: ' . $e->getMessage());
+        }
+    }
+
+    private function loadHotelChunk(Request $request, $searchHash, $childAges)
+    {
+        $chunk = (int) $request->input('chunk', 0);
+        $chunkSize = 5; // Process 5 hotels at a time (lighter API load)
+        $fetchPrices = $request->boolean('fetch_prices', true);
+
+        try {
+            // Get search params from cache
+            $searchParams = Cache::get("search_params_{$searchHash}");
+            if (!$searchParams) {
+                return response()->json(['error' => 'Search expired'], 400);
+            }
+
+            // Check if we've already cached all hotels
+            $allHotelsCacheKey = "all_hotels_{$searchHash}";
+
+            if (!Cache::has($allHotelsCacheKey)) {
+                // First chunk - query database
+                $hotelQuery = DB::table('hotels')
+                    ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
+
+                if (!empty($searchParams['hotel_name'])) {
+                    $hotelQuery->where('name', 'like', '%' . $searchParams['hotel_name'] . '%');
+                }
+                if (!empty($searchParams['star_rating'])) {
+                    $hotelQuery->whereIn('star_rating', $searchParams['star_rating']);
+                }
+                if (!empty($searchParams['latitude']) && !empty($searchParams['longitude'])) {
+                    $lat = $searchParams['latitude'];
+                    $lng = $searchParams['longitude'];
+                    $radius = $searchParams['radius'] ?? 10;
+                    $hotelQuery->whereBetween('latitude', [
+                        $lat - ($radius / 111),
+                        $lat + ($radius / 111)
+                    ])->whereBetween('longitude', [
+                                $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                                $lng + ($radius / (111 * cos(deg2rad($lat))))
+                            ]);
+                }
+
+                $hotels = $hotelQuery->get();
+
+                // Attach images
+                $hotelImages = DB::table('hotel_images')
+                    ->whereIn('hotel_id', $hotels->pluck('hotel_id'))
+                    ->groupBy('hotel_id')
+                    ->pluck('image_url', 'hotel_id');
+
+                foreach ($hotels as $hotel) {
+                    $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
+                    $hotel->daily_price = null;
+                    $hotel->has_breakfast = false;
+                }
+
+                Cache::put($allHotelsCacheKey, $hotels->toArray(), now()->addMinutes(30));
+            }
+
+            $allHotels = collect(Cache::get($allHotelsCacheKey, []));
+            $totalHotels = $allHotels->count();
+
+            // Get chunk of hotels
+            $chunkHotels = $allHotels->slice($chunk * $chunkSize, $chunkSize);
+
+            if ($chunkHotels->isEmpty()) {
+                return response()->json([
+                    'html' => '',
+                    'hasMore' => false,
+                    'totalCount' => $totalHotels,
+                    'loadedCount' => $totalHotels,
+                ]);
+            }
+
+            // Fetch prices for this chunk from API (if requested)
+            if ($fetchPrices) {
+                $hotelIds = $chunkHotels->pluck('hotel_id')->toArray();
+
+                // Check cache first to avoid duplicate API calls
+                $priceCacheKey = "hotel_prices_" . md5(json_encode([
+                    $searchParams['checkin'],
+                    $searchParams['checkout'],
+                    $searchParams['adults'],
+                    $childAges,
+                    $hotelIds,
+                    $request->input('currency', 'EUR'),
+                ]));
+
+                $pricesResult = Cache::get($priceCacheKey);
+
+                if (!$pricesResult) {
+                    $apiBody = [
+                        'checkin' => $searchParams['checkin'],
+                        'checkout' => $searchParams['checkout'],
+                        'residency' => 'gb',
+                        'language' => 'en',
+                        'guests' => [
+                            [
+                                'adults' => (int) $searchParams['adults'],
+                                'children' => $childAges,
+                            ]
+                        ],
+                        'ids' => $hotelIds,
+                        'currency' => $request->input('currency', 'EUR'),
+                    ];
+
+                    try {
+                        $apiData = Http::timeout(30) // Increased timeout for better reliability
+                            ->withOptions($this->httpOptions)
+                            ->withBasicAuth($this->username, $this->password)
+                            ->withHeaders(['Content-Type' => 'application/json'])
+                            ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
+                            ->json()['data']['hotels'] ?? [];
+
+                        // Map prices & breakfast flags
+                        $pricesResult = [];
+                        foreach ($apiData as $apiHotel) {
+                            $hid = $apiHotel['id'] ?? null;
+                            if (!$hid)
+                                continue;
+                            $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
+                            $hasBreakfast = collect($apiHotel['rates'] ?? [])
+                                ->contains(function ($r) {
+                                    $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
+                                    return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
+                                });
+                            $pricesResult[$hid] = compact('dailyPrice', 'hasBreakfast');
+                        }
+
+                        // Cache for 10 minutes to reduce API calls
+                        Cache::put($priceCacheKey, $pricesResult, now()->addMinutes(10));
+
+                    } catch (\Exception $e) {
+                        Log::warning('API timeout for chunk ' . $chunk . ', showing hotels without prices', ['error' => $e->getMessage()]);
+                        $pricesResult = []; // Empty array to continue without prices
+                    }
+                }
+
+                // Apply cached or fresh prices to hotels
+                foreach ($chunkHotels as $hotel) {
+                    $hotel = (object) $hotel;
+                    $res = $pricesResult[$hotel->hotel_id] ?? null;
+                    $hotel->daily_price = $res['dailyPrice'] ?? null;
+                    $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
+                }
+            }
+
+            // Apply filters (only if we have prices, or if filter doesn't require price)
+            $filtered = $chunkHotels->filter(function ($h) use ($request) {
+                $hotel = (object) $h;
+
+                // Skip price filters if we don't have price data yet
+                if ($request->filled('min_price') && $hotel->daily_price !== null && $hotel->daily_price < $request->min_price) {
+                    return false;
+                }
+                if ($request->filled('max_price') && $hotel->daily_price !== null && $hotel->daily_price > $request->max_price) {
+                    return false;
+                }
+                if ($request->boolean('breakfast_included') && !$hotel->has_breakfast) {
+                    return false;
+                }
+                return true;
+            });
+
+            // Generate HTML
+            $html = '';
+            foreach ($filtered as $hotelData) {
+                $hotel = (object) $hotelData;
+                $query = array_merge(
+                    ['id' => $hotel->hotel_id],
+                    $request->only(['checkin', 'checkout', 'adults', 'rooms', 'latitude', 'longitude', 'currency']),
+                    ['children_count' => $searchParams['children_count']],
+                    ['children' => $searchParams['children']]
+                );
+
+                $currencySym = match ($request->input('currency', 'EUR')) {
+                    'USD' => '$',
+                    'GBP' => '£',
+                    'EUR' => '€',
+                    default => '€',
+                };
+
+                $html .= view('Hotel::frontend.partials.hotel-card-chunk', compact('hotel', 'query', 'currencySym'))->render();
+            }
+
+            $loadedCount = ($chunk + 1) * $chunkSize;
+            $hasMore = $loadedCount < $totalHotels;
+
+            return response()->json([
+                'html' => $html,
+                'hasMore' => $hasMore,
+                'totalCount' => $totalHotels,
+                'loadedCount' => min($loadedCount, $totalHotels),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error loading hotel chunk', ['message' => $e->getMessage(), 'chunk' => $chunk]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -545,15 +734,15 @@ class HotelHController extends Controller
 
         try {
             // 1. Parse parameters
-            $checkin   = $request->query('checkin', now()->format('Y-m-d'));
-            $checkout  = $request->query('checkout', now()->addDay()->format('Y-m-d'));
+            $checkin = $request->query('checkin', now()->format('Y-m-d'));
+            $checkout = $request->query('checkout', now()->addDay()->format('Y-m-d'));
             $residency = $request->query('residency', 'gb');
-            $language  = $request->query('language', 'en');
-            $currency  = $request->query('currency', 'EUR');
-            $adults    = (int)$request->query('adults', 1);
-            $children  = collect($request->query('children', []))
+            $language = $request->query('language', 'en');
+            $currency = $request->query('currency', 'EUR');
+            $adults = (int) $request->query('adults', 1);
+            $children = collect($request->query('children', []))
                 ->filter(fn($age) => is_numeric($age) && $age >= 0 && $age <= 17)
-                ->map(fn($age) => (int)$age)
+                ->map(fn($age) => (int) $age)
                 ->values()
                 ->toArray();
 
@@ -578,13 +767,13 @@ class HotelHController extends Controller
                 ->withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->apiUrl . 'search/hp/', [
-                    'checkin'   => $checkin,
-                    'checkout'  => $checkout,
+                    'checkin' => $checkin,
+                    'checkout' => $checkout,
                     'residency' => $residency,
-                    'language'  => $language,
-                    'currency'  => $currency,
-                    'id'        => $id,
-                    'guests'    => [[ 'adults' => $adults, 'children' => $children ]],
+                    'language' => $language,
+                    'currency' => $currency,
+                    'id' => $id,
+                    'guests' => [['adults' => $adults, 'children' => $children]],
                 ]);
 
             if ($rateResponse->failed()) {
@@ -605,15 +794,15 @@ class HotelHController extends Controller
                 ->withBasicAuth($this->username, $this->password)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->apiUrl . 'hotel/info/', [
-                    'hid'      => (int)$dbHotel->hid,
+                    'hid' => (int) $dbHotel->hid,
                     'language' => $language,
                 ]);
 
-                $roomImageMap = [];
-                $metapolicyStruct = [];
-                $metapolicyExtraInfo = '';
+            $roomImageMap = [];
+            $metapolicyStruct = [];
+            $metapolicyExtraInfo = '';
 
-                if ($infoResponse->ok() && isset($infoResponse['data'])) {
+            if ($infoResponse->ok() && isset($infoResponse['data'])) {
                 $infoData = $infoResponse['data'];
 
                 // ✅ Extract metapolicy fields from API
@@ -637,12 +826,12 @@ class HotelHController extends Controller
 
                         Log::info('Mapped room group images', [
                             'room_name_key' => $roomNameKey,
-                            'image_count'   => count($images),
-                            'first_image'   => $images[0] ?? 'N/A',
+                            'image_count' => count($images),
+                            'first_image' => $images[0] ?? 'N/A',
                         ]);
                     }
                 }
-                } else {
+            } else {
                 Log::warning('Empty or invalid hotel info API response', ['hotel_id' => $id]);
             }
 
@@ -655,8 +844,8 @@ class HotelHController extends Controller
             // can use them without duplicating the logic.
             $roomRates = collect($hotelRateData['rates'] ?? [])->map(function ($rate) use ($roomImageMap, $checkin, $checkout, $adults, $children) {
                 // Extract pricing information
-                $payment    = $rate['payment_options']['payment_types'][0] ?? [];
-                $net        = data_get($payment, 'commission_info.charge.amount_net', 0);
+                $payment = $rate['payment_options']['payment_types'][0] ?? [];
+                $net = data_get($payment, 'commission_info.charge.amount_net', 0);
                 $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
 
                 // Determine human‑readable meal label based on the `meal` or `meal_data.value` field
@@ -674,25 +863,25 @@ class HotelHController extends Controller
                     Log::warning('Rate missing room name', ['rate' => $rate]);
                     $rate['room_images'] = [];
                     // Still attach basic pricing and meal info so UI remains consistent
-                    $rate['net_amount']        = $net;
+                    $rate['net_amount'] = $net;
                     $rate['commission_amount'] = $commission;
-                    $rate['final_price']       = round($net + $commission, 2);
-                    $rate['meal_type']         = $mealLabel;
+                    $rate['final_price'] = round($net + $commission, 2);
+                    $rate['meal_type'] = $mealLabel;
                     return $rate;
                 }
 
                 // Match room images using normalized room name
                 $roomNameKey = $this->normalizeRoomName($roomNameRaw);
-                $roomImages  = $roomImageMap[$roomNameKey] ?? $this->findClosestImageMatch($roomNameKey, $roomImageMap);
+                $roomImages = $roomImageMap[$roomNameKey] ?? $this->findClosestImageMatch($roomNameKey, $roomImageMap);
                 if (empty($roomImages)) {
                     Log::debug('No images matched for room', ['room_name_key' => $roomNameKey]);
                 }
 
                 // Attach computed fields back to the rate
-                $rate['net_amount']        = $net;
+                $rate['net_amount'] = $net;
                 $rate['commission_amount'] = $commission;
-                $rate['final_price']       = round($net + $commission, 2);
-                $rate['meal_type']         = $mealLabel;
+                $rate['final_price'] = round($net + $commission, 2);
+                $rate['meal_type'] = $mealLabel;
                 // Optionally derive a simple meal code based on the first letters of each word
                 $rate['meal_code'] = preg_match_all('/\b(\w)/u', $mealLabel, $m) ? strtoupper(implode('', $m[1])) : null;
                 $rate['room_images'] = $roomImages;
@@ -701,18 +890,18 @@ class HotelHController extends Controller
                 // when provided; otherwise multiply the per‑person per‑night amount by
                 // number of nights and guests.  Attach the results to the rate so the
                 // view can use them.
-                $taxes        = data_get($payment, 'tax_data.taxes', []);
+                $taxes = data_get($payment, 'tax_data.taxes', []);
                 $displayTaxes = [];
                 foreach ($taxes as $tax) {
-                    $name         = $tax['name'] ?? '';
+                    $name = $tax['name'] ?? '';
                     $currencyCode = $tax['currency_code'] ?? '';
                     // Prefer the total displayable amount fields when available
                     $amount = $tax['amount_show']
-                           ?? ($tax['amount_charge'] ?? ($tax['amount'] ?? 0));
+                        ?? ($tax['amount_charge'] ?? ($tax['amount'] ?? 0));
                     $displayTaxes[] = [
-                        'name'                 => $name,
-                        'amount'               => (float) $amount,
-                        'currency_code'        => $currencyCode,
+                        'name' => $name,
+                        'amount' => (float) $amount,
+                        'currency_code' => $currencyCode,
                         'included_by_supplier' => $tax['included_by_supplier'] ?? false,
                     ];
                 }
@@ -720,33 +909,39 @@ class HotelHController extends Controller
 
                 Log::info('Processing rate', [
                     'room_name_key' => $roomNameKey,
-                    'has_images'    => !empty($roomImages),
-                    'image_count'   => count($roomImages),
-                    'first_image'   => $roomImages[0] ?? 'N/A',
+                    'has_images' => !empty($roomImages),
+                    'image_count' => count($roomImages),
+                    'first_image' => $roomImages[0] ?? 'N/A',
                 ]);
 
                 return $rate;
             })->toArray();
 
             $hotel = [
-                'id'                    => $hotelRateData['id'] ?? $dbHotel->hotel_id,
-                'name'                  => $dbHotel->name ?? $hotelRateData['name'] ?? 'N/A',
-                'address'               => $dbHotel->address ?? $hotelRateData['address'] ?? 'N/A',
-                'star_rating'           => $dbHotel->star_rating ?? $hotelRateData['star_rating'] ?? 0,
-                'images_ext'            => $hotelImages,
-                'metapolicy_struct'     => $metapolicyStruct,
+                'id' => $hotelRateData['id'] ?? $dbHotel->hotel_id,
+                'name' => $dbHotel->name ?? $hotelRateData['name'] ?? 'N/A',
+                'address' => $dbHotel->address ?? $hotelRateData['address'] ?? 'N/A',
+                'star_rating' => $dbHotel->star_rating ?? $hotelRateData['star_rating'] ?? 0,
+                'images_ext' => $hotelImages,
+                'metapolicy_struct' => $metapolicyStruct,
                 'metapolicy_extra_info' => $metapolicyExtraInfo,
             ];
 
 
             return view('Hotel::frontend.info-ha', compact(
-                'hotel', 'roomRates', 'checkin', 'checkout', 'adults', 'children', 'currency'
+                'hotel',
+                'roomRates',
+                'checkin',
+                'checkout',
+                'adults',
+                'children',
+                'currency'
             ));
 
         } catch (\Exception $e) {
             Log::error('Error fetching hotel info', [
                 'hotel_id' => $id,
-                'error'    => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
             return redirect()->back()->withErrors(['error' => 'Could not load hotel information.']);
         }
@@ -818,7 +1013,7 @@ class HotelHController extends Controller
             return ['status' => 'error', 'error' => 'timeout'];
         }
 
-        $startTime    = time();
+        $startTime = time();
         $lastResponse = ['status' => null, 'error' => null];
 
         // Keep polling until we hit a terminal condition or time runs out.  We
@@ -839,7 +1034,7 @@ class HotelHController extends Controller
                     $json = $resp->json();
                     $lastResponse = $json;
                     $status = data_get($json, 'status');
-                    $error  = data_get($json, 'error');
+                    $error = data_get($json, 'error');
 
                     // When the booking has completed successfully (status = 'ok') or
                     // when a final error appears, break out of the loop.
@@ -853,7 +1048,7 @@ class HotelHController extends Controller
                     $statusCode = $resp->status();
                     $lastResponse = [
                         'status' => 'error',
-                        'error'  => $statusCode,
+                        'error' => $statusCode,
                     ];
                     if ($statusCode >= 400 && $statusCode < 500) {
                         // 4xx errors are not recoverable by polling
@@ -864,7 +1059,7 @@ class HotelHController extends Controller
                 // Network or other exception; treat as temporary and continue.
                 $lastResponse = [
                     'status' => 'error',
-                    'error'  => 'unknown',
+                    'error' => 'unknown',
                 ];
             }
 
@@ -896,15 +1091,15 @@ class HotelHController extends Controller
             $validated = $request->validate([
                 'book_hash' => 'required|string',
                 'room_name' => 'required|string',
-                'children'  => 'sometimes',
+                'children' => 'sometimes',
             ]);
 
-            $bookHash             = $validated['book_hash'];
+            $bookHash = $validated['book_hash'];
             $priceIncreasePercent = (int) $request->input('price_increase_percent', 20);
-            $roomName             = $validated['room_name'];
+            $roomName = $validated['room_name'];
 
             $apiBody = [
-                'hash'                   => $bookHash,
+                'hash' => $bookHash,
                 'price_increase_percent' => $priceIncreasePercent,
             ];
 
@@ -924,17 +1119,17 @@ class HotelHController extends Controller
                 : (array) $rawChildren;
 
             $displayFinalPrice = (float) $request->input('display_final_price', 0);
-            $displayCurrency   = $request->input('display_currency', 'EUR');
+            $displayCurrency = $request->input('display_currency', 'EUR');
 
             session([
-                'prebookData'         => $prebookData,
-                'roomName'            => $roomName,
-                'checkin'             => $request->checkin,
-                'checkout'            => $request->checkout,
-                'adults'              => (int) $request->input('adults', 1),
-                'children'            => $children,
+                'prebookData' => $prebookData,
+                'roomName' => $roomName,
+                'checkin' => $request->checkin,
+                'checkout' => $request->checkout,
+                'adults' => (int) $request->input('adults', 1),
+                'children' => $children,
                 'display_final_price' => $displayFinalPrice,
-                'display_currency'    => $displayCurrency,
+                'display_currency' => $displayCurrency,
             ]);
 
             return redirect()->route('hotel.prebook.result');
@@ -950,13 +1145,13 @@ class HotelHController extends Controller
     public function prebookResult()
     {
         $prebookData = session('prebookData');
-        $roomName    = session('roomName');
-        $checkin     = session('checkin', now()->format('Y-m-d'));
-        $checkout    = session('checkout', now()->addDay()->format('Y-m-d'));
-        $adults      = session('adults', 1);
-        $children    = session('children', []);
+        $roomName = session('roomName');
+        $checkin = session('checkin', now()->format('Y-m-d'));
+        $checkout = session('checkout', now()->addDay()->format('Y-m-d'));
+        $adults = session('adults', 1);
+        $children = session('children', []);
 
-        $oldPrice    = (float) session('display_final_price', 0.0);
+        $oldPrice = (float) session('display_final_price', 0.0);
         $oldCurrency = session('display_currency', '');
 
         if (!$prebookData) {
@@ -964,8 +1159,8 @@ class HotelHController extends Controller
         }
 
         $hotelData = $prebookData['data']['hotels'][0] ?? null;
-        $rate      = $hotelData['rates'][0] ?? null;
-        $hotelId   = $hotelData['id'] ?? null;
+        $rate = $hotelData['rates'][0] ?? null;
+        $hotelId = $hotelData['id'] ?? null;
 
         if (!$hotelId) {
             return redirect()->route('hotel.search')->withErrors(['error' => 'Hotel ID is missing from prebooking data.']);
@@ -978,9 +1173,9 @@ class HotelHController extends Controller
             ->value('image_url');
 
         $hotelDetails = [
-            'id'          => $hotelId,
-            'name'        => $hotel->name ?? $hotelData['name'] ?? 'Hotel Name Not Available',
-            'address'     => $hotel->address ?? $hotelData['address'] ?? 'Location Not Available',
+            'id' => $hotelId,
+            'name' => $hotel->name ?? $hotelData['name'] ?? 'Hotel Name Not Available',
+            'address' => $hotel->address ?? $hotelData['address'] ?? 'Location Not Available',
             'star_rating' => $hotel->star_rating ?? $hotelData['star_rating'] ?? 0,
         ];
 
@@ -990,9 +1185,9 @@ class HotelHController extends Controller
 
         if ($rate) {
             $payment = $rate['payment_options']['payment_types'][0] ?? [];
-            $net        = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
+            $net = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
             $commission = data_get($payment, 'commission_info.charge.amount_commission', 0);
-            $newPrice   = (float) $net + (float) $commission;
+            $newPrice = (float) $net + (float) $commission;
             $newCurrency = $payment['currency_code'] ?? '';
 
             if ($oldPrice > 0 && abs($newPrice - $oldPrice) > 0.01) {
@@ -1099,30 +1294,30 @@ class HotelHController extends Controller
         try {
             // Validate input
             $request->validate([
-                'book_hash'          => 'required|string',
-                'partner_order_id'   => 'required|string',
-                'user_ip'            => 'required|ip',
-                'hotel_id'           => 'required|string',
-                'checkin'            => 'required|date',
-                'checkout'           => 'required|date',
-                'meal_plan'          => 'nullable|string',
+                'book_hash' => 'required|string',
+                'partner_order_id' => 'required|string',
+                'user_ip' => 'required|ip',
+                'hotel_id' => 'required|string',
+                'checkin' => 'required|date',
+                'checkout' => 'required|date',
+                'meal_plan' => 'nullable|string',
             ]);
 
-            $bookHash       = $request->input('book_hash');
+            $bookHash = $request->input('book_hash');
             $partnerOrderId = $request->input('partner_order_id');
-            $userIp         = $request->input('user_ip');
+            $userIp = $request->input('user_ip');
 
             // Persist booking basics in session for later steps
             session([
                 'booking.partner_order_id' => $partnerOrderId,
-                'booking.book_hash'        => $bookHash,
-                'booking.user_ip'          => $userIp,
-                'booking.hotel_id'         => $request->input('hotel_id'),
-                'booking.checkin'          => $request->input('checkin'),
-                'booking.checkout'         => $request->input('checkout'),
-                'booking.meal_plan'        => $request->input('meal_plan'),
-                'booking.adults'           => $request->input('adults', 1),
-                'booking.children'         => json_decode($request->input('children', '[]'), true),
+                'booking.book_hash' => $bookHash,
+                'booking.user_ip' => $userIp,
+                'booking.hotel_id' => $request->input('hotel_id'),
+                'booking.checkin' => $request->input('checkin'),
+                'booking.checkout' => $request->input('checkout'),
+                'booking.meal_plan' => $request->input('meal_plan'),
+                'booking.adults' => $request->input('adults', 1),
+                'booking.children' => json_decode($request->input('children', '[]'), true),
             ]);
 
             // Initialize the booking deadline for this order so that all subsequent
@@ -1131,9 +1326,9 @@ class HotelHController extends Controller
 
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
-                'book_hash'        => $bookHash,
-                'language'         => 'en',
-                'user_ip'          => $userIp,
+                'book_hash' => $bookHash,
+                'language' => 'en',
+                'user_ip' => $userIp,
             ];
 
             Log::info('📤 Sending booking form request to API', ['payload' => $apiBody]);
@@ -1145,7 +1340,7 @@ class HotelHController extends Controller
 
             Log::info('📥 Booking API Response', [
                 'status' => $response->status(),
-                'body'   => $response->body(),
+                'body' => $response->body(),
             ]);
 
             // If HTTP request fails (4xx/5xx), throw exception
@@ -1153,9 +1348,9 @@ class HotelHController extends Controller
                 throw new \Exception('Booking API request failed: ' . $response->body());
             }
 
-            $json       = $response->json();
-            $status     = data_get($json, 'status');
-            $error      = data_get($json, 'error');
+            $json = $response->json();
+            $status = data_get($json, 'status');
+            $error = data_get($json, 'error');
             $httpStatus = $response->status();
 
             // If the form call succeeded, store bookingData and go to confirmation
@@ -1220,7 +1415,7 @@ class HotelHController extends Controller
                 // if the booking has been created internally.  Respect the remaining
                 // booking window so as not to exceed the global timeout.
                 $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
-                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+                $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('bookRoom finish/status response', ['status' => $statusData]);
 
                 if (data_get($statusData, 'status') === 'ok') {
@@ -1268,17 +1463,17 @@ class HotelHController extends Controller
     {
         // 1) Basic validation
         $request->validate([
-            'order_id'         => 'required|string',
+            'order_id' => 'required|string',
             'partner_order_id' => 'required|string',
-            'payment_method'   => 'required|integer|min:0',
-            'guests'           => 'required|array|min:1',
+            'payment_method' => 'required|integer|min:0',
+            'guests' => 'required|array|min:1',
             'guests.*.first_name' => 'required|string',
-            'guests.*.last_name'  => 'required|string',
+            'guests.*.last_name' => 'required|string',
         ]);
 
         try {
-            $orderId         = $request->input('order_id');
-            $partnerOrderId  = $request->input('partner_order_id');
+            $orderId = $request->input('order_id');
+            $partnerOrderId = $request->input('partner_order_id');
 
             // Ensure a booking deadline exists for this partner order id so that
             // all subsequent polling respects a single timeout window across
@@ -1286,35 +1481,35 @@ class HotelHController extends Controller
             // present from the form step, this call will return the existing
             // value; otherwise it will initialise one.
             $this->getBookingDeadline($partnerOrderId);
-            $pmIndex         = $request->input('payment_method');
-            $guests          = $request->input('guests');
+            $pmIndex = $request->input('payment_method');
+            $guests = $request->input('guests');
 
             $bookingData = session('bookingData');
-            if (! $bookingData) {
+            if (!$bookingData) {
                 throw new \Exception('Session bookingData missing');
             }
 
             $paymentTypes = data_get($bookingData, 'payment_types', []);
-            if (! isset($paymentTypes[$pmIndex])) {
+            if (!isset($paymentTypes[$pmIndex])) {
                 throw new \Exception('Invalid payment method index');
             }
             $selectedPayment = $paymentTypes[$pmIndex];
 
             // 2) If CC data is needed, validate
-            if (! empty($selectedPayment['is_need_credit_card_data'])) {
+            if (!empty($selectedPayment['is_need_credit_card_data'])) {
                 $request->validate([
-                    'card_number'  => 'required|digits:16',
-                    'card_holder'  => 'required|string',
+                    'card_number' => 'required|digits:16',
+                    'card_holder' => 'required|string',
                     'expiry_month' => 'required|digits:2',
-                    'expiry_year'  => 'required|digits:2',
-                    'cvc'          => 'required|digits_between:3,4',
+                    'expiry_year' => 'required|digits:2',
+                    'cvc' => 'required|digits_between:3,4',
                 ]);
                 $creditCardData = [
-                    'card_number'  => $request->input('card_number'),
-                    'card_holder'  => $request->input('card_holder'),
+                    'card_number' => $request->input('card_number'),
+                    'card_holder' => $request->input('card_holder'),
                     'expiry_month' => $request->input('expiry_month'),
-                    'expiry_year'  => $request->input('expiry_year'),
-                    'cvc'          => $request->input('cvc'),
+                    'expiry_year' => $request->input('expiry_year'),
+                    'cvc' => $request->input('cvc'),
                 ];
             }
 
@@ -1326,19 +1521,19 @@ class HotelHController extends Controller
             // 3) Build payload
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
-                'order_id'         => $orderId,
-                'payment_type'     => [
-                    'type'          => $selectedPayment['type'],
-                    'amount'        => $selectedPayment['amount'],
+                'order_id' => $orderId,
+                'payment_type' => [
+                    'type' => $selectedPayment['type'],
+                    'amount' => $selectedPayment['amount'],
                     'currency_code' => $selectedPayment['currency_code'],
                 ],
-                'language'         => 'en',
-                'rooms'            => $rooms,
-                'guests'           => $guests,
+                'language' => 'en',
+                'rooms' => $rooms,
+                'guests' => $guests,
                 'credit_card_data' => $creditCardData ?? null,
             ];
 
-            Log::info('Sending payment payload', ['payload'=>$apiBody]);
+            Log::info('Sending payment payload', ['payload' => $apiBody]);
 
             // Send the booking finish request to RateHawk.  Do not assume that a
             // successful HTTP response from this endpoint means the booking
@@ -1360,13 +1555,13 @@ class HotelHController extends Controller
             } catch (\Exception $e) {
                 Log::error('processPayment: Unable to decode JSON', ['exception' => $e->getMessage()]);
                 return view('Hotel::frontend.booking-pending', [
-                    'status'   => ['error' => 'decoding_json'],
+                    'status' => ['error' => 'decoding_json'],
                     'order_id' => $orderId,
                 ]);
             }
 
-            $status     = data_get($json, 'status');
-            $error      = data_get($json, 'error');
+            $status = data_get($json, 'status');
+            $error = data_get($json, 'error');
             $httpStatus = $resp->status();
             $shouldPoll = false;
 
@@ -1383,7 +1578,7 @@ class HotelHController extends Controller
                 if (in_array($error, $this->finalFinishErrors, true)) {
                     Log::error('processPayment: Final finish error encountered', ['error' => $error]);
                     return view('Hotel::frontend.booking-pending', [
-                        'status'   => ['error' => $error],
+                        'status' => ['error' => $error],
                         'order_id' => $orderId,
                     ]);
                 }
@@ -1396,7 +1591,7 @@ class HotelHController extends Controller
                 } else {
                     Log::error('processPayment: Unhandled finish error', ['error' => $error]);
                     return view('Hotel::frontend.booking-pending', [
-                        'status'   => ['error' => $error],
+                        'status' => ['error' => $error],
                         'order_id' => $orderId,
                     ]);
                 }
@@ -1417,7 +1612,7 @@ class HotelHController extends Controller
                 // Poll the finish/status endpoint repeatedly until a final
                 // response or until the remaining booking window expires.
                 $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
-                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+                $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('processPayment: finish/status response after polling', ['statusData' => $statusData]);
                 if (data_get($statusData, 'status') === 'ok') {
                     // Booking confirmed after polling.  Clear the deadline and redirect.
@@ -1427,7 +1622,7 @@ class HotelHController extends Controller
                 // Otherwise, display the pending page with the last status or
                 // error returned from the status call.
                 return view('Hotel::frontend.booking-pending', [
-                    'status'   => $statusData,
+                    'status' => $statusData,
                     'order_id' => $orderId,
                 ]);
             }
@@ -1447,16 +1642,14 @@ class HotelHController extends Controller
 
             // Fallback: show pending if the status is neither ok nor final.
             return view('Hotel::frontend.booking-pending', [
-                'status'   => ['status' => $status, 'error' => $error],
+                'status' => ['status' => $status, 'error' => $error],
                 'order_id' => $orderId,
             ]);
-        }
-        catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return redirect()->back()->withErrors($e->errors());
-        }
-        catch (\Exception $e) {
-            Log::error('processPayment error', ['message'=>$e->getMessage(),'trace'=>$e->getTraceAsString()]);
-            return redirect()->back()->withErrors(['error'=>'Payment processing failed: '.$e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('processPayment error', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return redirect()->back()->withErrors(['error' => 'Payment processing failed: ' . $e->getMessage()]);
         }
     }
 
@@ -1532,18 +1725,18 @@ class HotelHController extends Controller
     public function handlePcbReturn(Request $request)
     {
         $orderId = $request->query('ID');       // PCB Order ID
-        $status  = $request->query('STATUS');   // e.g. "FullyPaid"
-        $token   = $request->query('token');    // For retrieving cached booking
+        $status = $request->query('STATUS');   // e.g. "FullyPaid"
+        $token = $request->query('token');    // For retrieving cached booking
 
         \Log::info('PCB Bank returned with', [
-            'ID'     => $orderId,
+            'ID' => $orderId,
             'STATUS' => $status,
-            'token'  => $token,
+            'token' => $token,
         ]);
 
         // 1. Retrieve all relevant booking data from cache/session
         $bookingData = \Cache::get("pending_booking_{$token}");
-        $pcbOrder    = \Cache::get("pcb_order_{$token}");
+        $pcbOrder = \Cache::get("pcb_order_{$token}");
 
         if (!$bookingData || !$pcbOrder) {
             \Log::error('No booking data found in cache');
@@ -1561,7 +1754,7 @@ class HotelHController extends Controller
         // 3. Store PCB Bank order details in cache for later saving to MjellmaBooking
         $pcbService = new \App\Services\PcbBankService();
         $orderDetails = $pcbService->getOrderDetails($pcbOrder['id'], $pcbOrder['password']);
-        
+
         if ($orderDetails) {
             // Store PCB Bank response in cache to save later when MjellmaBooking is created
             \Cache::put("pcb_response_{$bookingData['partner_order_id']}", $orderDetails, now()->addMinutes(30));
@@ -1594,7 +1787,7 @@ class HotelHController extends Controller
 
         // 7. Optionally, store or override any needed user details to pass to RateHawk
         $bookingData['first_name'] = $bookingData['first_name'] ?? 'Guest';
-        $bookingData['last_name']  = $bookingData['last_name']  ?? 'User';
+        $bookingData['last_name'] = $bookingData['last_name'] ?? 'User';
 
         \Log::info('Confirming booking after PCB as a deposit booking', ['payload' => $bookingData]);
 
@@ -1633,7 +1826,7 @@ class HotelHController extends Controller
         $payment->payment_gateway = 'pcb_bank';
         $payment->status = 'completed';
         $payment->amount = $bookingData['payment_type']['amount'] ?? 0;
-        
+
         // Store comprehensive payment data for invoice generation
         // Structure the data to match what PcbBankGateway::getInvoiceData expects
         $invoiceData = [
@@ -1670,13 +1863,13 @@ class HotelHController extends Controller
         // Create invoice using InvoiceService
         $invoiceService = new \App\Services\InvoiceService();
         $invoice = $invoiceService->createInvoice($payment);
-        
+
         // Generate PDF
         $invoiceService->generatePdf($invoice);
-        
+
         // Send invoice via email
         $invoiceService->sendInvoice($invoice);
-        
+
         \Log::info('📄 Invoice created and sent for PCB Bank payment', [
             'invoice_id' => $invoice->id,
             'invoice_number' => $invoice->invoice_number,
@@ -1700,7 +1893,7 @@ class HotelHController extends Controller
 
         // Check if PCB Bank payment is selected (from the dropdown)
         $isPcbPayment = $request->input('payment_type.type') === 'pcb_bank';
-        
+
         if (($paymentType === 'now' && $requiresCard) || $isPcbPayment) {
             // ✅ Generate token to store booking
             $token = Str::random(32);
@@ -2060,20 +2253,20 @@ class HotelHController extends Controller
     public function finishBooking(Request $request)
     {
         $request->validate([
-            'order_id'                    => 'required|string',
-            'partner_order_id'            => 'required|string',
-            'first_name'                  => 'required|string',
-            'last_name'                   => 'required|string',
-            'email'                       => 'required|email',
-            'phone'                       => 'required|string|min:5',
-            'payment_type'                => 'required|array',
-            'payment_type.type'           => 'required|string',
-            'payment_type.amount'         => 'required|numeric',
-            'payment_type.currency_code'  => 'required|string',
-            'rooms'                       => 'required|array',
-            'rooms.*.guests'              => 'required|array',
+            'order_id' => 'required|string',
+            'partner_order_id' => 'required|string',
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'email' => 'required|email',
+            'phone' => 'required|string|min:5',
+            'payment_type' => 'required|array',
+            'payment_type.type' => 'required|string',
+            'payment_type.amount' => 'required|numeric',
+            'payment_type.currency_code' => 'required|string',
+            'rooms' => 'required|array',
+            'rooms.*.guests' => 'required|array',
             'rooms.*.guests.*.first_name' => 'required|string',
-            'rooms.*.guests.*.last_name'  => 'required|string',
+            'rooms.*.guests.*.last_name' => 'required|string',
         ]);
 
         $partnerOrderId = $request->input('partner_order_id');
@@ -2098,7 +2291,7 @@ class HotelHController extends Controller
                 // ensures we respect the same timeout across all steps and
                 // avoid ghost bookings.
                 $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
-                $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+                $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
                 Log::info('⏳ Polled finish/status during retry', ['status' => $statusData]);
 
                 if (data_get($statusData, 'status') === 'ok') {
@@ -2119,21 +2312,21 @@ class HotelHController extends Controller
         }
 
         $payload = [
-            'order_id'      => $request->input('order_id'),
-            'partner'       => ['partner_order_id' => $partnerOrderId],
-            'user'          => [
+            'order_id' => $request->input('order_id'),
+            'partner' => ['partner_order_id' => $partnerOrderId],
+            'user' => [
                 'first_name' => $request->input('first_name'),
-                'last_name'  => $request->input('last_name'),
-                'email'      => 'blerimmi@hotmail.com',
-                'phone'      => $request->input('phone'),
+                'last_name' => $request->input('last_name'),
+                'email' => 'blerimmi@hotmail.com',
+                'phone' => $request->input('phone'),
             ],
             'supplier_data' => $request->input('supplier_data', []),
-            'rooms'         => $request->input('rooms'),
-            'payment_type'  => $request->input('payment_type'),
-            'language'      => $request->input('language', 'en'),
-            'return_path'   => $request->input('return_path'),
-            'item_id'       => $request->input('item_id'),
-            'book_hash'     => $request->input('book_hash'),
+            'rooms' => $request->input('rooms'),
+            'payment_type' => $request->input('payment_type'),
+            'language' => $request->input('language', 'en'),
+            'return_path' => $request->input('return_path'),
+            'item_id' => $request->input('item_id'),
+            'book_hash' => $request->input('book_hash'),
         ];
 
         Log::info('📥 Booking Submission', ['payload' => $payload]);
@@ -2150,8 +2343,8 @@ class HotelHController extends Controller
         Log::info('finishBooking response', ['response' => $json]);
 
         // Extract status and error returned from the finish call
-        $status     = data_get($json, 'status');
-        $error      = data_get($json, 'error');
+        $status = data_get($json, 'status');
+        $error = data_get($json, 'error');
         $httpStatus = $response->status();
 
         // Determine whether we should proceed to poll the status endpoint.
@@ -2174,7 +2367,7 @@ class HotelHController extends Controller
             if (in_array($error, $this->finalFinishErrors, true)) {
                 Log::error('❌ Final finish error encountered', ['error' => $error]);
                 return view('Hotel::frontend.booking-pending', [
-                    'status'   => ['error' => $error],
+                    'status' => ['error' => $error],
                     'order_id' => $payload['order_id'],
                 ]);
             }
@@ -2186,7 +2379,7 @@ class HotelHController extends Controller
                 // Unexpected error code: treat as unrecoverable and surface to user
                 Log::error('❌ Unhandled finish error', ['error' => $error]);
                 return view('Hotel::frontend.booking-pending', [
-                    'status'   => ['error' => $error],
+                    'status' => ['error' => $error],
                     'order_id' => $payload['order_id'],
                 ]);
             }
@@ -2213,16 +2406,16 @@ class HotelHController extends Controller
         if ($status === 'ok' || $status === 'processing') {
             // Get cached PCB Bank response if available
             $pcbResponse = \Cache::get("pcb_response_{$partnerOrderId}");
-            
+
             $bookingData = [
-                'order_id'       => $payload['order_id'],
-                'payment_type'   => $payload['payment_type']['type'],
+                'order_id' => $payload['order_id'],
+                'payment_type' => $payload['payment_type']['type'],
                 'payment_amount' => $payload['payment_type']['amount'],
-                'currency_code'  => $payload['payment_type']['currency_code'],
+                'currency_code' => $payload['payment_type']['currency_code'],
                 // Always store "processing" here so later calls know to poll
-                'api_status'     => 'processing',
+                'api_status' => 'processing',
             ];
-            
+
             // Add PCB Bank response if available
             if ($pcbResponse) {
                 $bookingData['pcb_bank_response'] = $pcbResponse;
@@ -2232,7 +2425,7 @@ class HotelHController extends Controller
                     'pcb_status' => $pcbResponse['status'] ?? 'Unknown'
                 ]);
             }
-            
+
             MjellmaBooking::updateOrCreate(
                 ['partner_order_id' => $partnerOrderId],
                 $bookingData
@@ -2245,7 +2438,7 @@ class HotelHController extends Controller
             // a common timeout and we avoid ghost bookings.  The remaining
             // time is computed from the booking deadline created earlier.
             $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
-            $statusData    = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+            $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
             Log::info('finishBooking status response', ['status' => $statusData]);
 
             if (data_get($statusData, 'status') === 'ok') {
@@ -2254,14 +2447,14 @@ class HotelHController extends Controller
                     ->update(['api_status' => 'ok']);
                 $this->clearBookingDeadline($partnerOrderId);
                 return view('Hotel::frontend.payment-success', [
-                    'order_id'         => $payload['order_id'],
+                    'order_id' => $payload['order_id'],
                     'partner_order_id' => $partnerOrderId,
                 ]);
             }
 
             // Booking not completed yet; return pending with the last status
             return view('Hotel::frontend.booking-pending', [
-                'status'   => $statusData,
+                'status' => $statusData,
                 'order_id' => $payload['order_id'],
             ]);
         }
@@ -2275,7 +2468,7 @@ class HotelHController extends Controller
             ->update(['api_status' => 'ok']);
         $this->clearBookingDeadline($partnerOrderId);
         return view('Hotel::frontend.payment-success', [
-            'order_id'         => $payload['order_id'],
+            'order_id' => $payload['order_id'],
             'partner_order_id' => $partnerOrderId,
         ]);
     }
@@ -2293,19 +2486,19 @@ class HotelHController extends Controller
 
         // Build the finish payload according to the booking record and request
         $finishPayload = [
-            'order_id'         => $booking->order_id,
+            'order_id' => $booking->order_id,
             'partner_order_id' => $partnerId,
-            'supplier_data'    => $request->input('supplier_data', []),
-            'payment_type'     => [
-                'amount'        => $booking->payment_amount,
+            'supplier_data' => $request->input('supplier_data', []),
+            'payment_type' => [
+                'amount' => $booking->payment_amount,
                 'currency_code' => $booking->currency_code,
-                'type'          => $booking->payment_type,
+                'type' => $booking->payment_type,
             ],
-            'return_path'      => $request->input('return_path'),
-            'rooms'            => $request->input('rooms'),
-            'language'         => $request->input('language', 'en'),
-            'book_hash'        => $booking->book_hash,
-            'item_id'          => $booking->item_id,
+            'return_path' => $request->input('return_path'),
+            'rooms' => $request->input('rooms'),
+            'language' => $request->input('language', 'en'),
+            'book_hash' => $booking->book_hash,
+            'item_id' => $booking->item_id,
         ];
 
         try {
@@ -2315,9 +2508,9 @@ class HotelHController extends Controller
                 ->timeout(30)
                 ->post($this->apiUrl . 'hotel/order/booking/finish/', $finishPayload);
 
-            $json       = $resp->json();
-            $status     = data_get($json, 'status');
-            $error      = data_get($json, 'error');
+            $json = $resp->json();
+            $status = data_get($json, 'status');
+            $error = data_get($json, 'error');
             $httpStatus = $resp->status();
 
             Log::info('completeBooking finish response', ['response' => $json]);
@@ -2329,7 +2522,7 @@ class HotelHController extends Controller
                 // immediately and not retried or polled.
                 if (in_array($error, $this->finalFinishErrors, true)) {
                     return view('Hotel::frontend.booking-pending', [
-                        'status'   => ['error' => $error],
+                        'status' => ['error' => $error],
                         'order_id' => $booking->order_id,
                     ]);
                 }
@@ -2340,7 +2533,7 @@ class HotelHController extends Controller
                 } else {
                     // Any other error is treated as unrecoverable
                     return view('Hotel::frontend.booking-pending', [
-                        'status'   => ['error' => $error],
+                        'status' => ['error' => $error],
                         'order_id' => $booking->order_id,
                     ]);
                 }
@@ -2368,20 +2561,20 @@ class HotelHController extends Controller
                 // short window to allow recovery from transient issues until
                 // the overall booking timeout expires.
                 $remainingTime = $this->getRemainingBookingTime($partnerId);
-                $statusData    = $this->pollFinishStatus($partnerId, $remainingTime);
+                $statusData = $this->pollFinishStatus($partnerId, $remainingTime);
                 Log::info('completeBooking status response', ['status' => $statusData]);
                 if (data_get($statusData, 'status') === 'ok') {
                     // Mark final success and clear the deadline
                     $booking->update(['status' => 'ok']);
                     $this->clearBookingDeadline($partnerId);
                     return view('Hotel::frontend.payment-success', [
-                        'booking'    => $booking,
+                        'booking' => $booking,
                         'statusData' => $statusData,
                     ]);
                 }
                 return view('Hotel::frontend.booking-pending', [
                     'booking' => $booking,
-                    'status'  => $statusData,
+                    'status' => $statusData,
                 ]);
             }
 
@@ -2390,7 +2583,7 @@ class HotelHController extends Controller
             $booking->update(['status' => 'ok']);
             $this->clearBookingDeadline($partnerId);
             return view('Hotel::frontend.payment-success', [
-                'booking'    => $booking,
+                'booking' => $booking,
                 'statusData' => $json,
             ]);
 
@@ -2401,7 +2594,7 @@ class HotelHController extends Controller
             ]);
             return view('Hotel::frontend.booking-pending', [
                 'booking' => $booking,
-                'status'  => ['error' => 'unknown'],
+                'status' => ['error' => 'unknown'],
             ]);
         }
     }
@@ -2425,7 +2618,7 @@ class HotelHController extends Controller
         if ($user->role_id !== 1) {
             $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
                 $query->where('user_id', $user->id)
-                      ->orWhere('agent_id', $user->id);
+                    ->orWhere('agent_id', $user->id);
             })->pluck('partner_order_id')->filter()->values()->toArray();
 
             if (empty($partnerOrderIds)) {
@@ -2448,21 +2641,21 @@ class HotelHController extends Controller
         if ($response->successful() && isset($response['data']['orders'])) {
             foreach ($response['data']['orders'] as $order) {
                 $bookings[] = [
-                    'order_id'        => $order['order_id'] ?? '',
+                    'order_id' => $order['order_id'] ?? '',
                     'client_name' => collect(data_get($order, 'rooms_data.0.guest_data.guests', []))
                         ->map(function ($guest) {
                             return trim(($guest['first_name'] ?? '') . ' ' . ($guest['last_name'] ?? ''));
                         })
                         ->filter()
                         ->implode(', '),
-                    'user_email'      => data_get($order, 'user.email', 'N/A'),
-                    'user_phone'      => data_get($order, 'user.phone', 'N/A'),
-                    'payment_amount'  => data_get($order, 'client_price.amount', 'N/A'),
-                    'currency_code'   => data_get($order, 'client_price.currency_code', ''),
-                    'created_at'      => data_get($order, 'created_at', 'N/A'),
-                    'invoice_id'      => data_get($order, 'invoice_id', 'N/A'),
-                    'status'          => data_get($order, 'status', 'unknown'),
-                    'partner_order_id'=> data_get($order, 'partner_data.order_id'),
+                    'user_email' => data_get($order, 'user.email', 'N/A'),
+                    'user_phone' => data_get($order, 'user.phone', 'N/A'),
+                    'payment_amount' => data_get($order, 'client_price.amount', 'N/A'),
+                    'currency_code' => data_get($order, 'client_price.currency_code', ''),
+                    'created_at' => data_get($order, 'created_at', 'N/A'),
+                    'invoice_id' => data_get($order, 'invoice_id', 'N/A'),
+                    'status' => data_get($order, 'status', 'unknown'),
+                    'partner_order_id' => data_get($order, 'partner_data.order_id'),
                 ];
 
                 $statuses[$order['order_id']] = $order['status'] ?? 'unknown';
@@ -2484,16 +2677,16 @@ class HotelHController extends Controller
             // 1) Fetch “order/info”
             $infoResp = Http::withOptions($this->httpOptions)
                 ->withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type'=>'application/json'])
-                ->post($this->apiUrl.'hotel/order/info/', [
-                    'ordering'   => ['ordering_type'=>'desc', 'ordering_by'=>'created_at'],
-                    'pagination' => ['page_size'=>1, 'page_number'=>1],
-                    'search'     => ['order_ids'=>[(int)$orderId]],
-                    'language'   => 'en',
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->apiUrl . 'hotel/order/info/', [
+                    'ordering' => ['ordering_type' => 'desc', 'ordering_by' => 'created_at'],
+                    'pagination' => ['page_size' => 1, 'page_number' => 1],
+                    'search' => ['order_ids' => [(int) $orderId]],
+                    'language' => 'en',
                 ]);
 
-            if (! $infoResp->successful()) {
-                throw new \Exception("order/info returned HTTP ".$infoResp->status());
+            if (!$infoResp->successful()) {
+                throw new \Exception("order/info returned HTTP " . $infoResp->status());
             }
 
             $infoJson = $infoResp->json();
@@ -2503,41 +2696,41 @@ class HotelHController extends Controller
 
             $bookingInfo = $infoJson['data']['orders'][0];
             $partnerOrderId = data_get($bookingInfo, 'partner_data.order_id');
-            if (! $partnerOrderId) {
+            if (!$partnerOrderId) {
                 throw new \Exception("Missing partner_order_id in partner_data");
             }
 
             // 2) Fetch “finish/status”
             $statusResp = Http::withOptions($this->httpOptions)
                 ->withBasicAuth($this->username, $this->password)
-                ->withHeaders(['Content-Type'=>'application/json'])
-                ->post($this->apiUrl.'hotel/order/booking/finish/status/', [
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
                     'partner_order_id' => $partnerOrderId
                 ]);
 
-            if (! $statusResp->successful()) {
-                throw new \Exception("finish/status returned HTTP ".$statusResp->status());
+            if (!$statusResp->successful()) {
+                throw new \Exception("finish/status returned HTTP " . $statusResp->status());
             }
 
             $statusJson = $statusResp->json();
             $finalStatus = $statusJson['status'] ?? 'UNKNOWN';
-            $finishData  = $statusJson;
+            $finishData = $statusJson;
 
         } catch (\Exception $e) {
             Log::error('Error in showBookingDetails', [
-                'orderId'=>$orderId,
-                'message'=>$e->getMessage(),
-                'trace'=>$e->getTraceAsString()
+                'orderId' => $orderId,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             return redirect()->back()->withErrors([
-                'error' => 'Could not load booking details: '.$e->getMessage()
+                'error' => 'Could not load booking details: ' . $e->getMessage()
             ]);
         }
 
         return view('Hotel::admin.details', [
-            'booking'     => $bookingInfo,
+            'booking' => $bookingInfo,
             'finalStatus' => $finalStatus,
-            'finishData'  => $finishData,
+            'finishData' => $finishData,
         ]);
     }
 
@@ -2640,7 +2833,7 @@ class HotelHController extends Controller
 
         $query->where(function ($q) use ($user) {
             $q->where('user_id', $user->id)
-              ->orWhere('agent_id', $user->id);
+                ->orWhere('agent_id', $user->id);
         });
 
         if ($status = $request->input('status')) {
