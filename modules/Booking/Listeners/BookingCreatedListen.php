@@ -3,10 +3,12 @@
 namespace Modules\Booking\Listeners;
 
 use Modules\Booking\Events\BookingCreatedEvent;
+use Modules\Booking\Emails\NewBookingEmail;
 use App\Models\User;
 use App\Notifications\AdminChannelServices;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 
 class BookingCreatedListen
 {
@@ -18,13 +20,13 @@ class BookingCreatedListen
         $avatar = Auth::check() ? (Auth::user()->avatar_url ?? '') : '';
 
         $data = [
-            'id'      => $booking->id,
-            'event'   => 'BookingCreatedEvent',
-            'to'      => 'admin',
-            'name'    => $name,
-            'avatar'  => $avatar,
-            'link'    => url('/admin/module/booking'),
-            'type'    => 'booking',
+            'id' => $booking->id,
+            'event' => 'BookingCreatedEvent',
+            'to' => 'admin',
+            'name' => $name,
+            'avatar' => $avatar,
+            'link' => url('/admin/module/booking'),
+            'type' => 'booking',
             'message' => __(":name has created a new Booking", ['name' => $name]),
         ];
 
@@ -35,6 +37,19 @@ class BookingCreatedListen
             Log::info('📬 Sent Booking Notification to Admin', ['admin_id' => $adminUser->id]);
         } else {
             Log::warning('⚠️ No Admin user found for Booking notification.');
+        }
+
+        // Send booking confirmation email to customer
+        try {
+            if ($booking->email) {
+                Mail::to($booking->email)->send(new NewBookingEmail($booking, 'customer'));
+                Log::info('✉️ Sent Booking Confirmation Email to Customer', [
+                    'booking_id' => $booking->id,
+                    'customer_email' => $booking->email
+                ]);
+            }
+        } catch (\Exception $exception) {
+            Log::warning('⚠️ Failed to send customer confirmation email: ' . $exception->getMessage());
         }
     }
 }
