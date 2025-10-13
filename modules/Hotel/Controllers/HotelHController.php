@@ -237,6 +237,9 @@ class HotelHController extends Controller
 
     public function searchHotels(Request $request)
     {
+        // Extend execution time for large dataset searches
+        set_time_limit(120);
+
         try {
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
@@ -311,7 +314,7 @@ class HotelHController extends Controller
                         ]);
             }
 
-            $hotels = $hotelQuery->limit(5)->get(); // Show first 5 immediately
+            $hotels = $hotelQuery->limit(10)->get(); // Show first 10 immediately
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -342,27 +345,30 @@ class HotelHController extends Controller
                 'children' => $childAges,
             ], now()->addMinutes(30));
 
-            // Cache total count
-            $totalCount = DB::table('hotels')
-                ->when($request->filled('hotel_name'), function ($q) use ($request) {
-                    return $q->where('name', 'like', '%' . $request->hotel_name . '%');
-                })
-                ->when($request->filled('star_rating'), function ($q) use ($request) {
-                    return $q->whereIn('star_rating', $request->star_rating);
-                })
-                ->when($request->filled('latitude') && $request->filled('longitude'), function ($q) use ($request) {
-                    $lat = $request->latitude;
-                    $lng = $request->longitude;
-                    $radius = $request->radius ?? 10;
-                    return $q->whereBetween('latitude', [
-                        $lat - ($radius / 111),
-                        $lat + ($radius / 111)
-                    ])->whereBetween('longitude', [
-                                $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                                $lng + ($radius / (111 * cos(deg2rad($lat))))
-                            ]);
-                })
-                ->count();
+            // Cache total count to avoid slow COUNT queries on large datasets
+            $totalCountCacheKey = "hotel_count_{$searchHash}";
+            $totalCount = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($request) {
+                return DB::table('hotels')
+                    ->when($request->filled('hotel_name'), function ($q) use ($request) {
+                        return $q->where('name', 'like', '%' . $request->hotel_name . '%');
+                    })
+                    ->when($request->filled('star_rating'), function ($q) use ($request) {
+                        return $q->whereIn('star_rating', $request->star_rating);
+                    })
+                    ->when($request->filled('latitude') && $request->filled('longitude'), function ($q) use ($request) {
+                        $lat = $request->latitude;
+                        $lng = $request->longitude;
+                        $radius = $request->radius ?? 10;
+                        return $q->whereBetween('latitude', [
+                            $lat - ($radius / 111),
+                            $lat + ($radius / 111)
+                        ])->whereBetween('longitude', [
+                                    $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                                    $lng + ($radius / (111 * cos(deg2rad($lat))))
+                                ]);
+                    })
+                    ->count();
+            });
 
             // Return page with first 10 hotels immediately
             return view('Hotel::frontend.results-ha', [
@@ -376,7 +382,7 @@ class HotelHController extends Controller
                 'maxPrice' => 999,
                 'searchHash' => $searchHash,
                 'isLoading' => false, // Show hotels immediately
-                'loadMore' => $totalCount > 5,
+                'loadMore' => $totalCount > 10,
             ]);
 
         } catch (\Exception $e) {
@@ -387,8 +393,11 @@ class HotelHController extends Controller
 
     private function loadHotelChunk(Request $request, $searchHash, $childAges)
     {
+        // Extend execution time for chunk processing
+        set_time_limit(60);
+
         $chunk = (int) $request->input('chunk', 0);
-        $chunkSize = 5; // Process 5 hotels at a time (lighter API load)
+        $chunkSize = 10; // Process 10 hotels at a time
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
@@ -398,25 +407,22 @@ class HotelHController extends Controller
                 return response()->json(['error' => 'Search expired'], 400);
             }
 
-            // Check if we've already cached all hotels
-            $allHotelsCacheKey = "all_hotels_{$searchHash}";
-
-            if (!Cache::has($allHotelsCacheKey)) {
-                // First chunk - query database
-                $hotelQuery = DB::table('hotels')
+            // Build base query for counting and fetching
+            $baseQuery = function () use ($searchParams) {
+                $query = DB::table('hotels')
                     ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
 
                 if (!empty($searchParams['hotel_name'])) {
-                    $hotelQuery->where('name', 'like', '%' . $searchParams['hotel_name'] . '%');
+                    $query->where('name', 'like', '%' . $searchParams['hotel_name'] . '%');
                 }
                 if (!empty($searchParams['star_rating'])) {
-                    $hotelQuery->whereIn('star_rating', $searchParams['star_rating']);
+                    $query->whereIn('star_rating', $searchParams['star_rating']);
                 }
                 if (!empty($searchParams['latitude']) && !empty($searchParams['longitude'])) {
                     $lat = $searchParams['latitude'];
                     $lng = $searchParams['longitude'];
                     $radius = $searchParams['radius'] ?? 10;
-                    $hotelQuery->whereBetween('latitude', [
+                    $query->whereBetween('latitude', [
                         $lat - ($radius / 111),
                         $lat + ($radius / 111)
                     ])->whereBetween('longitude', [
@@ -425,28 +431,37 @@ class HotelHController extends Controller
                             ]);
                 }
 
-                $hotels = $hotelQuery->get();
+                return $query;
+            };
 
-                // Attach images
+            // Get total count (cached to avoid recounting on each chunk)
+            $totalCountCacheKey = "hotel_count_{$searchHash}";
+            $totalHotels = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($baseQuery) {
+                return $baseQuery()->count();
+            });
+
+            // Fetch only the current chunk from database
+            $chunkHotels = $baseQuery()
+                ->skip($chunk * $chunkSize)
+                ->take($chunkSize)
+                ->get();
+
+            // Attach images for this chunk only
+            if ($chunkHotels->isNotEmpty()) {
                 $hotelImages = DB::table('hotel_images')
-                    ->whereIn('hotel_id', $hotels->pluck('hotel_id'))
+                    ->whereIn('hotel_id', $chunkHotels->pluck('hotel_id'))
                     ->groupBy('hotel_id')
                     ->pluck('image_url', 'hotel_id');
 
-                foreach ($hotels as $hotel) {
+                foreach ($chunkHotels as $hotel) {
                     $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
                     $hotel->daily_price = null;
                     $hotel->has_breakfast = false;
                 }
-
-                Cache::put($allHotelsCacheKey, $hotels->toArray(), now()->addMinutes(30));
             }
 
-            $allHotels = collect(Cache::get($allHotelsCacheKey, []));
-            $totalHotels = $allHotels->count();
-
             // Get chunk of hotels
-            $chunkHotels = $allHotels->slice($chunk * $chunkSize, $chunkSize);
+            $chunkHotels = collect($chunkHotels);
 
             if ($chunkHotels->isEmpty()) {
                 return response()->json([
@@ -461,72 +476,53 @@ class HotelHController extends Controller
             if ($fetchPrices) {
                 $hotelIds = $chunkHotels->pluck('hotel_id')->toArray();
 
-                // Check cache first to avoid duplicate API calls
-                $priceCacheKey = "hotel_prices_" . md5(json_encode([
-                    $searchParams['checkin'],
-                    $searchParams['checkout'],
-                    $searchParams['adults'],
-                    $childAges,
-                    $hotelIds,
-                    $request->input('currency', 'EUR'),
-                ]));
+                $apiBody = [
+                    'checkin' => $searchParams['checkin'],
+                    'checkout' => $searchParams['checkout'],
+                    'residency' => 'gb',
+                    'language' => 'en',
+                    'guests' => [
+                        [
+                            'adults' => (int) $searchParams['adults'],
+                            'children' => $childAges,
+                        ]
+                    ],
+                    'ids' => $hotelIds,
+                    'currency' => $request->input('currency', 'EUR'),
+                ];
 
-                $pricesResult = Cache::get($priceCacheKey);
+                try {
+                    $apiData = Http::timeout(30)
+                        ->withOptions($this->httpOptions)
+                        ->withBasicAuth($this->username, $this->password)
+                        ->withHeaders(['Content-Type' => 'application/json'])
+                        ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
+                        ->json()['data']['hotels'] ?? [];
 
-                if (!$pricesResult) {
-                    $apiBody = [
-                        'checkin' => $searchParams['checkin'],
-                        'checkout' => $searchParams['checkout'],
-                        'residency' => 'gb',
-                        'language' => 'en',
-                        'guests' => [
-                            [
-                                'adults' => (int) $searchParams['adults'],
-                                'children' => $childAges,
-                            ]
-                        ],
-                        'ids' => $hotelIds,
-                        'currency' => $request->input('currency', 'EUR'),
-                    ];
-
-                    try {
-                        $apiData = Http::timeout(30) // Increased timeout for better reliability
-                            ->withOptions($this->httpOptions)
-                            ->withBasicAuth($this->username, $this->password)
-                            ->withHeaders(['Content-Type' => 'application/json'])
-                            ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
-                            ->json()['data']['hotels'] ?? [];
-
-                        // Map prices & breakfast flags
-                        $pricesResult = [];
-                        foreach ($apiData as $apiHotel) {
-                            $hid = $apiHotel['id'] ?? null;
-                            if (!$hid)
-                                continue;
-                            $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
-                            $hasBreakfast = collect($apiHotel['rates'] ?? [])
-                                ->contains(function ($r) {
-                                    $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
-                                    return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
-                                });
-                            $pricesResult[$hid] = compact('dailyPrice', 'hasBreakfast');
-                        }
-
-                        // Cache for 10 minutes to reduce API calls
-                        Cache::put($priceCacheKey, $pricesResult, now()->addMinutes(10));
-
-                    } catch (\Exception $e) {
-                        Log::warning('API timeout for chunk ' . $chunk . ', showing hotels without prices', ['error' => $e->getMessage()]);
-                        $pricesResult = []; // Empty array to continue without prices
+                    // Map prices & breakfast flags
+                    $pricesResult = [];
+                    foreach ($apiData as $apiHotel) {
+                        $hid = $apiHotel['id'] ?? null;
+                        if (!$hid)
+                            continue;
+                        $dailyPrice = $apiHotel['rates'][0]['daily_prices'][0] ?? null;
+                        $hasBreakfast = collect($apiHotel['rates'] ?? [])
+                            ->contains(function ($r) {
+                                $mealValue = strtolower((string) data_get($r, 'meal', data_get($r, 'meal_data.value')));
+                                return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
+                            });
+                        $pricesResult[$hid] = compact('dailyPrice', 'hasBreakfast');
                     }
-                }
 
-                // Apply cached or fresh prices to hotels
-                foreach ($chunkHotels as $hotel) {
-                    $hotel = (object) $hotel;
-                    $res = $pricesResult[$hotel->hotel_id] ?? null;
-                    $hotel->daily_price = $res['dailyPrice'] ?? null;
-                    $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
+                    foreach ($chunkHotels as $hotel) {
+                        $hotel = (object) $hotel;
+                        $res = $pricesResult[$hotel->hotel_id] ?? null;
+                        $hotel->daily_price = $res['dailyPrice'] ?? null;
+                        $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('API timeout for chunk ' . $chunk . ', showing hotels without prices', ['error' => $e->getMessage()]);
+                    // Continue to show hotels even if API fails
                 }
             }
 
