@@ -93,9 +93,6 @@
                         <span class="text-muted" id="results-counter">
                             Among <span class="fw-semibold" id="total-count">{{ $totalHotels ?? $hotels->count() }}</span> accommodations
                         </span>
-                        <span class="text-primary small ms-2" id="loading-prices-indicator">
-                            <i class="fa fa-spinner fa-spin"></i> Loading prices...
-                        </span>
                     </div>
 
                     {{-- View toggle --}}
@@ -187,16 +184,15 @@
             extendedBtn.addEventListener('click', () => setView('extended'));
             compactBtn.addEventListener('click', () => setView('compact'));
 
-            // Progressive loading with retry logic
+            // Progressive loading
             @if(isset($searchHash))
             const searchHash = '{{ $searchHash }}';
-            let currentChunk = 1; // Start from chunk 1 after chunk 0 prices load
+            let currentChunk = 1; // Start from chunk 1 (chunk 0 already loaded)
             let activeRequests = 0;
-            let maxParallelRequests = 2; // Load 2 chunks in parallel (reduced for better reliability)
+            let maxParallelRequests = 3; // Load 3 chunks in parallel
             let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
             let totalHotelsCount = {{ $totalHotels ?? 0 }};
-            let loadedChunks = new Set(); // Will add chunk 0 after loading prices
-            let failedChunks = new Map(); // Track failed chunks for retry with exponential backoff
+            let loadedChunks = new Set([0]); // Chunk 0 already loaded
             let priceUpdateInterval;
 
             function loadChunk(chunkNumber) {
@@ -229,34 +225,16 @@
                         return;
                     }
 
-                    // Handle chunk 0 specially - update prices for existing hotels
+                    // Hide skeleton on first load
                     if (chunkNumber === 0) {
-                        if (data.html) {
-                            const hotelList = document.getElementById('hotel-list');
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(data.html, 'text/html');
-                            const newCards = doc.querySelectorAll('.hotel-listcard');
-                            const existingCards = hotelList.querySelectorAll('.hotel-listcard');
+                        const skeleton = document.getElementById('loading-skeleton');
+                        if (skeleton) skeleton.remove();
+                    }
 
-                            // Update existing cards with prices
-                            newCards.forEach((newCard, index) => {
-                                if (existingCards[index]) {
-                                    existingCards[index].replaceWith(newCard);
-                                }
-                            });
-                        }
-
-                        // Hide the "Loading prices..." indicator
-                        const priceIndicator = document.getElementById('loading-prices-indicator');
-                        if (priceIndicator) {
-                            priceIndicator.style.display = 'none';
-                        }
-                    } else {
-                        // Append new hotels for chunks 1+
-                        if (data.html) {
-                            const hotelList = document.getElementById('hotel-list');
-                            hotelList.insertAdjacentHTML('beforeend', data.html);
-                        }
+                    // Append hotels
+                    if (data.html) {
+                        const hotelList = document.getElementById('hotel-list');
+                        hotelList.insertAdjacentHTML('beforeend', data.html);
                     }
 
                     // Update counter
@@ -296,56 +274,26 @@
                         document.getElementById('loading-more').classList.add('d-none');
                     }
 
-                    // Hide price indicator if chunk 0 failed
-                    if (chunkNumber === 0) {
-                        const priceIndicator = document.getElementById('loading-prices-indicator');
-                        if (priceIndicator) {
-                            priceIndicator.innerHTML = '<i class="fa fa-exclamation-circle"></i> Retrying...';
+                    // Retry this chunk after delay
+                    setTimeout(() => {
+                        if (hasMoreHotels && !loadedChunks.has(chunkNumber)) {
+                            loadChunk(chunkNumber);
                         }
-                    }
-
-                    // Retry with exponential backoff
-                    const retryCount = failedChunks.get(chunkNumber) || 0;
-                    if (retryCount < 3) { // Max 3 retries
-                        const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 8000); // 1s, 2s, 4s, max 8s
-                        failedChunks.set(chunkNumber, retryCount + 1);
-
-                        console.log(`Retrying chunk ${chunkNumber} in ${backoffDelay}ms (attempt ${retryCount + 1}/3)`);
-
-                        setTimeout(() => {
-                            if (!loadedChunks.has(chunkNumber)) {
-                                loadChunk(chunkNumber);
-                            }
-                        }, backoffDelay);
-                    } else {
-                        console.error(`Chunk ${chunkNumber} failed after 3 retries, skipping`);
-
-                        // Update indicator for chunk 0 failure
-                        if (chunkNumber === 0) {
-                            const priceIndicator = document.getElementById('loading-prices-indicator');
-                            if (priceIndicator) {
-                                priceIndicator.style.display = 'none';
-                            }
-                        }
-
-                        // Move to next chunk after max retries
-                        scheduleNextBatch();
-                    }
+                    }, 2000);
                 });
             }
 
             function scheduleNextBatch() {
-                // Load multiple chunks in parallel with staggered delays
+                // Load multiple chunks in parallel
                 while (activeRequests < maxParallelRequests && hasMoreHotels) {
                     const nextChunk = currentChunk++;
 
-                    // Staggered loading to prevent API overload
-                    if (nextChunk < 3) {
-                        // Quick loading for first 2 chunks
-                        setTimeout(() => loadChunk(nextChunk), 200 * (nextChunk - 1));
+                    // Quick successive loading for first few chunks
+                    if (nextChunk < 5) {
+                        loadChunk(nextChunk);
                     } else {
-                        // Progressive delay for subsequent chunks (500ms apart)
-                        setTimeout(() => loadChunk(nextChunk), 500 * (nextChunk - 2));
+                        // Slight delay for subsequent chunks
+                        setTimeout(() => loadChunk(nextChunk), 100 * (nextChunk - 4));
                         break;
                     }
                 }
@@ -363,14 +311,9 @@
                 });
             }
 
-            // Start loading immediately - load chunk 0 and chunk 1 in parallel
-            loadChunk(0); // Load prices for the first 5 hotels already displayed
-
+            // Start loading immediately
             if (hasMoreHotels) {
-                // Start loading next chunk immediately (in parallel with chunk 0)
-                setTimeout(() => {
-                    scheduleNextBatch();
-                }, 100); // Small delay to prioritize chunk 0
+                scheduleNextBatch();
             }
 
             // Start updating prices for loaded hotels
