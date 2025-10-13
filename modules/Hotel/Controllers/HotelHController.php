@@ -329,6 +329,7 @@ class HotelHController extends Controller
                 // Don't set is_available yet - will show loading state
             }
 
+
             // Cache search params for AJAX
             $cacheKey = "search_params_{$searchHash}";
             Cache::put($cacheKey, [
@@ -521,14 +522,6 @@ class HotelHController extends Controller
                         $hotel->daily_price = $res['dailyPrice'] ?? null;
                         $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
                         $hotel->is_available = $hotel->daily_price !== null; // Mark availability
-
-                        // Debug logging
-                        Log::info('Hotel availability', [
-                            'hotel_id' => $hotel->hotel_id,
-                            'name' => $hotel->name,
-                            'daily_price' => $hotel->daily_price,
-                            'is_available' => $hotel->is_available
-                        ]);
                     }
                 } catch (\Exception $e) {
                     Log::warning('API timeout for chunk ' . $chunk . ', showing hotels without prices', ['error' => $e->getMessage()]);
@@ -568,17 +561,7 @@ class HotelHController extends Controller
             // Sort hotels: available ones (with prices) first
             $filtered = $filtered->sortByDesc(function ($h) {
                 $hotel = (object) $h;
-                $isAvailable = $hotel->is_available ?? false;
-
-                // Debug logging
-                Log::info('Sorting hotel', [
-                    'hotel_id' => $hotel->hotel_id,
-                    'name' => $hotel->name,
-                    'is_available' => $isAvailable,
-                    'daily_price' => $hotel->daily_price
-                ]);
-
-                return $isAvailable;
+                return $hotel->is_available ?? false;
             })->values();
 
             // Generate HTML

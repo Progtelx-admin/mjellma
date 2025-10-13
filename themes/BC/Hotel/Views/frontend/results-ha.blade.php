@@ -184,6 +184,33 @@
             extendedBtn.addEventListener('click', () => setView('extended'));
             compactBtn.addEventListener('click', () => setView('compact'));
 
+            // Sort hotels by availability (available first)
+            function sortHotelsByAvailability() {
+                const hotelList = document.getElementById('hotel-list');
+                const hotels = Array.from(hotelList.children);
+
+                hotels.sort((a, b) => {
+                    const aPrice = a.querySelector('.hotel-listcard__price');
+                    const bPrice = b.querySelector('.hotel-listcard__price');
+
+                    if (!aPrice || !bPrice) return 0;
+
+                    const aText = aPrice.textContent.trim();
+                    const bText = bPrice.textContent.trim();
+
+                    // Available hotels (with price) come first
+                    const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
+                    const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
+
+                    if (aAvailable && !bAvailable) return -1; // a comes first
+                    if (!aAvailable && bAvailable) return 1;  // b comes first
+                    return 0; // keep original order
+                });
+
+                // Re-append sorted hotels
+                hotels.forEach(hotel => hotelList.appendChild(hotel));
+            }
+
             // Progressive loading
             @if(isset($searchHash))
             const searchHash = '{{ $searchHash }}';
@@ -235,6 +262,9 @@
                     if (data.html) {
                         const hotelList = document.getElementById('hotel-list');
                         hotelList.insertAdjacentHTML('beforeend', data.html);
+
+                        // Sort hotels: available ones first
+                        sortHotelsByAvailability();
                     }
 
                     // Update counter
@@ -315,6 +345,11 @@
             if (hasMoreHotels) {
                 scheduleNextBatch();
             }
+
+            // Sort initial hotels after a short delay to allow prices to load
+            setTimeout(() => {
+                sortHotelsByAvailability();
+            }, 2000); // Wait 2 seconds for initial prices to load
 
             // Start updating prices for loaded hotels
             priceUpdateInterval = setInterval(() => {
