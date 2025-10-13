@@ -326,6 +326,7 @@ class HotelHController extends Controller
                 $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
                 $hotel->daily_price = null; // Will be updated via AJAX
                 $hotel->has_breakfast = false;
+                // Don't set is_available yet - will show loading state
             }
 
             // Cache search params for AJAX
@@ -492,7 +493,7 @@ class HotelHController extends Controller
                 ];
 
                 try {
-                    $apiData = Http::timeout(30)
+                    $apiData = Http::timeout(20) // 20 seconds max - faster fallback to "No rooms available"
                         ->withOptions($this->httpOptions)
                         ->withBasicAuth($this->username, $this->password)
                         ->withHeaders(['Content-Type' => 'application/json'])
@@ -519,14 +520,35 @@ class HotelHController extends Controller
                         $res = $pricesResult[$hotel->hotel_id] ?? null;
                         $hotel->daily_price = $res['dailyPrice'] ?? null;
                         $hotel->has_breakfast = $res['hasBreakfast'] ?? false;
+                        $hotel->is_available = $hotel->daily_price !== null; // Mark availability
+
+                        // Debug logging
+                        Log::info('Hotel availability', [
+                            'hotel_id' => $hotel->hotel_id,
+                            'name' => $hotel->name,
+                            'daily_price' => $hotel->daily_price,
+                            'is_available' => $hotel->is_available
+                        ]);
                     }
                 } catch (\Exception $e) {
                     Log::warning('API timeout for chunk ' . $chunk . ', showing hotels without prices', ['error' => $e->getMessage()]);
-                    // Continue to show hotels even if API fails
+                    // Mark all hotels as unavailable if API fails
+                    foreach ($chunkHotels as $hotel) {
+                        $hotel = (object) $hotel;
+                        if (!isset($hotel->is_available)) {
+                            $hotel->is_available = false;
+                        }
+                    }
+                }
+            } else {
+                // If not fetching prices, mark all as unavailable
+                foreach ($chunkHotels as $hotel) {
+                    $hotel = (object) $hotel;
+                    $hotel->is_available = false;
                 }
             }
 
-            // Apply filters (only if we have prices, or if filter doesn't require price)
+            // Apply filters first (only if we have prices, or if filter doesn't require price)
             $filtered = $chunkHotels->filter(function ($h) use ($request) {
                 $hotel = (object) $h;
 
@@ -542,6 +564,22 @@ class HotelHController extends Controller
                 }
                 return true;
             });
+
+            // Sort hotels: available ones (with prices) first
+            $filtered = $filtered->sortByDesc(function ($h) {
+                $hotel = (object) $h;
+                $isAvailable = $hotel->is_available ?? false;
+
+                // Debug logging
+                Log::info('Sorting hotel', [
+                    'hotel_id' => $hotel->hotel_id,
+                    'name' => $hotel->name,
+                    'is_available' => $isAvailable,
+                    'daily_price' => $hotel->daily_price
+                ]);
+
+                return $isAvailable;
+            })->values();
 
             // Generate HTML
             $html = '';
