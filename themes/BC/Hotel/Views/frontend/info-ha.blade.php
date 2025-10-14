@@ -353,7 +353,7 @@
                             $comm = data_get($payment, 'commission_info.charge.amount_commission', null);
                             $currency = $payment['currency_code'] ?? '';
                             // Use the final_price from controller (already has 15% markup for guests)
-                            $finalPrice = $rate['final_price'] ?? ($net + ($comm ?? 0));
+                            $finalPrice = $rate['final_price'] ?? $net + ($comm ?? 0);
 
                             $mealData = data_get($rate, 'meal_data', []);
                             $mealValue = $mealData['value'] ?? null;
@@ -451,33 +451,36 @@
                                         @endif
                                     </div>
                                     {{-- Price + Choose --}}
-                                    <div class="mt-auto ms-auto price-stack text-right" style="max-width: 220px;">
-                                        <div class="label">Total price</div>
-                                        <div class="amount">{{ number_format((float) $finalPrice, 2) }}
-                                            {{ $currency }}
+                                    <div class="mt-auto d-flex justify-content-end">
+                                        <div class="price-stack" style="max-width: 220px;">
+                                            <div class="label">Total price</div>
+                                            <div class="amount">{{ number_format((float) $finalPrice, 2) }}
+                                                {{ $currency }}
+                                            </div>
+
+                                            <form method="POST" action="{{ route('hotel.prebook') }}">
+                                                @csrf
+                                                <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
+                                                <input type="hidden" name="room_name" value="{{ $rate['room_name'] }}">
+                                                <input type="hidden" name="display_final_price"
+                                                    value="{{ number_format((float) $finalPrice, 2, '.', '') }}">
+                                                <input type="hidden" name="display_currency" value="{{ $currency }}">
+                                                <input type="hidden" name="room_number" value="{{ $roomId }}">
+                                                <input type="hidden" name="room_code"
+                                                    value="{{ $rate['room_code'] ?? '' }}">
+                                                <input type="hidden" name="checkin" value="{{ $checkin }}">
+                                                <input type="hidden" name="checkout" value="{{ $checkout }}">
+                                                <input type="hidden" name="adults" value="{{ $adults }}">
+                                                <input type="hidden" name="currency" value="{{ $currency }}">
+                                                <input type="hidden" name="children_count"
+                                                    value="{{ count($children) }}">
+                                                @foreach ($children as $age)
+                                                    <input type="hidden" name="children[]" value="{{ $age }}">
+                                                @endforeach
+
+                                                <button type="submit" class="btn btn-choose mt-1">Choose</button>
+                                            </form>
                                         </div>
-
-                                        <form method="POST" action="{{ route('hotel.prebook') }}">
-                                            @csrf
-                                            <input type="hidden" name="book_hash" value="{{ $rate['book_hash'] }}">
-                                            <input type="hidden" name="room_name" value="{{ $rate['room_name'] }}">
-                                            <input type="hidden" name="display_final_price"
-                                                value="{{ number_format((float) $finalPrice, 2, '.', '') }}">
-                                            <input type="hidden" name="display_currency" value="{{ $currency }}">
-                                            <input type="hidden" name="room_number" value="{{ $roomId }}">
-                                            <input type="hidden" name="room_code"
-                                                value="{{ $rate['room_code'] ?? '' }}">
-                                            <input type="hidden" name="checkin" value="{{ $checkin }}">
-                                            <input type="hidden" name="checkout" value="{{ $checkout }}">
-                                            <input type="hidden" name="adults" value="{{ $adults }}">
-                                            <input type="hidden" name="currency" value="{{ $currency }}">
-                                            <input type="hidden" name="children_count" value="{{ count($children) }}">
-                                            @foreach ($children as $age)
-                                                <input type="hidden" name="children[]" value="{{ $age }}">
-                                            @endforeach
-
-                                            <button type="submit" class="btn btn-choose w-50 mt-1">Choose</button>
-                                        </form>
                                     </div>
                                 </div>
                             </div>
@@ -1026,11 +1029,26 @@
         }
 
         /* ----- Price stack: label -> amount -> button ----- */
+        .room-card .col-md-6:last-child {
+            align-items: flex-end !important;
+        }
+
+        .price-stack {
+            text-align: right !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-end !important;
+            width: 100%;
+            margin-left: auto !important;
+        }
+
         .price-stack .label {
             font-size: .875rem;
             font-weight: 600;
             color: #16a34a;
             /* green 'Total price' label */
+            text-align: right !important;
+            align-self: flex-end !important;
         }
 
         .price-stack .amount {
@@ -1038,6 +1056,19 @@
             /* big price */
             font-weight: 800;
             line-height: 1.1;
+            text-align: right !important;
+            align-self: flex-end !important;
+        }
+
+        .price-stack form {
+            width: 100%;
+            display: flex !important;
+            justify-content: flex-end !important;
+            align-items: flex-end !important;
+        }
+
+        .price-stack .btn-choose {
+            margin-left: auto !important;
         }
 
         .btn-choose {
