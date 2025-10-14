@@ -1003,6 +1003,56 @@
                     filterToggle.classList.remove('rotated');
                 });
             }
+
+            // Initialize map when modal is shown
+            const mapModal = document.getElementById('mapModal');
+            let map = null;
+            let markers = [];
+
+            if (mapModal) {
+                mapModal.addEventListener('shown.bs.modal', function() {
+                    if (!map) {
+                        // Initialize map
+                        map = L.map('hotelMap').setView([51.505, -0.09], 10);
+
+                        // Add tile layer
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap contributors'
+                        }).addTo(map);
+
+                        // Add hotel markers
+                        const hotels = @json($hotels);
+                        const bounds = L.latLngBounds();
+
+                        hotels.forEach(function(hotel) {
+                            if (hotel.latitude && hotel.longitude) {
+                                const marker = L.marker([hotel.latitude, hotel.longitude]).addTo(
+                                    map);
+
+                                // Create popup content
+                                const popupContent = `
+                                    <div style="min-width: 200px;">
+                                        <h6 class="fw-bold mb-2">${hotel.name || hotel.title || 'Hotel'}</h6>
+                                        <p class="mb-1"><strong>Address:</strong> ${hotel.address || 'N/A'}</p>
+                                        <p class="mb-1"><strong>Star Rating:</strong> ${hotel.star_rating || 'N/A'}</p>
+                                        <p class="mb-2"><strong>Price:</strong> ${hotel.daily_price ? '€' + hotel.daily_price : 'N/A'}</p>
+                                        <a href="/hotels/info/${hotel.hotel_id}" class="btn btn-primary btn-sm">View Details</a>
+                                    </div>
+                                `;
+
+                                marker.bindPopup(popupContent);
+                                markers.push(marker);
+                                bounds.extend([hotel.latitude, hotel.longitude]);
+                            }
+                        });
+
+                        // Fit map to show all markers
+                        if (markers.length > 0) {
+                            map.fitBounds(bounds);
+                        }
+                    }
+                });
+            }
         });
     </script>
 @endsection
