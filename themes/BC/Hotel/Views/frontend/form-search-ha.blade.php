@@ -36,12 +36,12 @@
                 <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist"
                     style="overflow-x: auto; overflow-y: hidden;">
                     <li class="nav-item flex-fill" role="presentation">
-                        <a class="nav-link text-center" id="flight-tab" data-toggle="tab" href="#flight" role="tab"
+                        <a class="nav-link text-center" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
                             aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i><span
                                 class="d-none d-sm-inline"> Flights</span></a>
                     </li>
                     <li class="nav-item flex-fill" role="presentation">
-                        <a class="nav-link active text-center" id="hotel-tab" data-toggle="tab" href="#hotel"
+                        <a class="nav-link active text-center" id="hotel-tab" data-bs-toggle="tab" href="#hotel"
                             role="tab" aria-controls="hotel" aria-selected="true"><i class="fa fa-hotel"></i><span
                                 class="d-none d-sm-inline"> Hotels</span></a>
                     </li>
@@ -272,11 +272,8 @@
         ])
     @endforeach
 
-    <!-- Bootstrap 4.6 (includes Popper) -->
+    <!-- Bootstrap 4.6 CSS (keep this for styling) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -525,7 +522,7 @@
             if (!link) return;
 
             // Ignore Bootstrap tabs and other BS toggles
-            if (link.hasAttribute("data-toggle")) return;
+            if (link.hasAttribute("data-bs-toggle")) return;
 
             const href = link.getAttribute("href");
             if (!href || href === "#" || href.length <= 1) return;
