@@ -2,7 +2,7 @@
 
 @section('content')
     <div id="carouselBackground"
-        class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-center"
+        class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-end"
         data-ride="carousel" data-interval="4000">
         <div class="carousel-inner w-100 h-100">
             <div class="carousel-item active" style="background-image: url('{{ asset('uploads/chicago.jpg') }}');">
@@ -27,22 +27,27 @@
             <button type="button" data-target="#carouselBackground" data-slide-to="4" aria-label="Slide 5"></button>
         </div>
 
-        <div class="w-75 position-absolute" style="z-index: 1">
-            <h1 class="text-white fw-bold mb-4 text-center" style="text-shadow:2px 2px 5px rgba(0,0,0,0.7);">
+        <div class="w-90 w-md-90 position-absolute px-3 px-md-0 pb-5" style="z-index: 1">
+            <h1 class="text-white fw-bold mb-3 mb-md-4 text-center"
+                style="text-shadow:2px 2px 5px rgba(0,0,0,0.7); font-size: clamp(1.5rem, 5vw, 2.5rem);">
                 Escape To Paradise, Unwind In Luxury
             </h1>
-            <div class="p-4 rounded shadow-sm bg-white">
-                <ul class="nav nav-tabs mb-3" id="searchTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <a class="nav-link" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
-                            aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i> Flights</a>
+            <div class="p-4 p-md-5 rounded shadow-sm bg-white">
+                <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist"
+                    style="overflow-x: auto; overflow-y: hidden;">
+                    <li class="nav-item flex-fill" role="presentation">
+                        <a class="nav-link text-center" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
+                            aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i><span
+                                class="d-none d-sm-inline"> Flights</span></a>
                     </li>
-                    <li class="nav-item" role="presentation">
-                        <a class="nav-link active" id="hotel-tab" data-bs-toggle="tab" href="#hotel" role="tab"
-                            aria-controls="hotel" aria-selected="true"><i class="fa fa-hotel"></i> Hotels</a>
+                    <li class="nav-item flex-fill" role="presentation">
+                        <a class="nav-link active text-center" id="hotel-tab" data-bs-toggle="tab" href="#hotel"
+                            role="tab" aria-controls="hotel" aria-selected="true"><i class="fa fa-hotel"></i><span
+                                class="d-none d-sm-inline"> Hotels</span></a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fa fa-car"></i> Cars</a>
+                    <li class="nav-item flex-fill">
+                        <a class="nav-link text-center" href="#"><i class="fa fa-car"></i><span
+                                class="d-none d-sm-inline"> Cars</span></a>
                     </li>
                 </ul>
 
@@ -54,8 +59,8 @@
                         <script src="https://mjellmatravel.resvoyage.com/scripts/thomalex-integration.js"></script>
                     </div>
 
-                    <div class="tab-pane fade show active p-4 rounded shadow-sm bg-white" id="hotel" role="tabpanel"
-                        aria-labelledby="hotel-tab">
+                    <div class="tab-pane fade show active p-4 p-md-5 rounded shadow-sm bg-white" id="hotel"
+                        role="tabpanel" aria-labelledby="hotel-tab">
                         <div id="dateErrorAlert" class="alert alert-danger d-none" role="alert">
                         </div>
 
@@ -73,8 +78,8 @@
                             @endif
 
                             {{-- Row 1: Hotel Name + Location --}}
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6 position-relative">
+                            <div class="row g-2 g-md-3 mb-2 mb-md-3">
+                                <div class="col-12 col-md-6 position-relative">
                                     <label for="hotel_name" class="form-label">Hotel Name</label>
                                     <input type="text" id="hotel_name" name="hotel_name"
                                         class="form-control @error('hotel_name') is-invalid @enderror"
@@ -83,7 +88,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-6 position-relative">
+                                <div class="col-12 col-md-6 position-relative">
                                     <label for="location" class="form-label">Location</label>
                                     <input type="text" id="location" name="location"
                                         class="form-control @error('location') is-invalid @enderror"
@@ -97,8 +102,8 @@
                             </div>
 
                             {{-- Row 2: Dates / Guests / Rooms / Children --}}
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-3">
+                            <div class="row g-2 g-md-3 align-items-end">
+                                <div class="col-6 col-md-3">
                                     <label for="checkin" class="form-label">Check-in Date</label>
                                     <input type="date" id="checkin" name="checkin"
                                         class="form-control @error('checkin') is-invalid @enderror"
@@ -107,7 +112,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-6 col-md-3">
                                     <label for="checkout" class="form-label">Check-out Date</label>
                                     <input type="date" id="checkout" name="checkout"
                                         class="form-control @error('checkout') is-invalid @enderror"
@@ -116,7 +121,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-4 col-md-2">
                                     <label for="adults" class="form-label">Adults</label>
                                     <input type="number" id="adults" name="adults"
                                         class="form-control @error('adults') is-invalid @enderror"
@@ -125,7 +130,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-4 col-md-2">
                                     <label for="rooms" class="form-label">Rooms</label>
                                     <input type="number" id="rooms" name="rooms"
                                         class="form-control @error('rooms') is-invalid @enderror"
@@ -136,7 +141,7 @@
                                 </div>
 
                                 {{-- Children Input --}}
-                                <div class="col-md-2">
+                                <div class="col-4 col-md-2">
                                     <label for="children_count" class="form-label">Children</label>
                                     <input type="number" id="children_count" name="children_count"
                                         class="form-control @error('children_count') is-invalid @enderror"
@@ -148,12 +153,13 @@
                             </div>
 
                             {{-- Row 3: Dynamic Child Ages --}}
-                            <div id="children-ages-row" class="row g-3 mt-2" style="display:none;"></div>
+                            <div id="children-ages-row" class="row g-2 g-md-3 mt-2" style="display:none;"></div>
 
                             {{-- Row 4: Full-width Search --}}
-                            <div class="row mt-4">
+                            <div class="row mt-3 mt-md-4">
                                 <div class="col d-flex justify-content-center">
-                                    <button type="submit" class="btn btn-blue w-25">Search</button>
+                                    <button type="submit"
+                                        class="btn btn-blue w-100 w-sm-75 w-md-50 w-lg-25">Search</button>
                                 </div>
                             </div>
 
@@ -248,11 +254,11 @@
             ->orderBy('sort_order')
             ->with(['cards' => fn($q) => $q->active()->orderBy('sort_order')])
             ->get();
-        
+
         // Remove the first section (already shown above)
         $remainingSections = $allSections->slice(1);
     @endphp
-    
+
     @foreach ($remainingSections as $section)
         @include('offers::front.section', [
             'section' => $section,
@@ -336,7 +342,7 @@
                 agesRow.style.display = 'flex';
                 for (let i = 1; i <= n; i++) {
                     const col = document.createElement('div');
-                    col.className = 'col-md-2';
+                    col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
                     col.innerHTML = `
                         <div class="form-floating">
                             <select name="children[]" id="child_age_${i}"
@@ -442,10 +448,87 @@
     </script>
 
     <style>
+        /* Responsive width utilities */
+        .w-md-95 {
+            width: 95% !important;
+        }
+
+        .w-lg-85 {
+            width: 85% !important;
+        }
+
+        .w-sm-75 {
+            width: 75% !important;
+        }
+
+        .w-md-50 {
+            width: 50% !important;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 575.98px) {
+
+            .w-sm-75,
+            .w-md-50,
+            .w-lg-25 {
+                width: 100% !important;
+            }
+
+            .form-label {
+                font-size: 0.9rem;
+            }
+
+            .nav-link {
+                font-size: 0.85rem;
+                padding: 0.5rem 0.80rem;
+            }
+        }
+
+        /* Navigation tabs overflow fix */
+        .nav-tabs {
+            overflow-y: hidden !important;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-tabs .nav-link {
+            border: none;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+        }
+
+        .nav-tabs .nav-link:hover {
+            border-color: transparent;
+            border-bottom-color: #0B0B45;
+        }
+
+        @media (min-width: 768px) and (max-width: 991.98px) {
+            .w-md-95 {
+                width: 95% !important;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .w-lg-85 {
+                width: 85% !important;
+            }
+        }
+
         .carousel-item {
             background-size: cover;
             background-position: center;
             min-height: 100vh;
+        }
+
+        @media (max-width: 767.98px) {
+            .carousel-item {
+                background-position: center;
+                min-height: 100vh;
+            }
+
+            #carouselBackground {
+                align-items: flex-end !important;
+                padding-bottom: 20px;
+            }
         }
 
         .carousel-item img {
@@ -483,11 +566,18 @@
 
         .btn-blue {
             background-color: #0B0B45;
-            color: white
+            color: white;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            transition: all 0.3s ease;
         }
 
         .btn-blue:hover {
-            color: white
+            color: white;
+            background-color: #060630;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(11, 11, 69, 0.3);
         }
 
         .nav-tabs .nav-link.active {
@@ -498,6 +588,35 @@
 
         .form-label {
             font-weight: bold;
+        }
+
+        /* Form control responsiveness */
+        @media (max-width: 767.98px) {
+
+            .form-control,
+            .form-select {
+                font-size: 0.9rem;
+            }
+
+            input[type="date"] {
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Tab content responsive padding */
+        .tab-pane {
+            overflow-x: hidden;
+        }
+
+        /* Suggestions list responsive */
+        #suggestions {
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 575.98px) {
+            #suggestions {
+                font-size: 0.85rem;
+            }
         }
 
         .section-title {
