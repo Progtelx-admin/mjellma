@@ -30,7 +30,7 @@
         <div class="w-90 w-md-90 position-absolute px-3 px-md-0 pb-5" style="z-index: 1">
             <h1 class="text-white fw-bold mb-3 mb-md-4 text-center"
                 style="text-shadow:2px 2px 5px rgba(0,0,0,0.7); font-size: clamp(1.5rem, 5vw, 2.5rem);">
-                Escape To Paradise, Unwind In Luxury
+                Rezervo Heret, Blej Lirë
             </h1>
             <div class="p-4 p-md-5 rounded shadow-sm bg-white">
                 <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist"
@@ -59,8 +59,8 @@
                         <script src="https://mjellmatravel.resvoyage.com/scripts/thomalex-integration.js"></script>
                     </div>
 
-                    <div class="tab-pane fade show active p-4 p-md-5 rounded shadow-sm bg-white" id="hotel"
-                        role="tabpanel" aria-labelledby="hotel-tab">
+                    <div class="tab-pane fade show active rounded" id="hotel" role="tabpanel"
+                        aria-labelledby="hotel-tab">
                         <div id="dateErrorAlert" class="alert alert-danger d-none" role="alert">
                         </div>
 
