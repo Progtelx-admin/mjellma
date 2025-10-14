@@ -192,16 +192,16 @@
 
                     {{-- View toggle - Hidden on mobile --}}
                     <div class="view-toggle d-flex d-none d-md-flex">
-                        <button id="extended-view-btn" type="button" class="view-tab active">
+                        <button id="extended-view-btn" type="button" class="view-tab">
                             <i class="fa fa-list me-2"></i> Extended
                         </button>
-                        <button id="compact-view-btn" type="button" class="view-tab ms-4">
+                        <button id="compact-view-btn" type="button" class="view-tab active ms-4">
                             <i class="fa fa-th me-2"></i> Compact
                         </button>
                     </div>
                 </div>
 
-                <div id="hotel-list" class="extended-view d-md-block d-none">
+                <div id="hotel-list" class="compact-view d-md-block d-none">
                     @foreach ($hotels as $hotel)
                         @include('Hotel::frontend.partials.hotel-card-chunk', [
                             'hotel' => $hotel,
@@ -720,15 +720,21 @@
             filter: brightness(.95);
         }
 
-        /* Compact grid */
+        /* Compact grid - Force 3 columns by default */
         #hotel-list.compact-view {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 28px;
-
-            /* Ensure grid items stretch */
-            align-items: stretch;
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 28px !important;
+            align-items: stretch !important;
         }
+
+        /* Ensure 3 columns on large screens */
+        @media (min-width: 1001px) {
+            #hotel-list.compact-view {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+
 
         /* Make the anchor fill the grid cell so the card can be 100% height */
         #hotel-list.compact-view .hotel-card-link {
@@ -821,10 +827,10 @@
             display: none !important;
         }
 
-        /* Responsive */
-        @media (max-width: 1200px) {
+        /* Responsive - Only change to 2 columns on smaller screens */
+        @media (max-width: 768px) {
             #hotel-list.compact-view {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(2, 1fr) !important;
             }
         }
 
@@ -841,9 +847,9 @@
             }
         }
 
-        @media (max-width: 575.98px) {
+        @media (max-width: 480px) {
             #hotel-list.compact-view {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr !important;
             }
         }
 
@@ -995,6 +1001,56 @@
 
                 mobileFilters.addEventListener('hide.bs.collapse', function() {
                     filterToggle.classList.remove('rotated');
+                });
+            }
+
+            // Initialize map when modal is shown
+            const mapModal = document.getElementById('mapModal');
+            let map = null;
+            let markers = [];
+
+            if (mapModal) {
+                mapModal.addEventListener('shown.bs.modal', function() {
+                    if (!map) {
+                        // Initialize map
+                        map = L.map('hotelMap').setView([51.505, -0.09], 10);
+
+                        // Add tile layer
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap contributors'
+                        }).addTo(map);
+
+                        // Add hotel markers
+                        const hotels = @json($hotels);
+                        const bounds = L.latLngBounds();
+
+                        hotels.forEach(function(hotel) {
+                            if (hotel.latitude && hotel.longitude) {
+                                const marker = L.marker([hotel.latitude, hotel.longitude]).addTo(
+                                    map);
+
+                                // Create popup content
+                                const popupContent = `
+                                    <div style="min-width: 200px;">
+                                        <h6 class="fw-bold mb-2">${hotel.name || hotel.title || 'Hotel'}</h6>
+                                        <p class="mb-1"><strong>Address:</strong> ${hotel.address || 'N/A'}</p>
+                                        <p class="mb-1"><strong>Star Rating:</strong> ${hotel.star_rating || 'N/A'}</p>
+                                        <p class="mb-2"><strong>Price:</strong> ${hotel.daily_price ? '€' + hotel.daily_price : 'N/A'}</p>
+                                        <a href="/hotels/info/${hotel.hotel_id}" class="btn btn-primary btn-sm">View Details</a>
+                                    </div>
+                                `;
+
+                                marker.bindPopup(popupContent);
+                                markers.push(marker);
+                                bounds.extend([hotel.latitude, hotel.longitude]);
+                            }
+                        });
+
+                        // Fit map to show all markers
+                        if (markers.length > 0) {
+                            map.fitBounds(bounds);
+                        }
+                    }
                 });
             }
         });

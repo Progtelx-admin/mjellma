@@ -65,7 +65,6 @@
                         </div>
 
                         <form id="hotel-search-form" method="GET" action="{{ route('hotel.search') }}">
-                            @csrf
 
                             @if ($errors->any())
                                 <div class="alert alert-danger">
@@ -158,8 +157,12 @@
                             {{-- Row 4: Full-width Search --}}
                             <div class="row mt-3 mt-md-4">
                                 <div class="col d-flex justify-content-center">
-                                    <button type="submit"
-                                        class="btn btn-blue w-100 w-sm-75 w-md-50 w-lg-25">Search</button>
+                                    <button type="submit" id="search-btn"
+                                        class="btn btn-blue w-100 w-sm-75 w-md-50 w-lg-25">
+                                        <span id="search-text">Search</span>
+                                        <span id="search-spinner" class="spinner-border spinner-border-sm ms-2 d-none"
+                                            role="status" aria-hidden="true"></span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -400,24 +403,115 @@
 
             checkoutInput.addEventListener('change', validateDates);
 
-            // Final form validation
+            // Final form validation and loading state
             const form = document.querySelector('form');
+            const searchBtn = document.getElementById('search-btn');
+            const searchText = document.getElementById('search-text');
+            const searchSpinner = document.getElementById('search-spinner');
+
             if (form) {
                 form.addEventListener('submit', function(e) {
+                    // Clear previous errors
+                    errorAlert.classList.add("d-none");
+                    errorAlert.textContent = "";
+
+                    // Remove invalid classes from all inputs
+                    const allInputs = form.querySelectorAll('.form-control');
+                    allInputs.forEach(input => {
+                        input.classList.remove('is-invalid');
+                    });
+
+                    // Remove invalid feedback
+                    const invalidFeedbacks = form.querySelectorAll('.invalid-feedback');
+                    invalidFeedbacks.forEach(feedback => {
+                        feedback.style.display = 'none';
+                    });
+
+                    // Validate required fields
+                    const checkinInput = document.getElementById('checkin');
+                    const checkoutInput = document.getElementById('checkout');
+                    const adultsInput = document.getElementById('adults');
+                    const roomsInput = document.getElementById('rooms');
+                    const childrenCountInput = document.getElementById('children_count');
+
+                    let hasErrors = false;
+                    const errors = [];
+
+                    // Check required fields
+                    if (!checkinInput.value) {
+                        checkinInput.classList.add('is-invalid');
+                        errors.push('Check-in date is required.');
+                        hasErrors = true;
+                    }
+
+                    if (!checkoutInput.value) {
+                        checkoutInput.classList.add('is-invalid');
+                        errors.push('Check-out date is required.');
+                        hasErrors = true;
+                    }
+
+                    if (!adultsInput.value || adultsInput.value < 1) {
+                        adultsInput.classList.add('is-invalid');
+                        errors.push('Number of adults is required.');
+                        hasErrors = true;
+                    }
+
+                    if (!roomsInput.value || roomsInput.value < 1) {
+                        roomsInput.classList.add('is-invalid');
+                        errors.push('Number of rooms is required.');
+                        hasErrors = true;
+                    }
+
+                    if (childrenCountInput.value === '' || childrenCountInput.value < 0) {
+                        childrenCountInput.classList.add('is-invalid');
+                        errors.push('Number of children is required.');
+                        hasErrors = true;
+                    }
+
+                    // Validate location if provided
                     const locationValue = locationInput.value.trim();
                     const locationSelected = locationSelectedInput.value === "true";
-                    const datesValid = validateDates();
 
                     if (locationValue !== "" && !locationSelected) {
+                        locationInput.classList.add('is-invalid');
+                        errors.push('Please select a location from the suggestions.');
+                        hasErrors = true;
+                    }
+
+                    // Validate dates
+                    const datesValid = validateDates();
+                    if (!datesValid) {
+                        hasErrors = true;
+                    }
+
+                    if (hasErrors) {
                         e.preventDefault();
-                        errorAlert.textContent = "Please select a location from the suggestions.";
-                        errorAlert.classList.remove("d-none");
+
+                        // Show error message
+                        if (errors.length > 0) {
+                            errorAlert.innerHTML = '<ul class="mb-0"><li>' + errors.join('</li><li>') +
+                                '</li></ul>';
+                            errorAlert.classList.remove("d-none");
+                        }
+
+                        // Scroll to first error
+                        const firstInvalid = form.querySelector('.is-invalid');
+                        if (firstInvalid) {
+                            firstInvalid.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center'
+                            });
+                            firstInvalid.focus();
+                        }
+
                         return;
                     }
 
-                    if (!datesValid) {
-                        e.preventDefault();
-                        return;
+                    // Show loading spinner
+                    if (searchBtn && searchText && searchSpinner) {
+                        searchBtn.disabled = true;
+                        searchText.textContent = "Searching...";
+                        searchSpinner.classList.remove("d-none");
                     }
                 });
             }
@@ -580,6 +674,19 @@
             box-shadow: 0 4px 12px rgba(11, 11, 69, 0.3);
         }
 
+        .btn-blue:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-blue .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+            border-width: 0.15em;
+        }
+
         .nav-tabs .nav-link.active {
             border-bottom: 3px solid #0B0B45F0;
             font-weight: bold;
@@ -701,6 +808,33 @@
         .partner-logo {
             max-height: 80px;
             width: auto;
+        }
+
+        /* Validation styles */
+        .form-control.is-invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
+        .invalid-feedback {
+            display: block;
+            width: 100%;
+            margin-top: 0.25rem;
+            font-size: 0.875em;
+            color: #dc3545;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            border-radius: 0.375rem;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .alert-danger ul {
+            margin-bottom: 0;
         }
     </style>
 @endsection

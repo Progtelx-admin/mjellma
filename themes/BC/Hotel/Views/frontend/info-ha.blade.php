@@ -183,8 +183,25 @@
                                     <th>Accepted payment methods</th>
                                     <td>
                                         @foreach ($hotel['payment_methods'] ?? ['visa', 'mastercard', 'cash'] as $method)
-                                            <img src="{{ asset('icons/' . $method . '.svg') }}"
-                                                alt="{{ ucfirst($method) }}" class="me-1" style="height:24px">
+                                            @if ($method === 'visa')
+                                                <i class="fa fa-cc-visa me-2" style="font-size: 24px; color: #1A1F71;"></i>
+                                            @elseif($method === 'mastercard')
+                                                <i class="fa fa-cc-mastercard me-2" style="font-size: 24px;"></i>
+                                            @elseif($method === 'cash')
+                                                <i class="fa fa-money-bill-wave me-2" style="font-size: 24px;"></i>
+                                            @elseif($method === 'amex')
+                                                <i class="fa fa-cc-amex me-2" style="font-size: 24px;"></i>
+                                            @elseif($method === 'discover')
+                                                <i class="fa fa-cc-discover me-2" style="font-size: 24px; "></i>
+                                            @elseif($method === 'paypal')
+                                                <i class="fa fa-cc-paypal me-2" style="font-size: 24px; "></i>
+                                            @elseif($method === 'apple')
+                                                <i class="fa fa-cc-apple-pay me-2" style="font-size: 24px; "></i>
+                                            @elseif($method === 'google')
+                                                <i class="fa fa-google-pay me-2" style="font-size: 24px; "></i>
+                                            @else
+                                                <i class="fa fa-credit-card me-2" style="font-size: 24px; "></i>
+                                            @endif
                                         @endforeach
                                     </td>
                                 </tr>
@@ -464,7 +481,8 @@
                                                 <input type="hidden" name="room_name" value="{{ $rate['room_name'] }}">
                                                 <input type="hidden" name="display_final_price"
                                                     value="{{ number_format((float) $finalPrice, 2, '.', '') }}">
-                                                <input type="hidden" name="display_currency" value="{{ $currency }}">
+                                                <input type="hidden" name="display_currency"
+                                                    value="{{ $currency }}">
                                                 <input type="hidden" name="room_number" value="{{ $roomId }}">
                                                 <input type="hidden" name="room_code"
                                                     value="{{ $rate['room_code'] ?? '' }}">
