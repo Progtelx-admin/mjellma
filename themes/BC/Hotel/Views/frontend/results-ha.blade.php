@@ -14,9 +14,20 @@
 
         <div class="row mt-4">
             {{-- ================================================================
+                 MOBILE FILTER BUTTON
+            ================================================================= --}}
+            <div class="col-12 d-md-none mb-3">
+                <button class="btn mobile-filter-btn w-100" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#mobileFilters" aria-expanded="false" aria-controls="mobileFilters">
+                    <i class="fa fa-filter me-2"></i>Filters
+                    <i class="fa fa-chevron-down ms-2" id="filterToggleIcon"></i>
+                </button>
+            </div>
+
+            {{-- ================================================================
                  FILTERS
             ================================================================= --}}
-            <div class="col-md-3 mb-5 filter-section sticky-top" style="top:1rem;">
+            <div class="col-md-3 mb-5 filter-section sticky-top d-none d-md-block" style="top:1rem;">
                 <h5 class="fw-bold">Filters</h5>
                 <hr>
 
@@ -84,6 +95,89 @@
             </div>
 
             {{-- ================================================================
+                 MOBILE FILTERS COLLAPSIBLE
+            ================================================================= --}}
+            <div class="col-12 d-md-none">
+                <div class="collapse" id="mobileFilters">
+                    <div class="card card-body mb-3 mobile-filters-card">
+                        <h5 class="fw-bold mb-3">Filters</h5>
+                        <form method="GET" action="{{ route('hotel.search') }}">
+                            {{-- Preserve query --}}
+                            <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
+                            <input type="hidden" name="location" value="{{ request('location') }}">
+                            <input type="hidden" name="checkin" value="{{ request('checkin') }}">
+                            <input type="hidden" name="checkout" value="{{ request('checkout') }}">
+                            <input type="hidden" name="adults" value="{{ request('adults') }}">
+                            <input type="hidden" name="rooms" value="{{ request('rooms') }}">
+                            <input type="hidden" name="latitude" value="{{ request('latitude') }}">
+                            <input type="hidden" name="longitude" value="{{ request('longitude') }}">
+                            <input type="hidden" name="currency" value="{{ request('currency', 'EUR') }}">
+                            <input type="hidden" name="children_count" value="{{ request('children_count', 0) }}">
+                            @foreach (request('children', []) as $age)
+                                <input type="hidden" name="children[]" value="{{ $age }}">
+                            @endforeach
+
+                            {{-- Price --}}
+                            <div class="mb-4">
+                                <h6 class="fw-bold">Price Range</h6>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label for="mobile_min_price" class="form-label">Min Price
+                                            (€{{ $minPrice }})</label>
+                                        <input type="number" class="form-control" id="mobile_min_price"
+                                            name="min_price" value="{{ request('min_price') }}" placeholder="Min">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="mobile_max_price" class="form-label">Max Price
+                                            (€{{ $maxPrice }})</label>
+                                        <input type="number" class="form-control" id="mobile_max_price"
+                                            name="max_price" value="{{ request('max_price') }}" placeholder="Max">
+                                    </div>
+                                </div>
+                            </div>
+                            <hr>
+
+                            {{-- Stars --}}
+                            <div class="mb-4">
+                                <h6 class="fw-bold">Hotel Star</h6>
+                                @for ($i = 5; $i >= 1; $i--)
+                                    <label class="d-flex align-items-center mb-2"
+                                        for="mobile_star_rating_{{ $i }}">
+                                        <input type="checkbox" id="mobile_star_rating_{{ $i }}"
+                                            name="star_rating[]" value="{{ $i }}" class="me-2"
+                                            @if (is_array(request('star_rating')) && in_array($i, request('star_rating'))) checked @endif>
+                                        @for ($j = 1; $j <= $i; $j++)
+                                            <i class="fa fa-star text-warning me-1"></i>
+                                        @endfor
+                                    </label>
+                                @endfor
+                            </div>
+                            <hr>
+
+                            {{-- Breakfast --}}
+                            <div class="mb-4">
+                                <h6 class="fw-bold">Hotel Service</h6>
+                                <label class="custom-checkbox">
+                                    <input type="checkbox" id="mobile_breakfast_included" name="breakfast_included"
+                                        value="1" @if (request('breakfast_included')) checked @endif>
+                                    <span class="checkmark"></span> Breakfast Included
+                                </label>
+                            </div>
+                            <hr>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">Apply Filters</button>
+                                <button type="button" class="btn btn-success" data-bs-toggle="modal"
+                                    data-bs-target="#mapModal">
+                                    Show on the Map
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ================================================================
                  RESULTS
             ================================================================= --}}
             <div class="col-md-9">
@@ -91,12 +185,13 @@
                 <div class="d-flex align-items-center justify-content-between mb-3">
                     <div>
                         <span class="text-muted" id="results-counter">
-                            Among <span class="fw-semibold" id="total-count">{{ $totalHotels ?? $hotels->count() }}</span> accommodations
+                            Among <span class="fw-semibold"
+                                id="total-count">{{ $totalHotels ?? $hotels->count() }}</span> accommodations
                         </span>
                     </div>
 
-                    {{-- View toggle --}}
-                    <div class="view-toggle d-flex">
+                    {{-- View toggle - Hidden on mobile --}}
+                    <div class="view-toggle d-flex d-none d-md-flex">
                         <button id="extended-view-btn" type="button" class="view-tab active">
                             <i class="fa fa-list me-2"></i> Extended
                         </button>
@@ -106,7 +201,7 @@
                     </div>
                 </div>
 
-                <div id="hotel-list" class="extended-view">
+                <div id="hotel-list" class="extended-view d-md-block d-none">
                     @foreach ($hotels as $hotel)
                         @include('Hotel::frontend.partials.hotel-card-chunk', [
                             'hotel' => $hotel,
@@ -124,8 +219,31 @@
                                     'currency',
                                 ]),
                                 ['children_count' => request('children_count', 0)],
-                                ['children' => request('children', [])],
-                            ),
+                                ['children' => request('children', [])]),
+                        ])
+                    @endforeach
+                </div>
+
+                {{-- Mobile Compact View --}}
+                <div id="hotel-list-mobile" class="compact-view d-md-none">
+                    @foreach ($hotels as $hotel)
+                        @include('Hotel::frontend.partials.hotel-card-chunk', [
+                            'hotel' => $hotel,
+                            'query' => array_merge(
+                                ['id' => $hotel->hotel_id],
+                                request()->only([
+                                    'hotel_name',
+                                    'location',
+                                    'checkin',
+                                    'checkout',
+                                    'adults',
+                                    'rooms',
+                                    'latitude',
+                                    'longitude',
+                                    'currency',
+                                ]),
+                                ['children_count' => request('children_count', 0)],
+                                ['children' => request('children', [])]),
                         ])
                     @endforeach
                 </div>
@@ -181,187 +299,231 @@
                 compactBtn.classList.toggle('active', mode === 'compact');
             }
 
-            extendedBtn.addEventListener('click', () => setView('extended'));
-            compactBtn.addEventListener('click', () => setView('compact'));
+            // Guard: only attach handlers if buttons exist (hidden on mobile)
+            if (extendedBtn && compactBtn) {
+                extendedBtn.addEventListener('click', () => setView('extended'));
+                compactBtn.addEventListener('click', () => setView('compact'));
+            }
 
             // Sort hotels by availability (available first)
             function sortHotelsByAvailability() {
                 const hotelList = document.getElementById('hotel-list');
-                const hotels = Array.from(hotelList.children);
+                const hotelListMobile = document.getElementById('hotel-list-mobile');
 
-                hotels.sort((a, b) => {
-                    const aPrice = a.querySelector('.hotel-listcard__price');
-                    const bPrice = b.querySelector('.hotel-listcard__price');
+                // Sort desktop list
+                if (hotelList) {
+                    const hotels = Array.from(hotelList.children);
+                    hotels.sort((a, b) => {
+                        const aPrice = a.querySelector('.hotel-listcard__price');
+                        const bPrice = b.querySelector('.hotel-listcard__price');
 
-                    if (!aPrice || !bPrice) return 0;
+                        if (!aPrice || !bPrice) return 0;
 
-                    const aText = aPrice.textContent.trim();
-                    const bText = bPrice.textContent.trim();
+                        const aText = aPrice.textContent.trim();
+                        const bText = bPrice.textContent.trim();
 
-                    // Available hotels (with price) come first
-                    const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
-                    const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
+                        // Available hotels (with price) come first
+                        const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
+                        const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
 
-                    if (aAvailable && !bAvailable) return -1; // a comes first
-                    if (!aAvailable && bAvailable) return 1;  // b comes first
-                    return 0; // keep original order
-                });
+                        if (aAvailable && !bAvailable) return -1; // a comes first
+                        if (!aAvailable && bAvailable) return 1; // b comes first
+                        return 0; // keep original order
+                    });
 
-                // Re-append sorted hotels
-                hotels.forEach(hotel => hotelList.appendChild(hotel));
+                    // Re-append sorted hotels
+                    hotels.forEach(hotel => hotelList.appendChild(hotel));
+                }
+
+                // Sort mobile list
+                if (hotelListMobile) {
+                    const hotelsMobile = Array.from(hotelListMobile.children);
+                    hotelsMobile.sort((a, b) => {
+                        const aPrice = a.querySelector('.hotel-listcard__price');
+                        const bPrice = b.querySelector('.hotel-listcard__price');
+
+                        if (!aPrice || !bPrice) return 0;
+
+                        const aText = aPrice.textContent.trim();
+                        const bText = bPrice.textContent.trim();
+
+                        // Available hotels (with price) come first
+                        const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
+                        const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
+
+                        if (aAvailable && !bAvailable) return -1; // a comes first
+                        if (!aAvailable && bAvailable) return 1; // b comes first
+                        return 0; // keep original order
+                    });
+
+                    // Re-append sorted hotels
+                    hotelsMobile.forEach(hotel => hotelListMobile.appendChild(hotel));
+                }
             }
 
             // Progressive loading
-            @if(isset($searchHash))
-            const searchHash = '{{ $searchHash }}';
-            let currentChunk = 1; // Start from chunk 1 (chunk 0 already loaded)
-            let activeRequests = 0;
-            let maxParallelRequests = 3; // Load 3 chunks in parallel
-            let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
-            let totalHotelsCount = {{ $totalHotels ?? 0 }};
-            let loadedChunks = new Set([0]); // Chunk 0 already loaded
-            let priceUpdateInterval;
+            @if (isset($searchHash))
+                const searchHash = '{{ $searchHash }}';
+                let currentChunk = 1; // Start from chunk 1 (chunk 0 already loaded)
+                let activeRequests = 0;
+                let maxParallelRequests = 3; // Load 3 chunks in parallel
+                let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
+                let totalHotelsCount = {{ $totalHotels ?? 0 }};
+                let loadedChunks = new Set([0]); // Chunk 0 already loaded
+                let priceUpdateInterval;
 
-            function loadChunk(chunkNumber) {
-                if (loadedChunks.has(chunkNumber)) return;
-                loadedChunks.add(chunkNumber);
+                function loadChunk(chunkNumber) {
+                    if (loadedChunks.has(chunkNumber)) return;
+                    loadedChunks.add(chunkNumber);
 
-                activeRequests++;
-                if (activeRequests === 1) {
-                    document.getElementById('loading-more').classList.remove('d-none');
+                    activeRequests++;
+                    if (activeRequests === 1) {
+                        document.getElementById('loading-more').classList.remove('d-none');
+                    }
+
+                    // Get current search parameters
+                    const urlParams = new URLSearchParams(window.location.search);
+                    urlParams.append('chunk', chunkNumber);
+
+                    fetch('{{ route('hotel.search') }}?' + urlParams.toString(), {
+                            method: 'GET',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            activeRequests--;
+
+                            if (data.error) {
+                                console.error('Error loading hotels:', data.error);
+                                loadedChunks.delete(chunkNumber); // Allow retry
+                                return;
+                            }
+
+                            // Hide skeleton on first load
+                            if (chunkNumber === 0) {
+                                const skeleton = document.getElementById('loading-skeleton');
+                                if (skeleton) skeleton.remove();
+                            }
+
+                            // Append hotels
+                            if (data.html) {
+                                const hotelList = document.getElementById('hotel-list');
+                                const hotelListMobile = document.getElementById('hotel-list-mobile');
+
+                                // Append to desktop list
+                                if (hotelList) {
+                                    hotelList.insertAdjacentHTML('beforeend', data.html);
+                                }
+
+                                // Append to mobile list
+                                if (hotelListMobile) {
+                                    hotelListMobile.insertAdjacentHTML('beforeend', data.html);
+                                }
+
+                                // Sort hotels: available ones first
+                                sortHotelsByAvailability();
+                            }
+
+                            // Update counter
+                            totalHotelsCount = data.totalCount || 0;
+                            const loadedCount = data.loadedCount || 0;
+
+                            const resultsCounter = document.getElementById('results-counter');
+                            if (totalHotelsCount > 0 && data.hasMore) {
+                                resultsCounter.innerHTML =
+                                    `Loaded <span class="fw-semibold">${loadedCount}</span> of <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
+                            }
+
+                            // Check if more to load
+                            hasMoreHotels = data.hasMore;
+
+                            if (activeRequests === 0) {
+                                document.getElementById('loading-more').classList.add('d-none');
+                            }
+
+                            // Continue loading more chunks
+                            if (hasMoreHotels) {
+                                scheduleNextBatch();
+                            } else {
+                                // All loaded
+                                if (totalHotelsCount === 0) {
+                                    document.getElementById('no-results').classList.remove('d-none');
+                                } else {
+                                    resultsCounter.innerHTML =
+                                        `Among <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading chunk ' + chunkNumber + ':', error);
+                            activeRequests--;
+                            loadedChunks.delete(chunkNumber); // Allow retry
+
+                            if (activeRequests === 0) {
+                                document.getElementById('loading-more').classList.add('d-none');
+                            }
+
+                            // Retry this chunk after delay
+                            setTimeout(() => {
+                                if (hasMoreHotels && !loadedChunks.has(chunkNumber)) {
+                                    loadChunk(chunkNumber);
+                                }
+                            }, 2000);
+                        });
                 }
 
-                // Get current search parameters
-                const urlParams = new URLSearchParams(window.location.search);
-                urlParams.append('chunk', chunkNumber);
+                function scheduleNextBatch() {
+                    // Load multiple chunks in parallel
+                    while (activeRequests < maxParallelRequests && hasMoreHotels) {
+                        const nextChunk = currentChunk++;
 
-                fetch('{{ route("hotel.search") }}?' + urlParams.toString(), {
-                    method: 'GET',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    activeRequests--;
-
-                    if (data.error) {
-                        console.error('Error loading hotels:', data.error);
-                        loadedChunks.delete(chunkNumber); // Allow retry
-                        return;
-                    }
-
-                    // Hide skeleton on first load
-                    if (chunkNumber === 0) {
-                        const skeleton = document.getElementById('loading-skeleton');
-                        if (skeleton) skeleton.remove();
-                    }
-
-                    // Append hotels
-                    if (data.html) {
-                        const hotelList = document.getElementById('hotel-list');
-                        hotelList.insertAdjacentHTML('beforeend', data.html);
-
-                        // Sort hotels: available ones first
-                        sortHotelsByAvailability();
-                    }
-
-                    // Update counter
-                    totalHotelsCount = data.totalCount || 0;
-                    const loadedCount = data.loadedCount || 0;
-
-                    const resultsCounter = document.getElementById('results-counter');
-                    if (totalHotelsCount > 0 && data.hasMore) {
-                        resultsCounter.innerHTML = `Loaded <span class="fw-semibold">${loadedCount}</span> of <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
-                    }
-
-                    // Check if more to load
-                    hasMoreHotels = data.hasMore;
-
-                    if (activeRequests === 0) {
-                        document.getElementById('loading-more').classList.add('d-none');
-                    }
-
-                    // Continue loading more chunks
-                    if (hasMoreHotels) {
-                        scheduleNextBatch();
-                    } else {
-                        // All loaded
-                        if (totalHotelsCount === 0) {
-                            document.getElementById('no-results').classList.remove('d-none');
+                        // Quick successive loading for first few chunks
+                        if (nextChunk < 5) {
+                            loadChunk(nextChunk);
                         } else {
-                            resultsCounter.innerHTML = `Among <span class="fw-semibold" id="total-count">${totalHotelsCount}</span> accommodations`;
+                            // Slight delay for subsequent chunks
+                            setTimeout(() => loadChunk(nextChunk), 100 * (nextChunk - 4));
+                            break;
                         }
                     }
-                })
-                .catch(error => {
-                    console.error('Error loading chunk ' + chunkNumber + ':', error);
-                    activeRequests--;
-                    loadedChunks.delete(chunkNumber); // Allow retry
+                }
 
-                    if (activeRequests === 0) {
-                        document.getElementById('loading-more').classList.add('d-none');
-                    }
-
-                    // Retry this chunk after delay
-                    setTimeout(() => {
-                        if (hasMoreHotels && !loadedChunks.has(chunkNumber)) {
-                            loadChunk(chunkNumber);
+                // Function to update prices for existing hotels
+                function updatePrices() {
+                    const hotelElements = document.querySelectorAll('.hotel-listcard');
+                    hotelElements.forEach(hotelEl => {
+                        const priceEl = hotelEl.querySelector('.hotel-listcard__price');
+                        if (priceEl && priceEl.textContent.includes('Loading price')) {
+                            // Price is still loading, will be updated via chunk loading
+                            return;
                         }
-                    }, 2000);
-                });
-            }
-
-            function scheduleNextBatch() {
-                // Load multiple chunks in parallel
-                while (activeRequests < maxParallelRequests && hasMoreHotels) {
-                    const nextChunk = currentChunk++;
-
-                    // Quick successive loading for first few chunks
-                    if (nextChunk < 5) {
-                        loadChunk(nextChunk);
-                    } else {
-                        // Slight delay for subsequent chunks
-                        setTimeout(() => loadChunk(nextChunk), 100 * (nextChunk - 4));
-                        break;
-                    }
+                    });
                 }
-            }
 
-            // Function to update prices for existing hotels
-            function updatePrices() {
-                const hotelElements = document.querySelectorAll('.hotel-listcard');
-                hotelElements.forEach(hotelEl => {
-                    const priceEl = hotelEl.querySelector('.hotel-listcard__price');
-                    if (priceEl && priceEl.textContent.includes('Loading price')) {
-                        // Price is still loading, will be updated via chunk loading
-                        return;
-                    }
-                });
-            }
-
-            // Start loading immediately
-            if (hasMoreHotels) {
-                scheduleNextBatch();
-            }
-
-            // Sort initial hotels after a short delay to allow prices to load
-            setTimeout(() => {
-                sortHotelsByAvailability();
-            }, 2000); // Wait 2 seconds for initial prices to load
-
-            // Start updating prices for loaded hotels
-            priceUpdateInterval = setInterval(() => {
-                updatePrices();
-            }, 2000);
-
-            // Clean up interval after 30 seconds
-            setTimeout(() => {
-                if (priceUpdateInterval) {
-                    clearInterval(priceUpdateInterval);
+                // Start loading immediately
+                if (hasMoreHotels) {
+                    scheduleNextBatch();
                 }
-            }, 30000);
+
+                // Sort initial hotels after a short delay to allow prices to load
+                setTimeout(() => {
+                    sortHotelsByAvailability();
+                }, 2000); // Wait 2 seconds for initial prices to load
+
+                // Start updating prices for loaded hotels
+                priceUpdateInterval = setInterval(() => {
+                    updatePrices();
+                }, 2000);
+
+                // Clean up interval after 30 seconds
+                setTimeout(() => {
+                    if (priceUpdateInterval) {
+                        clearInterval(priceUpdateInterval);
+                    }
+                }, 30000);
             @endif
         });
     </script>
@@ -421,15 +583,19 @@
             0% {
                 background-position: -200% 0;
             }
+
             100% {
                 background-position: 200% 0;
             }
         }
 
         @keyframes pulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 opacity: 1;
             }
+
             50% {
                 opacity: 0.8;
             }
@@ -680,5 +846,157 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Hide view toggle on mobile */
+        @media (max-width: 767.98px) {
+            .view-toggle {
+                display: none !important;
+            }
+        }
+
+        /* Mobile View Styles */
+        #hotel-list-mobile {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            align-items: stretch;
+        }
+
+        #hotel-list-mobile .hotel-card-link {
+            display: block;
+            height: 100%;
+        }
+
+        #hotel-list-mobile .hotel-listcard {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            border: 1px solid #e6e6e6;
+            overflow: hidden;
+            height: 100%;
+        }
+
+        #hotel-list-mobile .hotel-listcard__media {
+            position: relative;
+            width: 100%;
+            min-width: auto;
+            max-width: none;
+            height: 200px;
+            border-bottom: 1px solid #ececec;
+            flex: 0 0 200px;
+        }
+
+        #hotel-list-mobile .hotel-listcard__media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Mobile Filter Styles */
+        .mobile-filter-btn {
+            border: 2px solid #0B0B45;
+            color: #0B0B45;
+            background: white;
+            font-weight: 600;
+            padding: 12px 20px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-filter-btn:hover {
+            background: #0B0B45;
+            color: white;
+        }
+
+        .mobile-filter-btn:focus {
+            box-shadow: 0 0 0 0.2rem rgba(11, 11, 69, 0.25);
+        }
+
+        #filterToggleIcon {
+            transition: transform 0.3s ease;
+        }
+
+        #filterToggleIcon.rotated {
+            transform: rotate(180deg);
+        }
+
+        .mobile-filters-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .custom-checkbox {
+            position: relative;
+            padding-left: 30px;
+            cursor: pointer;
+            font-size: 14px;
+            user-select: none;
+        }
+
+        .custom-checkbox input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+
+        .checkmark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 20px;
+            width: 20px;
+            background-color: #eee;
+            border-radius: 4px;
+            border: 2px solid #ddd;
+        }
+
+        .custom-checkbox:hover input~.checkmark {
+            background-color: #ccc;
+        }
+
+        .custom-checkbox input:checked~.checkmark {
+            background-color: #0B0B45;
+            border-color: #0B0B45;
+        }
+
+        .checkmark:after {
+            content: "";
+            position: absolute;
+            display: none;
+        }
+
+        .custom-checkbox input:checked~.checkmark:after {
+            display: block;
+        }
+
+        .custom-checkbox .checkmark:after {
+            left: 6px;
+            top: 2px;
+            width: 6px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 3px 3px 0;
+            transform: rotate(45deg);
+        }
     </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterToggle = document.getElementById('filterToggleIcon');
+            const mobileFilters = document.getElementById('mobileFilters');
+
+            if (mobileFilters) {
+                mobileFilters.addEventListener('show.bs.collapse', function() {
+                    filterToggle.classList.add('rotated');
+                });
+
+                mobileFilters.addEventListener('hide.bs.collapse', function() {
+                    filterToggle.classList.remove('rotated');
+                });
+            }
+        });
+    </script>
 @endsection
