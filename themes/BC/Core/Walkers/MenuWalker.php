@@ -3,7 +3,7 @@ namespace Themes\BC\Core\Walkers;
 class MenuWalker
 {
     protected static $currentMenuItem;
-    protected        $menu;
+    protected $menu;
     protected $activeItems = [];
 
     public function __construct($menu)
@@ -15,16 +15,16 @@ class MenuWalker
     {
         $items = json_decode($this->menu->items, true);
         if (!empty($items)) {
-            echo '<ul class="main-menu menu-generated" style="color: #1a2b48;">';
+            echo '<ul class="main-menu menu-generated" style="color: #1a2b48; margin-bottom: -20px;">';
             $this->generateTree($items);
             echo '</ul>';
         }
     }
 
-    public function generateTree($items = [],$depth = 0,$parentKey = '')
+    public function generateTree($items = [], $depth = 0, $parentKey = '')
     {
         $mega_menu = $this->options['enable_mega_menu'] ?? false;
-        foreach ($items as $k=>$item) {
+        foreach ($items as $k => $item) {
 
             $class = e($item['class'] ?? '');
             $url = $item['url'] ?? '';
@@ -39,22 +39,21 @@ class MenuWalker
                 }
                 $url = $itemObj->getDetailUrl();
             }
-            if ($this->checkCurrentMenu($item, $url))
-            {
+            if ($this->checkCurrentMenu($item, $url)) {
                 $class .= ' active';
                 $this->activeItems[] = $parentKey;
             }
 
             if (!empty($item['children'])) {
                 ob_start();
-                $this->generateTree($item['children'],$depth + 1,$parentKey.'_'.$k);
+                $this->generateTree($item['children'], $depth + 1, $parentKey . '_' . $k);
                 $html = ob_get_clean();
-                if(in_array($parentKey.'_'.$k,$this->activeItems)){
-                    $class.=' active ';
+                if (in_array($parentKey . '_' . $k, $this->activeItems)) {
+                    $class .= ' active ';
                 }
             }
-            $class.= ($depth == 0 && !empty($item['mega_menu'])) ? ' -has-mega-menu' : null;
-            $class.=' depth-'.($depth);
+            $class .= ($depth == 0 && !empty($item['mega_menu'])) ? ' -has-mega-menu' : null;
+            $class .= ' depth-' . ($depth);
             printf('<li class="%s">', $class);
             $itemName = $item['name'];
             if (!empty($item['children'])) {
@@ -64,18 +63,18 @@ class MenuWalker
 
 
             if (!empty($item['children'])) {
-                if ($depth == 0 && !empty($item['mega_menu'])){
-                    echo '<div class="mega mb-menu-none column-'. ($item['mega_columns'] ?? '') .' '.(!empty($item['mega_image_url']) ? '--has-mega-image' : '').'">';
+                if ($depth == 0 && !empty($item['mega_menu'])) {
+                    echo '<div class="mega mb-menu-none column-' . ($item['mega_columns'] ?? '') . ' ' . (!empty($item['mega_image_url']) ? '--has-mega-image' : '') . '">';
                     echo '<ul class="subnav children-menu menu-dropdown">';
-                        echo $html;
+                    echo $html;
                     echo "</ul>";
-                    if(!empty($item['mega_image_url'])){
+                    if (!empty($item['mega_image_url'])) {
                         echo '<div class="mega-image">';
-                        echo '<img src="'.$item['mega_image_url'].'" alt="'. $itemName .'">';
+                        echo '<img src="' . $item['mega_image_url'] . '" alt="' . $itemName . '">';
                         echo '</div>';
                     }
                     echo '</div>';
-                }else {
+                } else {
                     if (!empty($item['children'])) {
                         echo '<ul class="subnav children-menu menu-dropdown">';
                         echo $html;
@@ -91,7 +90,7 @@ class MenuWalker
     protected function checkCurrentMenu($item, $url = '')
     {
 
-        if(trim($url,'/') == request()->path()){
+        if (trim($url, '/') == request()->path()) {
             return true;
         }
         if (!static::$currentMenuItem)
