@@ -1,27 +1,31 @@
 @php
-    $query = $query ?? array_merge(
-        ['id' => $hotel->hotel_id],
-        request()->only([
-            'hotel_name',
-            'location',
-            'checkin',
-            'checkout',
-            'adults',
-            'rooms',
-            'latitude',
-            'longitude',
-            'currency',
-        ]),
-        ['children_count' => request('children_count', 0)],
-        ['children' => request('children', [])],
-    );
+    $query =
+        $query ??
+        array_merge(
+            ['id' => $hotel->hotel_id],
+            request()->only([
+                'hotel_name',
+                'location',
+                'checkin',
+                'checkout',
+                'adults',
+                'rooms',
+                'latitude',
+                'longitude',
+                'currency',
+            ]),
+            ['children_count' => request('children_count', 0)],
+            ['children' => request('children', [])],
+        );
 
-    $currencySym = $currencySym ?? match (request('currency', 'EUR')) {
-        'USD' => '$',
-        'GBP' => '£',
-        'EUR' => '€',
-        default => request('currency', '€'),
-    };
+    $currencySym =
+        $currencySym ??
+        match (request('currency', 'EUR')) {
+            'USD' => '$',
+            'GBP' => '£',
+            'EUR' => '€',
+            default => request('currency', '€'),
+        };
 @endphp
 
 <a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link">
@@ -31,7 +35,7 @@
             @if ($hotel->image_url)
                 <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}">
             @else
-                <span class="no-image">No image available</span>
+                <img src="{{ asset('uploads/no_img.jpeg') }}" alt="No image available">
             @endif
 
             {{-- grid-only price badge --}}
@@ -102,5 +106,3 @@
         <div class="grid-see-footer">See options</div>
     </article>
 </a>
-
-
