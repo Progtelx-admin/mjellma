@@ -323,7 +323,7 @@ class HotelHController extends Controller
                 ->pluck('image_url', 'hotel_id');
 
             foreach ($hotels as $hotel) {
-                $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('images/default-image.jpg');
+                $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('uploads/no_img.jpeg');
                 $hotel->daily_price = null; // Will be updated via AJAX
                 $hotel->has_breakfast = false;
                 // Don't set is_available yet - will show loading state
