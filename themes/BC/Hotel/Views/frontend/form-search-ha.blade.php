@@ -53,10 +53,11 @@
 
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
-                        <div id="thomalex-widget"
-                            data-widget="https://mjellmatravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang="
-                            style="height:400px;"></div>
-                        <script src="https://mjellmatravel.resvoyage.com/scripts/thomalex-integration.js"></script>
+                        <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
+                                     JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                        <iframe
+                            src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
+                            style="width: 100%; min-width: 780px; height: 550px; border: none;" allowfullscreen></iframe>
                     </div>
 
                     <div class="tab-pane fade show active rounded" id="hotel" role="tabpanel"
@@ -511,6 +512,44 @@
                         searchSpinner.classList.remove("d-none");
                     }
                 });
+            }
+
+            /*
+             * Simple tab switching logic for the search form.
+             *
+             * Bootstrap's JavaScript may not be loaded in this environment, so we manually handle
+             * the activation of the tab navigation. When a tab link is clicked, we prevent
+             * the default anchor behaviour, update the active classes on both the navigation
+             * link and the corresponding tab pane, and for the flight tab we dynamically
+             * load the Thomalex widget script the first time it is opened.
+             */
+            const tabLinks = document.querySelectorAll('#searchTabs .nav-link[href^="#"]');
+            const tabPanes = document.querySelectorAll('.tab-content .tab-pane');
+            // No external script is needed when embedding the Thomalex widget directly as an iframe.
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+                    if (!href || href === '#' || href.length <= 1) return;
+                    e.preventDefault();
+                    // Update active state on nav links
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                    // Switch visible tab pane
+                    tabPanes.forEach(pane => pane.classList.remove('show', 'active'));
+                    const target = document.querySelector(href);
+                    if (target) {
+                        target.classList.add('show', 'active');
+                    }
+                    // No action required for the flight tab here because the widget is embedded as an iframe
+                    // and does not rely on any external script to render.
+                });
+            });
+            // If the page is loaded with a fragment identifier (#flight), automatically open the flight tab
+            if (window.location.hash === '#flight') {
+                const flightLink = document.querySelector('#searchTabs .nav-link[href="#flight"]');
+                if (flightLink) {
+                    flightLink.click();
+                }
             }
         });
     </script>
