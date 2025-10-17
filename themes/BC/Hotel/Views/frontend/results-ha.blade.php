@@ -288,6 +288,11 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Keep a global reference to all hotels currently loaded on the page.
+            // Start with the initial collection passed from the backend.  As
+            // additional chunks are loaded via AJAX this array will be
+            // augmented so the map can reflect the hotels currently visible.
+            window.mapHotels = @json($hotels);
             const list = document.getElementById('hotel-list');
             const extendedBtn = document.getElementById('extended-view-btn');
             const compactBtn = document.getElementById('compact-view-btn');
@@ -425,6 +430,18 @@
 
                                 // Sort hotels: available ones first
                                 sortHotelsByAvailability();
+                            }
+
+                            // Augment mapHotels with any hotel objects returned in the response
+                            // This allows the map to stay in sync with the hotels currently
+                            // visible on the page.  Some APIs may return hotel data in
+                            // different properties (e.g. `hotels`, `results`, or `data`).
+                            if (Array.isArray(data.hotels)) {
+                                window.mapHotels = window.mapHotels.concat(data.hotels);
+                            } else if (Array.isArray(data.results)) {
+                                window.mapHotels = window.mapHotels.concat(data.results);
+                            } else if (Array.isArray(data.data)) {
+                                window.mapHotels = window.mapHotels.concat(data.data);
                             }
 
                             // Update counter
@@ -1021,7 +1038,10 @@
                         }).addTo(map);
 
                         // Add hotel markers
-                        const hotels = @json($hotels);
+                        // Use the globally accumulated mapHotels array if available;
+                        // otherwise fall back to the initial hotels passed from the backend.
+                        const hotels = (window.mapHotels && Array.isArray(window.mapHotels)) ? window
+                            .mapHotels : @json($hotels);
                         const bounds = L.latLngBounds();
 
                         hotels.forEach(function(hotel) {

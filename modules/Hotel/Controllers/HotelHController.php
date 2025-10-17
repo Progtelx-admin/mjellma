@@ -471,6 +471,7 @@ class HotelHController extends Controller
                     'hasMore' => false,
                     'totalCount' => $totalHotels,
                     'loadedCount' => $totalHotels,
+                    'hotels' => [], // Add empty hotels array for consistency
                 ]);
             }
 
@@ -599,6 +600,7 @@ class HotelHController extends Controller
                 'hasMore' => $hasMore,
                 'totalCount' => $totalHotels,
                 'loadedCount' => min($loadedCount, $totalHotels),
+                'hotels' => $filtered->toArray(), // Add hotel objects for map markers
             ]);
 
         } catch (\Exception $e) {
