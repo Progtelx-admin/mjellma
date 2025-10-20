@@ -304,7 +304,7 @@ class HotelHController extends Controller
             if ($request->filled('latitude') && $request->filled('longitude')) {
                 $lat = $request->latitude;
                 $lng = $request->longitude;
-                $radius = $request->radius ?? 10;
+                $radius = $request->radius ?? 4;
                 $hotelQuery->whereBetween('latitude', [
                     $lat - ($radius / 111),
                     $lat + ($radius / 111)
@@ -360,7 +360,7 @@ class HotelHController extends Controller
                     ->when($request->filled('latitude') && $request->filled('longitude'), function ($q) use ($request) {
                         $lat = $request->latitude;
                         $lng = $request->longitude;
-                        $radius = $request->radius ?? 10;
+                        $radius = $request->radius ?? 4;
                         return $q->whereBetween('latitude', [
                             $lat - ($radius / 111),
                             $lat + ($radius / 111)
@@ -423,7 +423,7 @@ class HotelHController extends Controller
                 if (!empty($searchParams['latitude']) && !empty($searchParams['longitude'])) {
                     $lat = $searchParams['latitude'];
                     $lng = $searchParams['longitude'];
-                    $radius = $searchParams['radius'] ?? 10;
+                    $radius = $searchParams['radius'] ?? 4;
                     $query->whereBetween('latitude', [
                         $lat - ($radius / 111),
                         $lat + ($radius / 111)
