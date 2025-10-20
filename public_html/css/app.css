@@ -7363,7 +7363,7 @@ ol {
 }
 .bravo_wrap .bravo_topbar {
     background: #1a2b48;
-    padding: 15px 0;
+    padding: 5px 0;
 }
 @media (max-width: 768px) {
     .bravo_wrap .bravo_topbar {
@@ -7498,7 +7498,7 @@ ol {
 .bravo_wrap .bravo_header .content .header-left {
     position: relative;
     height: 100%;
-    min-height: 90px;
+    max-height: 50px;
     display: flex;
     align-items: center;
 }
@@ -7616,7 +7616,7 @@ ol {
     > .menu-dropdown
     li
     a {
-    padding: 15px 0;
+    padding: 5px 0;
     display: block;
     font-size: 14px;
 }
