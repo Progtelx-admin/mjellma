@@ -32,7 +32,7 @@
                 style="text-shadow:2px 2px 5px rgba(0,0,0,0.7); font-size: clamp(1.5rem, 5vw, 2.5rem);">
                 Rezervo Heret, Blej Lirë
             </h1>
-            <div class="p-4 p-md-5 rounded shadow-sm bg-white">
+            <div class="p-3 rounded shadow-sm bg-white">
                 <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist"
                     style="overflow-x: auto; overflow-y: hidden;">
                     <li class="nav-item flex-fill" role="presentation">
@@ -54,7 +54,7 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                     JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                                                     JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
                         <iframe
                             src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
                             style="width: 100%; min-width: 780px; height: 550px; border: none;" allowfullscreen></iframe>
@@ -159,7 +159,7 @@
                             <div class="row mt-3 mt-md-4">
                                 <div class="col d-flex justify-content-center">
                                     <button type="submit" id="search-btn"
-                                        class="btn btn-blue w-100 w-sm-75 w-md-50 w-lg-25">
+                                        class="btn btn-blue w-25 w-sm-50 w-md-25 w-lg-15">
                                         <span id="search-text">Search</span>
                                         <span id="search-spinner" class="spinner-border spinner-border-sm ms-2 d-none"
                                             role="status" aria-hidden="true"></span>
