@@ -1,4 +1,4 @@
-<div class="bravo_topbar" style="display: none">
+<div class="bravo_topbar">
     <div class="container">
         <div class="content">
             <div class="topbar-left">
@@ -7,7 +7,7 @@
 
 
             </div>
-            {{-- <div class="topbar-right">
+            <div class="topbar-right">
                 <ul class="topbar-items">
                     @include('Core::frontend.currency-switcher')
                     @include('Language::frontend.switcher')
@@ -81,7 +81,7 @@
                         </li>
                     @endif
                 </ul>
-            </div> --}}
+            </div>
         </div>
     </div>
 </div>
