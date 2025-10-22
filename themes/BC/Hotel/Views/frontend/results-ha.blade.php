@@ -1049,6 +1049,40 @@
                                 const marker = L.marker([hotel.latitude, hotel.longitude]).addTo(
                                     map);
 
+                                // Build URL with search parameters
+                                const urlParams = new URLSearchParams({
+                                    id: hotel.hotel_id,
+                                    checkin: '{{ request('checkin') }}',
+                                    checkout: '{{ request('checkout') }}',
+                                    adults: '{{ request('adults') }}',
+                                    rooms: '{{ request('rooms') }}',
+                                    currency: '{{ request('currency', 'EUR') }}',
+                                    children_count: '{{ request('children_count', 0) }}'
+                                });
+
+                                // Add children ages if present
+                                @if (request('children'))
+                                    @foreach (request('children') as $age)
+                                        urlParams.append('children[]', '{{ $age }}');
+                                    @endforeach
+                                @endif
+
+                                // Add optional parameters if present
+                                @if (request('hotel_name'))
+                                    urlParams.set('hotel_name', '{{ request('hotel_name') }}');
+                                @endif
+                                @if (request('location'))
+                                    urlParams.set('location', '{{ request('location') }}');
+                                @endif
+                                @if (request('latitude'))
+                                    urlParams.set('latitude', '{{ request('latitude') }}');
+                                @endif
+                                @if (request('longitude'))
+                                    urlParams.set('longitude', '{{ request('longitude') }}');
+                                @endif
+
+                                const hotelUrl = `/hotel/${hotel.hotel_id}?${urlParams.toString()}`;
+
                                 // Create popup content
                                 const popupContent = `
                                     <div style="min-width: 200px;">
@@ -1056,7 +1090,7 @@
                                         <p class="mb-1"><strong>Address:</strong> ${hotel.address || 'N/A'}</p>
                                         <p class="mb-1"><strong>Star Rating:</strong> ${hotel.star_rating || 'N/A'}</p>
                                         <p class="mb-2"><strong>Price:</strong> ${hotel.daily_price ? '€' + hotel.daily_price : 'N/A'}</p>
-                                        <a href="/hotels/info/${hotel.hotel_id}" class="btn btn-primary btn-sm">View Details</a>
+                                        <a href="${hotelUrl}" class="btn btn-primary btn-sm">View Details</a>
                                     </div>
                                 `;
 
