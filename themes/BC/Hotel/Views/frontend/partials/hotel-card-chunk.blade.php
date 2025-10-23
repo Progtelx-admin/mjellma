@@ -13,6 +13,7 @@
                 'latitude',
                 'longitude',
                 'currency',
+                'breakfast_included',
             ]),
             ['children_count' => request('children_count', 0)],
             ['children' => request('children', [])],

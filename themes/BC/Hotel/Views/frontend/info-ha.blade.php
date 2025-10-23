@@ -19,11 +19,18 @@
                     'currency',
                     'children_count',
                     'children',
+                    'breakfast_included',
                 ]),
             ) }}"
                 class="btn btn-outline-secondary">
                 ← Back to results
             </a>
+
+            @if (isset($breakfastIncluded) && ($breakfastIncluded == '1' || $breakfastIncluded === true))
+                <span class="badge bg-success ms-2">
+                    <i class="fa fa-coffee"></i> Showing only rooms with breakfast
+                </span>
+            @endif
         </div>
 
         {{-- Header --}}
