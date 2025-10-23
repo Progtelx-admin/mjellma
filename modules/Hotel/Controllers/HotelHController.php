@@ -319,7 +319,9 @@ class HotelHController extends Controller
                         ]);
             }
 
-            $hotels = $hotelQuery->limit(10)->get(); // Show first 10 immediately
+            // For better initial load performance, limit to reasonable batch
+            // Sorting by breakfast happens in chunks after prices load from API
+            $hotels = $hotelQuery->limit(50)->get();
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -331,8 +333,11 @@ class HotelHController extends Controller
                 $hotel->image_url = $hotelImages[$hotel->hotel_id] ?? asset('uploads/no_img.jpeg');
                 $hotel->daily_price = null; // Will be updated via AJAX
                 $hotel->has_breakfast = false;
-                // Don't set is_available yet - will show loading state
+                // Breakfast info will be loaded from API, then sorted in chunks
             }
+
+            // Take first 10 for immediate display
+            $hotels = collect($hotels)->take(10);
 
 
             // Cache search params for AJAX
@@ -570,10 +575,30 @@ class HotelHController extends Controller
                 return true;
             });
 
-            // Sort hotels: available ones (with prices) first
-            $filtered = $filtered->sortByDesc(function ($h) {
-                $hotel = (object) $h;
-                return $hotel->is_available ?? false;
+            // Sort hotels: breakfast-included first, then available ones (with prices) first
+            $filtered = $filtered->sort(function ($a, $b) {
+                $hotelA = (object) $a;
+                $hotelB = (object) $b;
+
+                // First priority: breakfast included
+                $aHasBreakfast = $hotelA->has_breakfast ?? false;
+                $bHasBreakfast = $hotelB->has_breakfast ?? false;
+
+                if ($aHasBreakfast && !$bHasBreakfast)
+                    return -1;
+                if (!$aHasBreakfast && $bHasBreakfast)
+                    return 1;
+
+                // Second priority: availability (has price)
+                $aAvailable = $hotelA->is_available ?? false;
+                $bAvailable = $hotelB->is_available ?? false;
+
+                if ($aAvailable && !$bAvailable)
+                    return -1;
+                if (!$aAvailable && $bAvailable)
+                    return 1;
+
+                return 0;
             })->values();
 
             // Generate HTML
@@ -973,6 +998,33 @@ class HotelHController extends Controller
                 // Re-index array after filtering
                 $roomRates = array_values($roomRates);
             }
+
+            // Sort rooms: breakfast-included rooms first
+            usort($roomRates, function ($a, $b) {
+                $aMealType = strtolower($a['meal_type'] ?? '');
+                $bMealType = strtolower($b['meal_type'] ?? '');
+
+                $aHasBreakfast = !empty($aMealType) &&
+                    $aMealType !== 'no meals' &&
+                    $aMealType !== 'no meal included' &&
+                    str_contains($aMealType, 'breakfast');
+
+                $bHasBreakfast = !empty($bMealType) &&
+                    $bMealType !== 'no meals' &&
+                    $bMealType !== 'no meal included' &&
+                    str_contains($bMealType, 'breakfast');
+
+                // Breakfast-included rooms come first
+                if ($aHasBreakfast && !$bHasBreakfast)
+                    return -1;
+                if (!$aHasBreakfast && $bHasBreakfast)
+                    return 1;
+
+                // If both have or don't have breakfast, sort by price (ascending)
+                $aPrice = $a['final_price'] ?? PHP_FLOAT_MAX;
+                $bPrice = $b['final_price'] ?? PHP_FLOAT_MAX;
+                return $aPrice <=> $bPrice;
+            });
 
             $hotel = [
                 'id' => $hotelRateData['id'] ?? $dbHotel->hotel_id,
