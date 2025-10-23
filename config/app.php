@@ -42,7 +42,7 @@ return [
     |
     */
 
-    'debug' => (bool)env('APP_DEBUG', false),
+    'debug' => (bool) env('APP_DEBUG', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -197,8 +197,8 @@ return [
         App\Providers\FortifyServiceProvider::class,
 
         /*
-        * Custom Service Providers...
-        */
+         * Custom Service Providers...
+         */
         \Themes\ThemeServiceProvider::class,
         Modules\ServiceProvider::class,
         Intervention\Image\ImageServiceProvider::class, // Xử lý ảnh,
@@ -230,8 +230,8 @@ return [
         // 'ExampleClass' => App\Example\ExampleClass::class,
     ])->toArray(),
 
-    'version'       => "3.4.2",
-    'asset_version' => env('APP_ASSET_VERSION', '3.4.0'),
+    'version' => "3.4.2",
+    'asset_version' => env('APP_ASSET_VERSION', '3.4.1'),
 
     'updater_url' => "http://check.bookingcore.co/updater.php"
 
