@@ -241,6 +241,11 @@ class HotelHController extends Controller
         set_time_limit(120);
 
         try {
+            // Set breakfast_included to true by default if not provided
+            if (!$request->has('breakfast_included')) {
+                $request->merge(['breakfast_included' => true]);
+            }
+
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
                 'hotel_name' => 'nullable|string',
@@ -956,6 +961,19 @@ class HotelHController extends Controller
                 return $rate;
             })->toArray();
 
+            // Filter rooms by breakfast if requested
+            $breakfastIncluded = $request->query('breakfast_included');
+            if ($breakfastIncluded == '1' || $breakfastIncluded === true) {
+                $roomRates = array_filter($roomRates, function ($rate) {
+                    $mealType = strtolower($rate['meal_type'] ?? '');
+                    return !empty($mealType) &&
+                        $mealType !== 'no meals' &&
+                        str_contains($mealType, 'breakfast');
+                });
+                // Re-index array after filtering
+                $roomRates = array_values($roomRates);
+            }
+
             $hotel = [
                 'id' => $hotelRateData['id'] ?? $dbHotel->hotel_id,
                 'name' => $dbHotel->name ?? $hotelRateData['name'] ?? 'N/A',
@@ -974,7 +992,8 @@ class HotelHController extends Controller
                 'checkout',
                 'adults',
                 'children',
-                'currency'
+                'currency',
+                'breakfastIncluded'
             ));
 
         } catch (\Exception $e) {
