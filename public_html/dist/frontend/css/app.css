@@ -8884,7 +8884,7 @@ ol {
 }
 .bravo_wrap .bravo_topbar {
     background: #e3e9f0;
-    padding: 5px 0;
+    padding: 5px 0 !important;
 }
 @media (max-width: 768px) {
     .bravo_wrap .bravo_topbar {
