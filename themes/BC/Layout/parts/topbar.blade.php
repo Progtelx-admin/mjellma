@@ -5,7 +5,7 @@
         </div>
     </div>
 @endif
-<div class="bravo_topbar">
+<div class="bravo_topbar" style="padding: 5px 0 !important;">
     <div class="container">
         <div class="content">
             <div class="topbar-left">
