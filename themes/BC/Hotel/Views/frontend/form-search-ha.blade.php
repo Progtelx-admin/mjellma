@@ -5,15 +5,15 @@
         class="carousel slide carousel-fade container-fluid p-0 position-relative min-vh-100 d-flex justify-content-center align-items-end"
         data-ride="carousel" data-interval="4000">
         <div class="carousel-inner w-100 h-100">
-            <div class="carousel-item active" style="background-image: url('{{ asset('uploads/chicago.jpg') }}');">
+            <div class="carousel-item active" style="background-image: url('{{ asset('uploads/1.jpg') }}');">
             </div>
-            <div class="carousel-item" style="background-image: url('{{ asset('uploads/londra.jpg') }}');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/2.jpg') }}');">
             </div>
-            <div class="carousel-item" style="background-image: url('{{ asset('uploads/roma.jpg') }}');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/3.jpg') }}');">
             </div>
-            <div class="carousel-item" style="background-image: url('{{ asset('uploads/stambolli.jpg') }}');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/4.jpg') }}');">
             </div>
-            <div class="carousel-item" style="background-image: url('{{ asset('uploads/viena.jpg') }}');">
+            <div class="carousel-item" style="background-image: url('{{ asset('uploads/5.jpg') }}');">
             </div>
         </div>
 
@@ -46,7 +46,7 @@
                                 class="d-none d-sm-inline"> Hotels</span></a>
                     </li>
                     <li class="nav-item flex-fill">
-                        <a class="nav-link text-center" href="#"><i class="fa fa-car"></i><span
+                        <a class="nav-link text-center" href="#car"><i class="fa fa-car"></i><span
                                 class="d-none d-sm-inline"> Cars</span></a>
                     </li>
                 </ul>
@@ -54,7 +54,7 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                                             JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                                                                                                             JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
                         <iframe
                             src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
                             style="width: 100%; min-width: 780px; height: 550px; border: none;" allowfullscreen></iframe>
@@ -174,8 +174,13 @@
                     </div>
 
                     <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
-                        <p>#</p>
+                        @include('Car.Views.frontend.layouts.car-rental-strip', [
+                            'action' => route('car.search'),
+                            'submitText' => __('Vazhdoje rezervimin'),
+                        ])
                     </div>
+
+
                 </div>
             </div>
         </div>
@@ -576,6 +581,135 @@
             });
         });
     </script>
+
+    <script>
+        (function() {
+            // Elements
+            const sameLocation = document.getElementById('same_location');
+            const returnPlaceRow = document.getElementById('returnPlaceRow');
+            const pickupPlace = document.getElementById('pickup_place');
+            const returnPlace = document.getElementById('return_place');
+            const carForm = document.getElementById('car-rental-form');
+            const alertBox = document.getElementById('carErrorAlert');
+
+            const pickupDate = document.getElementById('pickup_date');
+            const pickupTime = document.getElementById('pickup_time');
+            const dropoffDate = document.getElementById('dropoff_date');
+            const returnTime = document.getElementById('return_time');
+
+            // Helpers
+            const showError = (msg) => {
+                alertBox.textContent = msg;
+                alertBox.classList.remove('d-none');
+                alertBox.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+            };
+
+            const clearError = () => {
+                alertBox.textContent = '';
+                alertBox.classList.add('d-none');
+            };
+
+            const parseDDMMYYYY = (str) => {
+                // Expect dd/mm/YYYY
+                const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str || '');
+                if (!m) return null;
+                const [, dd, mm, yyyy] = m.map(Number);
+                // Month is 1-12 in input; JS Date month is 0-11
+                const d = new Date(yyyy, mm - 1, dd);
+                // Validate real date (e.g., 31/02 invalid)
+                if (d.getFullYear() !== yyyy || d.getMonth() !== (mm - 1) || d.getDate() !== dd) return null;
+                return d;
+            };
+
+            const combineDateTime = (dateText, timeText) => {
+                const d = parseDDMMYYYY(dateText);
+                if (!d) return null;
+                const [h, i] = (timeText || '').split(':').map((x) => parseInt(x, 10));
+                if (Number.isNaN(h) || Number.isNaN(i) || h < 0 || h > 23 || i < 0 || i > 59) return null;
+                d.setHours(h, i, 0, 0);
+                return d;
+            };
+
+            // Checkbox behavior
+            const updateReturnPlaceUI = () => {
+                if (sameLocation.checked) {
+                    // Hide return place and copy value from pickup
+                    returnPlaceRow.style.display = 'none';
+                    returnPlace.value = pickupPlace.value || '';
+                    returnPlace.setAttribute('disabled', 'disabled');
+                    returnPlace.removeAttribute('required');
+                } else {
+                    returnPlaceRow.style.display = '';
+                    returnPlace.removeAttribute('disabled');
+                    returnPlace.setAttribute('required', 'required');
+                    if (!returnPlace.value) returnPlace.focus();
+                }
+            };
+
+            sameLocation.addEventListener('change', updateReturnPlaceUI);
+            pickupPlace.addEventListener('input', () => {
+                if (sameLocation.checked) returnPlace.value = pickupPlace.value;
+            });
+
+            // Initial state
+            updateReturnPlaceUI();
+
+            // Form validation
+            carForm.addEventListener('submit', function(e) {
+                clearError();
+
+                // Ensure integer IDs
+                const intId = (v) => /^\d+$/.test((v || '').trim());
+                if (!intId(pickupPlace.value)) {
+                    e.preventDefault();
+                    return showError('Pickup place must be an integer ID.');
+                }
+                if (!sameLocation.checked && !intId(returnPlace.value)) {
+                    e.preventDefault();
+                    return showError('Dropoff place must be an integer ID.');
+                }
+                if (sameLocation.checked) {
+                    // Ensure return_place is sent with the same value
+                    returnPlace.disabled = false; // enable to include in submission
+                    returnPlace.value = pickupPlace.value;
+                }
+
+                // Dates & times
+                const pDT = combineDateTime(pickupDate.value, pickupTime.value);
+                if (!pDT) {
+                    e.preventDefault();
+                    return showError('Please enter a valid pickup date/time (dd/mm/YYYY and HH:MM).');
+                }
+                const dDT = combineDateTime(dropoffDate.value, returnTime.value);
+                if (!dDT) {
+                    e.preventDefault();
+                    return showError('Please enter a valid dropoff date/time (dd/mm/YYYY and HH:MM).');
+                }
+
+                // Must be strictly after pickup
+                if (dDT <= pDT) {
+                    e.preventDefault();
+                    return showError('Dropoff date/time must be after pickup date/time.');
+                }
+            });
+
+            // Optional: simple date input assistance (adds slashes)
+            const autoSlash = (el) => {
+                el.addEventListener('input', function() {
+                    let v = this.value.replace(/[^\d]/g, '').slice(0, 8);
+                    if (v.length >= 5) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+                    else if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2);
+                    this.value = v;
+                });
+            };
+            autoSlash(pickupDate);
+            autoSlash(dropoffDate);
+        })();
+    </script>
+
 
     <style>
         /* Responsive width utilities */
