@@ -174,10 +174,10 @@
                     </div>
 
                     <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
-                        @include('Car.Views.frontend.layouts.car-rental-strip', [
+                        {{-- @include('Car.Views.frontend.layouts.car-rental-strip', [
                             'action' => route('car.search'),
                             'submitText' => __('Vazhdoje rezervimin'),
-                        ])
+                        ]) --}}
                     </div>
 
 
