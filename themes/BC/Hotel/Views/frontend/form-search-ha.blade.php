@@ -54,7 +54,7 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                                                                                             JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                                                                                                                 JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
                         <iframe
                             src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
                             style="width: 100%; min-width: 780px; height: 550px; border: none;" allowfullscreen></iframe>
@@ -285,7 +285,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Carousel - Bootstrap 4 syntax
             $('#carouselBackground').carousel({
-                interval: 2000,
+                interval: 4000,
                 ride: 'carousel',
                 pause: false,
                 wrap: true
