@@ -36,9 +36,9 @@
         {{-- Header --}}
         <div class="hotel-header d-flex align-items-start justify-content-between gap-4 mb-4">
             <div>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
                     <h1 class="fw-bold mb-0">{{ $hotel['name'] }}</h1>
-                    <div class="star-wrap">
+                    <div class="star-wrap d-flex">
                         @for ($i = 0; $i < ($hotel['star_rating'] ?? 0); $i++)
                             <i class="fa fa-star text-warning"></i>
                         @endfor
@@ -47,6 +47,7 @@
                 <p class="text-muted mb-2"><i class="fa fa-map-marker"></i> {{ $hotel['address'] }}</p>
                 <div class="d-flex flex-wrap gap-3 small text-muted">
                     <div><strong>Check-in</strong>: {{ $checkin }}</div>
+                    <br />
                     <div><strong>Check-out</strong>: {{ $checkout }}</div>
                 </div>
             </div>
@@ -771,8 +772,19 @@
             --muted: #6b7280;
         }
 
+        .star-wrap {
+            gap: 0.25rem;
+        }
+
         .star-wrap i {
             font-size: 1rem
+        }
+
+        @media (max-width: 767.98px) {
+            .star-wrap {
+                width: 100%;
+                margin-top: 0.5rem;
+            }
         }
 
         /* Hero slider */
