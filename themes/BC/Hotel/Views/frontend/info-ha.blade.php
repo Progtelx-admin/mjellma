@@ -45,9 +45,8 @@
                     </div>
                 </div>
                 <p class="text-muted mb-2"><i class="fa fa-map-marker"></i> {{ $hotel['address'] }}</p>
-                <div class="d-flex flex-wrap gap-3 small text-muted">
-                    <div><strong>Check-in</strong>: {{ $checkin }}</div>
-                    <br />
+                <div class="d-flex flex-wrap gap-3 small text-muted checkin-checkout-info">
+                    <div class="me-3"><strong>Check-in</strong>: {{ $checkin }}</div>
                     <div><strong>Check-out</strong>: {{ $checkout }}</div>
                 </div>
             </div>
@@ -784,6 +783,15 @@
             .star-wrap {
                 width: 100%;
                 margin-top: 0.5rem;
+            }
+
+            .checkin-checkout-info {
+                gap: 1rem !important;
+            }
+
+            .checkin-checkout-info>div {
+                margin-right: 0 !important;
+                padding-right: 1rem;
             }
         }
 
