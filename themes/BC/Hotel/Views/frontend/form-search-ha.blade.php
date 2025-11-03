@@ -55,7 +55,7 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                                                                                                                                                 JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                                                                                                                                                                         JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
                         <iframe
                             src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
                             class="flight-widget-iframe" allowfullscreen></iframe>
@@ -160,7 +160,7 @@
                             <div class="row mt-3 mt-md-4">
                                 <div class="col d-flex justify-content-center">
                                     <button type="submit" id="search-btn"
-                                        class="btn btn-blue w-25 w-sm-50 w-md-25 w-lg-15">
+                                        class="btn btn-blue w-50 w-sm-100 w-md-25 w-lg-15">
                                         <span id="search-text">Search</span>
                                         <span id="search-spinner" class="spinner-border spinner-border-sm ms-2 d-none"
                                             role="status" aria-hidden="true"></span>
@@ -175,10 +175,10 @@
                     </div>
 
                     <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
-                        {{-- @include('Car.Views.frontend.layouts.car-rental-strip', [
+                        @include('Car.Views.frontend.layouts.car-rental-strip', [
                             'action' => route('car.search'),
                             'submitText' => __('Vazhdoje rezervimin'),
-                        ]) --}}
+                        ])
                     </div>
 
 
