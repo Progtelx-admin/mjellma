@@ -120,6 +120,8 @@ return [
     'popup_update',
     'popup_delete',
 
+    // Car Rent Reservations
+    'carrent_view',
 
     'media_manage_others'
 ];
