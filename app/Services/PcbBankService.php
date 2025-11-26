@@ -195,29 +195,48 @@ class PcbBankService
             $keyPath = str_replace('\\', '/', $this->keyPath);
             $caPath = str_replace('\\', '/', $this->caPath);
 
+            // Check if SSL certificates exist
+            $certExists = file_exists($certPath);
+            $keyExists = file_exists($keyPath);
+            $caExists = file_exists($caPath);
+
             Log::info('🔧 PCB Bank TLS Configuration', [
                 'cert_path' => $certPath,
                 'key_path' => $keyPath,
                 'ca_path' => $caPath,
-                'cert_exists' => file_exists($certPath),
-                'key_exists' => file_exists($keyPath),
-                'ca_exists' => file_exists($caPath)
+                'cert_exists' => $certExists,
+                'key_exists' => $keyExists,
+                'ca_exists' => $caExists
             ]);
 
-            $client = Http::withOptions([
+            // Build options array - only include SSL options if certificates exist
+            $options = [
                 'verify' => false, // Disable SSL verification for self-signed certificates
-                'cert' => [$certPath, ''], // Certificate file and password (empty for no password)
-                'ssl_key' => [$keyPath, ''], // Private key file and password (empty for no password)
                 'timeout' => $this->timeout,
                 'http_errors' => false, // Don't throw exceptions for HTTP errors
                 'curl' => [
-                    CURLOPT_SSL_VERIFYPEER => false, // Disable peer verification for self-signed certs
-                    CURLOPT_SSL_VERIFYHOST => false, // Disable host verification for self-signed certs
-                    CURLOPT_SSLCERT => $certPath,
-                    CURLOPT_SSLKEY => $keyPath,
-                    CURLOPT_CAINFO => $caPath,
+                    CURLOPT_SSL_VERIFYPEER => false, // Disable peer verification
+                    CURLOPT_SSL_VERIFYHOST => false, // Disable host verification
                 ]
-            ]);
+            ];
+
+            // Only add certificate options if files exist
+            if ($certExists && $keyExists) {
+                $options['cert'] = [$certPath, ''];
+                $options['ssl_key'] = [$keyPath, ''];
+                $options['curl'][CURLOPT_SSLCERT] = $certPath;
+                $options['curl'][CURLOPT_SSLKEY] = $keyPath;
+                
+                if ($caExists) {
+                    $options['curl'][CURLOPT_CAINFO] = $caPath;
+                }
+                
+                Log::info('✅ Using SSL certificates for PCB Bank');
+            } else {
+                Log::warning('⚠️ SSL certificates not found, proceeding without client certificates');
+            }
+
+            $client = Http::withOptions($options);
 
             $url = $this->apiUrl . $endpoint;
 

@@ -55,7 +55,7 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                                                                                                                                                                 JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                                                                                                                                                                                     JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
                         <iframe
                             src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
                             class="flight-widget-iframe" allowfullscreen></iframe>
@@ -175,10 +175,10 @@
                     </div>
 
                     <div class="tab-pane fade" id="car" role="tabpanel" aria-labelledby="car-tab">
-                        {{-- @include('Car.Views.frontend.layouts.car-rental-strip', [
+                        @include('Car.Views.frontend.layouts.car-rental-strip', [
                             'action' => route('car.search'),
                             'submitText' => __('Vazhdoje rezervimin'),
-                        ]) --}}
+                        ])
                     </div>
 
 
