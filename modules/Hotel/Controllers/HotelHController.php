@@ -43,7 +43,10 @@ class HotelHController extends Controller
     public function __construct()
     {
         // Pull from .env; keep a safe default for API_URL only
+        // Note: API URL can also be set dynamically via getApiUrl() method
         $this->apiUrl = env('API_URL', 'https://api.worldota.net/api/b2b/v3/');
+        // Note: username and password are now set dynamically based on logged-in user
+        // Default fallback credentials (for non-authenticated requests or fallback)
         $this->username = env('API_USERNAME');
         $this->password = env('API_PASSWORD');
 
@@ -58,6 +61,110 @@ class HotelHController extends Controller
                 \CURLOPT_IPRESOLVE => \CURL_IPRESOLVE_V4,
             ],
         ];
+    }
+
+    /**
+     * Determine if the current user is B2B or B2C
+     * Checks in order: user meta 'user_type', role code, role name
+     * Administrator and Vendor roles are automatically considered B2B
+     *
+     * @return string 'b2b' or 'b2c'
+     */
+    private function getUserType()
+    {
+        $user = auth()->user();
+
+        // If no user is logged in, default to B2C
+        if (!$user) {
+            return 'b2c';
+        }
+
+        // Check user meta field first
+        $userType = $user->getMeta('user_type', '');
+        if (!empty($userType) && in_array(strtolower($userType), ['b2b', 'b2c'])) {
+            return strtolower($userType);
+        }
+
+        // Check role code
+        if ($user->role && $user->role->code) {
+            $roleCode = strtolower($user->role->code);
+            // Administrator and Vendor are B2B
+            if (
+                str_contains($roleCode, 'b2b') ||
+                str_contains($roleCode, 'administrator') ||
+                str_contains($roleCode, 'vendor')
+            ) {
+                return 'b2b';
+            }
+            if (str_contains($roleCode, 'b2c')) {
+                return 'b2c';
+            }
+        }
+
+        // Check role name
+        if ($user->role && $user->role->name) {
+            $roleName = strtolower($user->role->name);
+            // Administrator and Vendor are B2B
+            if (
+                str_contains($roleName, 'b2b') ||
+                str_contains($roleName, 'business') ||
+                str_contains($roleName, 'administrator') ||
+                str_contains($roleName, 'vendor')
+            ) {
+                return 'b2b';
+            }
+            if (str_contains($roleName, 'b2c') || str_contains($roleName, 'customer')) {
+                return 'b2c';
+            }
+        }
+
+        // Default to B2C if no specific type is found
+        return 'b2c';
+    }
+
+    /**
+     * Get API username based on the logged-in user type
+     *
+     * @return string
+     */
+    private function getApiUsername()
+    {
+        $userType = $this->getUserType();
+
+        if ($userType === 'b2b') {
+            return env('API_USERNAME_B2B', env('API_USERNAME'));
+        }
+
+        // B2C or default
+        return env('API_USERNAME_B2C', env('API_USERNAME'));
+    }
+
+    /**
+     * Get API password based on the logged-in user type
+     *
+     * @return string
+     */
+    private function getApiPassword()
+    {
+        $userType = $this->getUserType();
+
+        if ($userType === 'b2b') {
+            return env('API_PASSWORD_B2B', env('API_PASSWORD'));
+        }
+
+        // B2C or default
+        return env('API_PASSWORD_B2C', env('API_PASSWORD'));
+    }
+
+    /**
+     * Get API URL - same for both B2B and B2C users
+     *
+     * @return string
+     */
+    private function getApiUrl()
+    {
+        // API URL is the same for both B2B and B2C
+        return env('API_URL', 'https://api.worldota.net/api/b2b/v3/');
     }
     /**
      * List of errors returned from the booking finish call that should be treated
@@ -227,6 +334,63 @@ class HotelHController extends Controller
             unset($map[$partnerOrderId]);
             session(['booking_deadlines' => $map]);
         }
+    }
+
+    /**
+     * Test endpoint to verify B2B/B2C credentials are working correctly
+     * This method shows which credentials are being used based on the logged-in user
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function testApiCredentials()
+    {
+        $user = auth()->user();
+        $userType = $this->getUserType();
+        $username = $this->getApiUsername();
+        $password = $this->getApiPassword();
+        $apiUrl = $this->getApiUrl();
+
+        // Log for debugging
+        Log::info('API Credentials Test', [
+            'user_id' => $user ? $user->id : 'guest',
+            'user_email' => $user ? $user->email : 'guest',
+            'user_type' => $userType,
+            'role_id' => $user && $user->role ? $user->role_id : null,
+            'role_name' => $user && $user->role ? $user->role->name : null,
+            'role_code' => $user && $user->role ? $user->role->code : null,
+            'user_meta_type' => $user ? $user->getMeta('user_type', 'not_set') : 'not_set',
+            'api_username' => substr($username, 0, 4) . '****', // Mask for security
+            'api_password_length' => strlen($password),
+            'api_url' => $apiUrl,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'user' => $user ? [
+                'id' => $user->id,
+                'email' => $user->email,
+                'name' => $user->name,
+            ] : 'guest',
+            'user_type' => $userType,
+            'role_info' => $user && $user->role ? [
+                'id' => $user->role->id,
+                'name' => $user->role->name,
+                'code' => $user->role->code,
+            ] : null,
+            'user_meta_type' => $user ? $user->getMeta('user_type', 'not_set') : 'not_set',
+            'api_credentials' => [
+                'username' => substr($username, 0, 4) . '****', // Mask for security
+                'password_length' => strlen($password),
+                'url' => $apiUrl,
+            ],
+            'environment_variables' => [
+                'API_USERNAME_B2B' => env('API_USERNAME_B2B') ? 'set' : 'not_set',
+                'API_PASSWORD_B2B' => env('API_PASSWORD_B2B') ? 'set' : 'not_set',
+                'API_USERNAME_B2C' => env('API_USERNAME_B2C') ? 'set' : 'not_set',
+                'API_PASSWORD_B2C' => env('API_PASSWORD_B2C') ? 'set' : 'not_set',
+                'API_URL' => env('API_URL', 'not_set'),
+            ],
+        ]);
     }
 
     public function showHotels()
@@ -507,9 +671,9 @@ class HotelHController extends Controller
                 try {
                     $apiData = Http::timeout(20) // 20 seconds max - faster fallback to "No rooms available"
                         ->withOptions($this->httpOptions)
-                        ->withBasicAuth($this->username, $this->password)
+                        ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                         ->withHeaders(['Content-Type' => 'application/json'])
-                        ->post($this->apiUrl . 'search/serp/hotels', $apiBody)
+                        ->post($this->getApiUrl() . 'search/serp/hotels', $apiBody)
                         ->json()['data']['hotels'] ?? [];
 
                     // Map prices & breakfast flags
@@ -642,7 +806,7 @@ class HotelHController extends Controller
     private function fetchApiData($checkin, $checkout, $adults, $children, $hotelIds, $hotelHids)
     {
         Log::info('Preparing API request...');
-        $url = $this->apiUrl . "search/serp/hotels/";
+        $url = $this->getApiUrl() . "search/serp/hotels/";
 
         $body = [
             'checkin' => $checkin,
@@ -664,7 +828,7 @@ class HotelHController extends Controller
 
         try {
             $response = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($url, $body);
 
@@ -742,7 +906,7 @@ class HotelHController extends Controller
 
     //         $response = Http::withBasicAuth($this->username, $this->password)
     //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->apiUrl . 'search/hp/', $apiBody);
+    //             ->post($this->getApiUrl() . 'search/hp/', $apiBody);
 
     //         if ($response->failed()) {
     //             Log::error('API call failed', ['response' => $response->body()]);
@@ -819,9 +983,9 @@ class HotelHController extends Controller
 
             // 3. API call: hotel rates
             $rateResponse = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'search/hp/', [
+                ->post($this->getApiUrl() . 'search/hp/', [
                     'checkin' => $checkin,
                     'checkout' => $checkout,
                     'residency' => $residency,
@@ -846,9 +1010,9 @@ class HotelHController extends Controller
             // 4. API call: room images (via hotel info)
             // 4. API call: hotel info (using HID)
             $infoResponse = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/info/', [
+                ->post($this->getApiUrl() . 'hotel/info/', [
                     'hid' => (int) $dbHotel->hid,
                     'language' => $language,
                 ]);
@@ -1132,10 +1296,10 @@ class HotelHController extends Controller
         do {
             try {
                 $resp = Http::withOptions($this->httpOptions)
-                    ->withBasicAuth($this->username, $this->password)
+                    ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                     ->withHeaders(['Content-Type' => 'application/json'])
                     ->timeout(30)
-                    ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                    ->post($this->getApiUrl() . 'hotel/order/booking/finish/status/', [
                         'partner_order_id' => $partnerOrderId,
                     ]);
 
@@ -1214,9 +1378,9 @@ class HotelHController extends Controller
             ];
 
             $response = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/prebook/', $apiBody);
+                ->post($this->getApiUrl() . 'hotel/prebook/', $apiBody);
 
             if ($response->failed()) {
                 throw new \Exception('Prebook API request failed: ' . $response->body());
@@ -1370,7 +1534,7 @@ class HotelHController extends Controller
 
     //         $response = Http::withBasicAuth($this->username, $this->password)
     //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->apiUrl . 'hotel/order/booking/form/', $apiBody);
+    //             ->post($this->getApiUrl() . 'hotel/order/booking/form/', $apiBody);
 
     //         Log::info('📥 Booking API Response', [
     //             'status' => $response->status(),
@@ -1455,9 +1619,9 @@ class HotelHController extends Controller
             Log::info('📤 Sending booking form request to API', ['payload' => $apiBody]);
 
             $response = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/booking/form/', $apiBody);
+                ->post($this->getApiUrl() . 'hotel/order/booking/form/', $apiBody);
 
             Log::info('📥 Booking API Response', [
                 'status' => $response->status(),
@@ -1675,9 +1839,9 @@ class HotelHController extends Controller
             // status is returned【788235750464074†L491-L501】.  See finishBooking()
             // for an example of the recommended logic.
             $resp = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiBody);
+                ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $apiBody);
 
             // Attempt to decode the JSON response.  Even if the HTTP status is
             // not 2xx, we still want to inspect the status and error fields.
@@ -1831,7 +1995,7 @@ class HotelHController extends Controller
     //         // Call the API
     //         $response = Http::withBasicAuth($this->username, $this->password)
     //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->apiUrl . 'hotel/order/booking/finish/', $apiPayload);
+    //             ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $apiPayload);
 
     //         if ($response->failed()) {
     //             throw new \Exception('API request failed: ' . $response->body());
@@ -2115,9 +2279,9 @@ class HotelHController extends Controller
         ];
 
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/booking/form/', $payload);
+            ->post($this->getApiUrl() . 'hotel/order/booking/form/', $payload);
 
         if ($response->successful()) {
             $data = $response->json()['data'];
@@ -2137,9 +2301,9 @@ class HotelHController extends Controller
         ];
 
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/booking/credit-card/', $payload);
+            ->post($this->getApiUrl() . 'hotel/order/booking/credit-card/', $payload);
 
         if ($response->successful() && isset($response->json()['data']['token'])) {
             return $response->json()['data']['token'];
@@ -2206,7 +2370,7 @@ class HotelHController extends Controller
 
     //     $response = Http::withBasicAuth($this->username, $this->password)
     //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
 
     //     Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
 
@@ -2272,7 +2436,7 @@ class HotelHController extends Controller
 
     //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
     //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
 
     //     \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
 
@@ -2361,7 +2525,7 @@ class HotelHController extends Controller
 
     //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
     //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
 
     //     \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
 
@@ -2482,10 +2646,10 @@ class HotelHController extends Controller
         // Send the finish call.  Any exception here should bubble up and
         // trigger the catch block below.
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
             ->timeout(30)
-            ->post($this->apiUrl . 'hotel/order/booking/finish/', $payload);
+            ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
 
         $json = $response->json();
         Log::info('finishBooking response', ['response' => $json]);
@@ -2661,10 +2825,10 @@ class HotelHController extends Controller
 
         try {
             $resp = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->timeout(30)
-                ->post($this->apiUrl . 'hotel/order/booking/finish/', $finishPayload);
+                ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $finishPayload);
 
             $json = $resp->json();
             $status = data_get($json, 'status');
@@ -2789,9 +2953,9 @@ class HotelHController extends Controller
         }
 
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/info/', $payload);
+            ->post($this->getApiUrl() . 'hotel/order/info/', $payload);
 
         $bookings = [];
         $statuses = [];
@@ -2834,9 +2998,9 @@ class HotelHController extends Controller
         try {
             // 1) Fetch “order/info”
             $infoResp = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/info/', [
+                ->post($this->getApiUrl() . 'hotel/order/info/', [
                     'ordering' => ['ordering_type' => 'desc', 'ordering_by' => 'created_at'],
                     'pagination' => ['page_size' => 1, 'page_number' => 1],
                     'search' => ['order_ids' => [(int) $orderId]],
@@ -2860,9 +3024,9 @@ class HotelHController extends Controller
 
             // 2) Fetch “finish/status”
             $statusResp = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/booking/finish/status/', [
+                ->post($this->getApiUrl() . 'hotel/order/booking/finish/status/', [
                     'partner_order_id' => $partnerOrderId
                 ]);
 
@@ -2897,7 +3061,7 @@ class HotelHController extends Controller
     // {
     //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
     //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->apiUrl . 'hotel/order/cancel/', [
+    //         ->post($this->getApiUrl() . 'hotel/order/cancel/', [
     //             'partner_order_id' => $partnerOrderId
     //         ]);
 
@@ -2914,9 +3078,9 @@ class HotelHController extends Controller
     public function cancelBooking(Request $request, $partnerOrderId)
     {
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/cancel/', [
+            ->post($this->getApiUrl() . 'hotel/order/cancel/', [
                 'partner_order_id' => $partnerOrderId,
                 'user' => [
                     'email' => 'blerimmi@hotmail.com'
@@ -2944,9 +3108,9 @@ class HotelHController extends Controller
 
         // 2. Fetch booking info from RateHawk API
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/info/', [
+            ->post($this->getApiUrl() . 'hotel/order/info/', [
                 "ordering" => [
                     "ordering_type" => "desc",
                     "ordering_by" => "created_at"
@@ -3009,9 +3173,9 @@ class HotelHController extends Controller
 
         if (!empty($orderIds)) {
             $response = Http::withOptions($this->httpOptions)
-                ->withBasicAuth($this->username, $this->password)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->apiUrl . 'hotel/order/info/', [
+                ->post($this->getApiUrl() . 'hotel/order/info/', [
                     'ordering' => [
                         'ordering_type' => 'desc',
                         'ordering_by' => 'created_at'
@@ -3044,9 +3208,9 @@ class HotelHController extends Controller
     public function showBookingInvoice(Request $request, $orderId)
     {
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->username, $this->password)
+            ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->post($this->apiUrl . 'hotel/order/info/', [
+            ->post($this->getApiUrl() . 'hotel/order/info/', [
                 "ordering" => [
                     "ordering_type" => "desc",
                     "ordering_by" => "created_at"
