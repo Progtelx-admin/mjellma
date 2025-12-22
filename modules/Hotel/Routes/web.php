@@ -26,7 +26,8 @@ Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'
 Route::post('/hotel/prebook', [HotelHController::class, 'prebookRoom'])->name('hotel.prebook');
 Route::get('/hotel/prebook/result', [HotelHController::class, 'prebookResult'])->name('hotel.prebook.result');
 Route::get('/hotel/booking/failed', function () {
-    return view('Hotel::frontend.booking-failed'); })->name('hotel.booking.failed');
+    return view('Hotel::frontend.booking-failed');
+})->name('hotel.booking.failed');
 
 
 // **BOOK** & confirmation

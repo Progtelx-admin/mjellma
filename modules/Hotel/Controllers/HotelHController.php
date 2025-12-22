@@ -689,11 +689,7 @@ class HotelHController extends Controller
                                 return $mealValue !== '' && $mealValue !== 'nomeal' && Str::contains($mealValue, 'breakfast');
                             });
 
-                        // Apply 15% markup for guest users
-                        if ($dailyPrice && !auth()->check()) {
-                            $dailyPrice = round($dailyPrice * 1.15, 2);
-                        }
-
+                        // Price comes directly from API based on B2B/B2C credentials
                         $pricesResult[$hid] = compact('dailyPrice', 'hasBreakfast');
                     }
 
@@ -1084,12 +1080,8 @@ class HotelHController extends Controller
                     // Still attach basic pricing and meal info so UI remains consistent
                     $rate['net_amount'] = $net;
                     $rate['commission_amount'] = $commission;
+                    // Price comes directly from API based on B2B/B2C credentials
                     $finalPrice = round($net + $commission, 2);
-
-                    // Apply 15% markup for guest users
-                    if (!auth()->check()) {
-                        $finalPrice = round($finalPrice * 1.15, 2);
-                    }
 
                     $rate['final_price'] = $finalPrice;
                     $rate['meal_type'] = $mealLabel;
@@ -1106,12 +1098,8 @@ class HotelHController extends Controller
                 // Attach computed fields back to the rate
                 $rate['net_amount'] = $net;
                 $rate['commission_amount'] = $commission;
+                // Price comes directly from API based on B2B/B2C credentials
                 $finalPrice = round($net + $commission, 2);
-
-                // Apply 15% markup for guest users
-                if (!auth()->check()) {
-                    $finalPrice = round($finalPrice * 1.15, 2);
-                }
 
                 $rate['final_price'] = $finalPrice;
                 $rate['meal_type'] = $mealLabel;
@@ -1465,11 +1453,8 @@ class HotelHController extends Controller
             $newPrice = (float) $net + (float) $commission;
             $newCurrency = $payment['currency_code'] ?? '';
 
-            // Apply 15% markup for guest users (what customer will pay)
+            // Price comes directly from API based on B2B/B2C credentials
             $displayFinalPrice = $newPrice;
-            if (!auth()->check()) {
-                $displayFinalPrice = round($newPrice * 1.15, 2);
-            }
 
             if ($oldPrice > 0 && abs($displayFinalPrice - $oldPrice) > 0.01) {
                 $priceChanged = true;
@@ -1600,7 +1585,7 @@ class HotelHController extends Controller
                 'booking.meal_plan' => $request->input('meal_plan'),
                 'booking.adults' => $request->input('adults', 1),
                 'booking.children' => json_decode($request->input('children', '[]'), true),
-                // Store display price (with 15% markup for guests) from prebook
+                // Store display price from prebook (based on B2B/B2C API credentials)
                 'display_final_price' => $request->input('display_final_price'),
                 'display_currency' => $request->input('display_currency', 'EUR'),
             ]);
@@ -1746,7 +1731,7 @@ class HotelHController extends Controller
 
         Log::info('Displaying booking confirmation', ['bookingData' => $bookingData]);
 
-        // Get display final price (with 15% markup for guests) from session
+        // Get display final price from session (based on B2B/B2C API credentials)
         $displayFinalPrice = session('display_final_price', $bookingData['payment_types'][0]['amount'] ?? 0);
         $displayCurrency = session('display_currency', $bookingData['payment_types'][0]['currency_code'] ?? 'EUR');
 
@@ -2113,7 +2098,7 @@ class HotelHController extends Controller
         $booking->email = $bookingData['email'] ?? 'customer@example.com';
         $booking->phone = $bookingData['phone'] ?? '+0000000000';
 
-        // Use display_final_price (customer paid amount with 15% markup for guests)
+        // Use display_final_price (customer paid amount based on B2B/B2C API credentials)
         $customerPaidAmount = $bookingData['display_final_price'] ?? $bookingData['payment_type']['amount'] ?? 0;
         $booking->pay_now = $customerPaidAmount;
         $booking->paid = $customerPaidAmount;
@@ -2198,7 +2183,7 @@ class HotelHController extends Controller
             $token = Str::random(32);
             session(["pending_booking_{$token}" => $request->all()]);
 
-            // Use display_final_price for customer payment (includes 15% markup for guests)
+            // Use display_final_price for customer payment (based on B2B/B2C API credentials)
             // RateHawk will still receive the original payment_type.amount
             $displayPrice = $request->input('display_final_price');
             $amount = $displayPrice ?: $request->input('payment_type.amount');
