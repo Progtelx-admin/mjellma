@@ -14,6 +14,9 @@ Route::get('/pcb-return', [HotelHController::class, 'handlePcbReturn'])->name('p
 // after PCB, confirm payment
 Route::get('/hotel/payment/confirm', [HotelHController::class, 'confirmAfterPcb'])->name('hotel.payment.confirm');
 
+// Test endpoint for API credentials (remove in production)
+Route::get('/hotel/test-api-credentials', [HotelHController::class, 'testApiCredentials'])->name('hotel.test.api.credentials');
+
 // list & search
 Route::get('/', [HotelHController::class, 'showHotels'])->name('hotel.show');
 Route::get('/hotels/search', [HotelHController::class, 'searchHotels'])->name('hotel.search');
@@ -23,7 +26,8 @@ Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'
 Route::post('/hotel/prebook', [HotelHController::class, 'prebookRoom'])->name('hotel.prebook');
 Route::get('/hotel/prebook/result', [HotelHController::class, 'prebookResult'])->name('hotel.prebook.result');
 Route::get('/hotel/booking/failed', function () {
-    return view('Hotel::frontend.booking-failed'); })->name('hotel.booking.failed');
+    return view('Hotel::frontend.booking-failed');
+})->name('hotel.booking.failed');
 
 
 // **BOOK** & confirmation

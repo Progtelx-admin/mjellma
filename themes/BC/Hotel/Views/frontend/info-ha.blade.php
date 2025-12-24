@@ -354,7 +354,7 @@
                     <div class="policy-card mb-4">
                         <div class="policy-card__header">Additional Policy Information</div>
                         <div class="policy-card__body">
-                            {!! nl2br(e(str_replace(["\\r\\n", "\\n"], "\n", $hotel['metapolicy_extra_info']))) !!}
+                            {!! $hotel['metapolicy_extra_info'] !!}
                         </div>
                     </div>
                 @endif
@@ -376,7 +376,7 @@
                             $net = data_get($payment, 'commission_info.charge.amount_net', $payment['amount'] ?? 0);
                             $comm = data_get($payment, 'commission_info.charge.amount_commission', null);
                             $currency = $payment['currency_code'] ?? '';
-                            // Use the final_price from controller (already has 15% markup for guests)
+                            // Use the final_price from controller (based on B2B/B2C API credentials)
                             $finalPrice = $rate['final_price'] ?? $net + ($comm ?? 0);
 
                             $mealData = data_get($rate, 'meal_data', []);
