@@ -2169,6 +2169,7 @@ class HotelHController extends Controller
     {
         $paymentType = $request->input('payment_type.type');
         $requiresCard = $request->input('payment_type.is_need_credit_card_data', false);
+        $bookHash = $request->input('book_hash');
 
         Log::info('📥 Booking Submission', [
             'payment_type' => $paymentType,
@@ -2208,6 +2209,11 @@ class HotelHController extends Controller
             }
 
             Log::error('❌ PCB createOrder failed');
+            // Redirect back to booking confirmation page with error message
+            if ($bookHash) {
+                return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash])
+                    ->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
+            }
             return back()->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
         }
 
@@ -2216,7 +2222,19 @@ class HotelHController extends Controller
         // return app()->call([$this, 'finishBooking'], ['request' => $request]);
 
         // If we reach here, payment method is not supported
-        Log::error('❌ Unsupported payment method');
+        Log::error('❌ Unsupported payment method', [
+            'payment_type' => $paymentType,
+            'is_pcb_payment' => $isPcbPayment,
+            'requires_card' => $requiresCard,
+        ]);
+        
+        // Redirect back to booking confirmation page with error message
+        // This ensures B2B users see the error instead of being redirected to hotel search
+        if ($bookHash) {
+            return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash])
+                ->withErrors(['error' => 'Only PCB Bank payment is supported. Please select PCB Bank payment method.']);
+        }
+        // Fallback to back() if book_hash is missing (shouldn't happen in normal flow)
         return back()->withErrors(['error' => 'Only PCB Bank payment is supported. Please select PCB Bank payment method.']);
     }
 
