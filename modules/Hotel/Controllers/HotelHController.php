@@ -1332,6 +1332,74 @@ class HotelHController extends Controller
         return $lastResponse;
     }
 
+    /**
+     * Verifies the actual booking status by calling the order/info endpoint.
+     * This is used as a fallback when polling returns an error but the booking
+     * may have actually completed successfully.
+     *
+     * @param string $orderId The order_id from the API
+     * @param string $partnerOrderId The partner_order_id
+     * @return array|null Returns the order data if found and status is 'ok', null otherwise
+     */
+    private function verifyBookingStatus(string $orderId, string $partnerOrderId): ?array
+    {
+        try {
+            $infoResp = Http::withOptions($this->httpOptions)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->timeout(10)
+                ->post($this->getApiUrl() . 'hotel/order/info/', [
+                    'ordering' => ['ordering_type' => 'desc', 'ordering_by' => 'created_at'],
+                    'pagination' => ['page_size' => 1, 'page_number' => 1],
+                    'search' => ['order_ids' => [(int) $orderId]],
+                    'language' => 'en',
+                ]);
+
+            if (!$infoResp->successful()) {
+                Log::warning('⚠️ order/info verification failed', [
+                    'order_id' => $orderId,
+                    'http_status' => $infoResp->status()
+                ]);
+                return null;
+            }
+
+            $infoJson = $infoResp->json();
+            if (($infoJson['status'] ?? '') !== 'ok' || empty($infoJson['data']['orders'][0])) {
+                Log::warning('⚠️ order/info returned non-ok status or no orders', [
+                    'order_id' => $orderId,
+                    'api_status' => $infoJson['status'] ?? 'unknown',
+                    'error' => $infoJson['error'] ?? null
+                ]);
+                return null;
+            }
+
+            $order = $infoJson['data']['orders'][0];
+            $orderStatus = data_get($order, 'status');
+
+            // Check if the order status indicates success
+            if ($orderStatus === 'ok' || $orderStatus === 'confirmed') {
+                Log::info('✅ Booking verified as successful via order/info', [
+                    'order_id' => $orderId,
+                    'partner_order_id' => $partnerOrderId,
+                    'order_status' => $orderStatus
+                ]);
+                return $order;
+            }
+
+            Log::info('ℹ️ Booking status from order/info', [
+                'order_id' => $orderId,
+                'order_status' => $orderStatus
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('❌ Exception while verifying booking status', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
 
     public function getHotelSuggestions(Request $request)
     {
@@ -1900,6 +1968,31 @@ class HotelHController extends Controller
                     $this->clearBookingDeadline($partnerOrderId);
                     return redirect()->route('hotel.payment.success');
                 }
+
+                // Before showing an error, verify the actual booking status via order/info
+                // This handles cases where polling timed out but the booking actually succeeded
+                $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
+                if ($verifiedOrder) {
+                    // Booking actually succeeded! Update DB and redirect to success
+                    Log::info('✅ Booking verified as successful after polling returned error in processPayment', [
+                        'order_id' => $orderId,
+                        'partner_order_id' => $partnerOrderId,
+                        'polling_status' => $statusData
+                    ]);
+
+                    $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+                    if ($mjellmaBooking) {
+                        $mjellmaBooking->api_status = 'ok';
+                        $mjellmaBooking->save();
+
+                        // Trigger event to send customer confirmation email
+                        event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+                    }
+
+                    $this->clearBookingDeadline($partnerOrderId);
+                    return redirect()->route('hotel.payment.success');
+                }
+
                 // Otherwise, display the pending page with the last status or
                 // error returned from the status call.
                 return view('Hotel::frontend.booking-pending', [
@@ -2169,6 +2262,7 @@ class HotelHController extends Controller
     {
         $paymentType = $request->input('payment_type.type');
         $requiresCard = $request->input('payment_type.is_need_credit_card_data', false);
+        $bookHash = $request->input('book_hash');
 
         Log::info('📥 Booking Submission', [
             'payment_type' => $paymentType,
@@ -2208,6 +2302,11 @@ class HotelHController extends Controller
             }
 
             Log::error('❌ PCB createOrder failed');
+            // Redirect back to booking confirmation page with error message
+            if ($bookHash) {
+                return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash])
+                    ->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
+            }
             return back()->withErrors(['error' => 'Failed to redirect to PCB Bank.']);
         }
 
@@ -2216,7 +2315,19 @@ class HotelHController extends Controller
         // return app()->call([$this, 'finishBooking'], ['request' => $request]);
 
         // If we reach here, payment method is not supported
-        Log::error('❌ Unsupported payment method');
+        Log::error('❌ Unsupported payment method', [
+            'payment_type' => $paymentType,
+            'is_pcb_payment' => $isPcbPayment,
+            'requires_card' => $requiresCard,
+        ]);
+
+        // Redirect back to booking confirmation page with error message
+        // This ensures B2B users see the error instead of being redirected to hotel search
+        if ($bookHash) {
+            return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash])
+                ->withErrors(['error' => 'Only PCB Bank payment is supported. Please select PCB Bank payment method.']);
+        }
+        // Fallback to back() if book_hash is missing (shouldn't happen in normal flow)
         return back()->withErrors(['error' => 'Only PCB Bank payment is supported. Please select PCB Bank payment method.']);
     }
 
@@ -2743,6 +2854,33 @@ class HotelHController extends Controller
 
             if (data_get($statusData, 'status') === 'ok') {
                 // Final success: mark as completed in DB and clear deadline
+                $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+                if ($mjellmaBooking) {
+                    $mjellmaBooking->api_status = 'ok';
+                    $mjellmaBooking->save();
+
+                    // Trigger event to send customer confirmation email
+                    event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+                }
+
+                $this->clearBookingDeadline($partnerOrderId);
+                return view('Hotel::frontend.payment-success', [
+                    'order_id' => $payload['order_id'],
+                    'partner_order_id' => $partnerOrderId,
+                ]);
+            }
+
+            // Before showing an error, verify the actual booking status via order/info
+            // This handles cases where polling timed out but the booking actually succeeded
+            $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
+            if ($verifiedOrder) {
+                // Booking actually succeeded! Update DB and show success page
+                Log::info('✅ Booking verified as successful after polling returned error', [
+                    'order_id' => $payload['order_id'],
+                    'partner_order_id' => $partnerOrderId,
+                    'polling_status' => $statusData
+                ]);
+
                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                 if ($mjellmaBooking) {
                     $mjellmaBooking->api_status = 'ok';
