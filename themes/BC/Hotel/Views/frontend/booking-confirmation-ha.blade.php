@@ -22,7 +22,7 @@
         .accordion .card {
             margin-bottom: 0.5rem;
         }
-    </style>{{-- @foreach ($bookingData['payment_types'] as $index => $payment)
+    </style>
     @php
         use Illuminate\Support\Str;
 
@@ -141,30 +141,27 @@
                 <label class="form-label">Select Payment Method</label>
                 <div class="gateways-table accordion" id="accordionExample">
                     {{-- COMMENTED OUT: RateHawk payment types (deposit, etc.) - Only PCB Bank is available now --}}
-    {{-- @foreach ($bookingData['payment_types'] as $index => $payment)
+                    {{-- @foreach ($bookingData['payment_types'] as $index => $payment)
                         <div class="card">
                             <div class="card-header">
                                 <h4 class="mb-0">
-                                    <label class="payment-method-label"
-                                        data-collapse-target="gateway_{{ $index }}" style="cursor: pointer;">
+                                    <label class="payment-method-label" data-collapse-target="gateway_{{ $index }}" style="cursor: pointer;">
                                         <input type="radio" name="payment_method"
-                                            id="payment_method_{{ $index }}"
-                                            value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
-                                            data-type="{{ $payment['type'] }}"
-                                            data-currency="{{ $payment['currency_code'] }}"
-                                            data-amount="{{ $payment['amount'] }}"
-                                            data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}"
-                                            {{ $index === 0 ? 'checked' : '' }}>
-                                        {{ ucfirst($payment['type']) }} - {{ $payment['amount'] }}
-                                        {{ $payment['currency_code'] }}
+                                               id="payment_method_{{ $index }}"
+                                               value="{{ $payment['type'] }}|{{ $payment['currency_code'] }}"
+                                               data-type="{{ $payment['type'] }}"
+                                               data-currency="{{ $payment['currency_code'] }}"
+                                               data-amount="{{ $payment['amount'] }}"
+                                               data-need-card="{{ $payment['is_need_credit_card_data'] ? '1' : '0' }}"
+                                               {{ $index === 0 ? 'checked' : '' }}>
+                                        {{ ucfirst($payment['type']) }} - {{ $payment['amount'] }} {{ $payment['currency_code'] }}
                                         @if ($payment['is_need_credit_card_data'])
                                             (Pay with Card)
                                         @endif
                                     </label>
                                 </h4>
                             </div>
-                            <div id="gateway_{{ $index }}" class="collapse {{ $index === 0 ? 'show' : '' }}"
-                                data-parent="#accordionExample">
+                            <div id="gateway_{{ $index }}" class="collapse {{ $index === 0 ? 'show' : '' }}" data-parent="#accordionExample">
                                 <div class="card-body">
                                     <div class="gateway_name">
                                         {{ ucfirst($payment['type']) }} Payment
@@ -178,156 +175,159 @@
                         </div>
                     @endforeach --}}
 
-    <!-- PCB Bank Payment Method (ONLY OPTION) -->
-    <div class="card">
-        <div class="card-header">
-            <h4 class="mb-0">
-                <label class="payment-method-label" data-collapse-target="gateway_pcb" style="cursor: pointer;">
-                    <input type="radio" name="payment_method" id="payment_method_pcb"
-                        value="pcb_bank|{{ $displayCurrency ?? 'EUR' }}" data-type="pcb_bank"
-                        data-currency="{{ $displayCurrency ?? 'EUR' }}" data-amount="{{ $displayFinalPrice ?? '0' }}"
-                        data-need-card="1" checked>
-                    PCB Bank Payment - {{ number_format($displayFinalPrice ?? 0, 2) }}
-                    {{ $displayCurrency ?? 'EUR' }}
-                </label>
-            </h4>
-        </div>
-        <div id="gateway_pcb" class="collapse show" data-parent="#accordionExample">
-            <div class="card-body">
-                <div class="gateway_name">
-                    PCB Bank Payment
-                </div>
-                <p>Amount: {{ number_format($displayFinalPrice ?? 0, 2) }} {{ $displayCurrency ?? 'EUR' }}
-                </p>
-                <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to
-                    enter your card information.</p>
+                    <!-- PCB Bank Payment Method (ONLY OPTION) -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="mb-0">
+                                <label class="payment-method-label" data-collapse-target="gateway_pcb"
+                                    style="cursor: pointer;">
+                                    <input type="radio" name="payment_method" id="payment_method_pcb"
+                                        value="pcb_bank|{{ $displayCurrency ?? 'EUR' }}" data-type="pcb_bank"
+                                        data-currency="{{ $displayCurrency ?? 'EUR' }}"
+                                        data-amount="{{ $displayFinalPrice ?? '0' }}" data-need-card="1" checked>
+                                    PCB Bank Payment - {{ number_format($displayFinalPrice ?? 0, 2) }}
+                                    {{ $displayCurrency ?? 'EUR' }}
+                                </label>
+                            </h4>
+                        </div>
+                        <div id="gateway_pcb" class="collapse show" data-parent="#accordionExample">
+                            <div class="card-body">
+                                <div class="gateway_name">
+                                    PCB Bank Payment
+                                </div>
+                                <p>Amount: {{ number_format($displayFinalPrice ?? 0, 2) }} {{ $displayCurrency ?? 'EUR' }}
+                                </p>
+                                <p class="text-info">Secure payment through PCB Bank gateway. You will be redirected to
+                                    enter your card information.</p>
 
-                <!-- Terms and Conditions Checkbox -->
-                <div class="mt-3">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="pcb_terms_checkbox" style="margin-right: 8px;">
-                        I have read and accept the <a href="#" onclick="toggleTermsDiv(); return false;"
-                            style="color: #F27625; text-decoration: underline; margin-left: 4px;">terms and
-                            conditions</a>
-                    </label>
-                    <div class="invalid-feedback" style="display: none; margin-top: 0.25rem;">
-                        You must accept the terms and conditions to proceed with PCB Bank payment.
+                                <!-- Terms and Conditions Checkbox -->
+                                <div class="mt-3">
+                                    <label style="display: flex; align-items: center; cursor: pointer;">
+                                        <input type="checkbox" id="pcb_terms_checkbox" style="margin-right: 8px;">
+                                        I have read and accept the <a href="#"
+                                            onclick="toggleTermsDiv(); return false;"
+                                            style="color: #F27625; text-decoration: underline; margin-left: 4px;">terms and
+                                            conditions</a>
+                                    </label>
+                                    <div class="invalid-feedback" style="display: none; margin-top: 0.25rem;">
+                                        You must accept the terms and conditions to proceed with PCB Bank payment.
+                                    </div>
+                                </div>
+
+                                <!-- Hidden Terms and Conditions Div -->
+                                <div id="terms-div"
+                                    style="display: none; margin-top: 15px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+                                    <h5 style="color: #F27625; margin-bottom: 15px;">Terms and Conditions</h5>
+                                    <p><strong>Welcome to Rezervo24!</strong></p>
+                                    <p>By using this website and/or making a reservation through our platform, you agree to
+                                        the following terms and conditions. Please read them carefully before proceeding.
+                                    </p>
+
+                                    <h6>1. Use of the Platform</h6>
+                                    <ul>
+                                        <li>Rezervo24 is an online platform that facilitates hotel and accommodation
+                                            bookings.</li>
+                                        <li>We do not own or operate the listed properties and are not directly responsible
+                                            for their management. We simply display the information and booking conditions
+                                            provided by the hotels.</li>
+                                    </ul>
+
+                                    <h6>2. Reservations</h6>
+                                    <ul>
+                                        <li>All reservations made through Rezervo24 are in real-time and are considered
+                                            valid only after confirmation is received via email or your user account.</li>
+                                        <li>Users are responsible for providing accurate and complete information during the
+                                            booking process.</li>
+                                    </ul>
+
+                                    <h6>3. Payments</h6>
+                                    <ul>
+                                        <li>Payments can be made securely through the online payment methods we offer.</li>
+                                        <li>All prices are displayed transparently and include applicable taxes unless
+                                            otherwise stated.</li>
+                                    </ul>
+
+                                    <h6>4. Cancellation Policy</h6>
+                                    <p>Before completing a booking, users must read and agree to the cancellation policy,
+                                        which may vary depending on the selected hotel. The full cancellation policy is
+                                        outlined below in this document and also displayed during the booking process on
+                                        each hotel's page.</p>
+
+                                    <h6>5. Hotel-Initiated Changes or Cancellations</h6>
+                                    <p>In exceptional cases, the hotel may modify or cancel a reservation. We will do our
+                                        best to assist you in finding an appropriate alternative or to provide a full
+                                        refund, depending on the situation.</p>
+
+                                    <h6>6. Privacy</h6>
+                                    <p>Your personal data will be handled in accordance with our Privacy Policy, in
+                                        compliance with data protection regulations.</p>
+
+                                    <h6>7. Dispute Resolution</h6>
+                                    <p>Any disputes will be resolved in accordance with the applicable laws of the Republic
+                                        of Albania / Republic of Kosovo (depending on the company's legal base).</p>
+
+                                    <hr style="margin: 20px 0;">
+
+                                    <h5 style="color: #F27625; margin-bottom: 15px;">Cancellation Policy</h5>
+                                    <p>The cancellation policy depends on each specific hotel and is clearly outlined during
+                                        the booking process. However, the following general rules may apply:</p>
+
+                                    <h6>1. Free Cancellation</h6>
+                                    <ul>
+                                        <li>Some hotels offer free cancellation up to a certain deadline (e.g., 24 to 72
+                                            hours before the check-in date).</li>
+                                        <li>If you cancel within this period, you will not be charged and any payments will
+                                            be fully refunded.</li>
+                                    </ul>
+
+                                    <h6>2. Cancellation Fee</h6>
+                                    <ul>
+                                        <li>If you cancel after the free cancellation period, a fee may apply—usually
+                                            equivalent to the price of one night or more, depending on the hotel's
+                                            individual policy.</li>
+                                    </ul>
+
+                                    <h6>3. No-Show</h6>
+                                    <ul>
+                                        <li>If you fail to check in without prior cancellation (no-show), you may be charged
+                                            the full reservation amount.</li>
+                                    </ul>
+
+                                    <h6>4. Booking Modifications</h6>
+                                    <ul>
+                                        <li>Changes to booking dates, guest numbers, or room types are subject to
+                                            availability and may involve a price adjustment or additional fees.</li>
+                                    </ul>
+
+                                    <h6>5. Cancellation Process</h6>
+                                    <ul>
+                                        <li>Cancellations can be made directly from your account on Rezervo24 or by
+                                            contacting our customer support team.</li>
+                                        <li>If eligible, refunds will be processed within 5–10 business days.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Hidden Terms and Conditions Div -->
-                <div id="terms-div"
-                    style="display: none; margin-top: 15px; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
-                    <h5 style="color: #F27625; margin-bottom: 15px;">Terms and Conditions</h5>
-                    <p><strong>Welcome to Rezervo24!</strong></p>
-                    <p>By using this website and/or making a reservation through our platform, you agree to
-                        the following terms and conditions. Please read them carefully before proceeding.
-                    </p>
-
-                    <h6>1. Use of the Platform</h6>
-                    <ul>
-                        <li>Rezervo24 is an online platform that facilitates hotel and accommodation
-                            bookings.</li>
-                        <li>We do not own or operate the listed properties and are not directly responsible
-                            for their management. We simply display the information and booking conditions
-                            provided by the hotels.</li>
-                    </ul>
-
-                    <h6>2. Reservations</h6>
-                    <ul>
-                        <li>All reservations made through Rezervo24 are in real-time and are considered
-                            valid only after confirmation is received via email or your user account.</li>
-                        <li>Users are responsible for providing accurate and complete information during the
-                            booking process.</li>
-                    </ul>
-
-                    <h6>3. Payments</h6>
-                    <ul>
-                        <li>Payments can be made securely through the online payment methods we offer.</li>
-                        <li>All prices are displayed transparently and include applicable taxes unless
-                            otherwise stated.</li>
-                    </ul>
-
-                    <h6>4. Cancellation Policy</h6>
-                    <p>Before completing a booking, users must read and agree to the cancellation policy,
-                        which may vary depending on the selected hotel. The full cancellation policy is
-                        outlined below in this document and also displayed during the booking process on
-                        each hotel's page.</p>
-
-                    <h6>5. Hotel-Initiated Changes or Cancellations</h6>
-                    <p>In exceptional cases, the hotel may modify or cancel a reservation. We will do our
-                        best to assist you in finding an appropriate alternative or to provide a full
-                        refund, depending on the situation.</p>
-
-                    <h6>6. Privacy</h6>
-                    <p>Your personal data will be handled in accordance with our Privacy Policy, in
-                        compliance with data protection regulations.</p>
-
-                    <h6>7. Dispute Resolution</h6>
-                    <p>Any disputes will be resolved in accordance with the applicable laws of the Republic
-                        of Albania / Republic of Kosovo (depending on the company's legal base).</p>
-
-                    <hr style="margin: 20px 0;">
-
-                    <h5 style="color: #F27625; margin-bottom: 15px;">Cancellation Policy</h5>
-                    <p>The cancellation policy depends on each specific hotel and is clearly outlined during
-                        the booking process. However, the following general rules may apply:</p>
-
-                    <h6>1. Free Cancellation</h6>
-                    <ul>
-                        <li>Some hotels offer free cancellation up to a certain deadline (e.g., 24 to 72
-                            hours before the check-in date).</li>
-                        <li>If you cancel within this period, you will not be charged and any payments will
-                            be fully refunded.</li>
-                    </ul>
-
-                    <h6>2. Cancellation Fee</h6>
-                    <ul>
-                        <li>If you cancel after the free cancellation period, a fee may apply—usually
-                            equivalent to the price of one night or more, depending on the hotel's
-                            individual policy.</li>
-                    </ul>
-
-                    <h6>3. No-Show</h6>
-                    <ul>
-                        <li>If you fail to check in without prior cancellation (no-show), you may be charged
-                            the full reservation amount.</li>
-                    </ul>
-
-                    <h6>4. Booking Modifications</h6>
-                    <ul>
-                        <li>Changes to booking dates, guest numbers, or room types are subject to
-                            availability and may involve a price adjustment or additional fees.</li>
-                    </ul>
-
-                    <h6>5. Cancellation Process</h6>
-                    <ul>
-                        <li>Cancellations can be made directly from your account on Rezervo24 or by
-                            contacting our customer support team.</li>
-                        <li>If eligible, refunds will be processed within 5–10 business days.</li>
-                    </ul>
-                </div>
             </div>
-        </div>
-    </div>
-    </div>
-    </div>
 
-    <input type="hidden" id="payment_type_amount" name="payment_type[amount]"
-        value="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}">
-    <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
-    <input type="hidden" id="payment_type_type" name="payment_type[type]">
-    <input type="hidden" id="payment_type_is_need_credit_card_data" name="payment_type[is_need_credit_card_data]">
+            <input type="hidden" id="payment_type_amount" name="payment_type[amount]"
+                value="{{ $bookingData['payment_types'][0]['amount'] ?? '0' }}">
+            <input type="hidden" id="payment_type_currency_code" name="payment_type[currency_code]">
+            <input type="hidden" id="payment_type_type" name="payment_type[type]">
+            <input type="hidden" id="payment_type_is_need_credit_card_data"
+                name="payment_type[is_need_credit_card_data]">
 
-    <!-- Display final price (with 15% markup for guests) - used for customer payment -->
-    <input type="hidden" name="display_final_price" value="{{ $displayFinalPrice ?? '0' }}">
-    <input type="hidden" name="display_currency" value="{{ $displayCurrency ?? 'EUR' }}">
+            <!-- Display final price (with 15% markup for guests) - used for customer payment -->
+            <input type="hidden" name="display_final_price" value="{{ $displayFinalPrice ?? '0' }}">
+            <input type="hidden" name="display_currency" value="{{ $displayCurrency ?? 'EUR' }}">
 
-    <button type="submit" class="btn w-50 mt-3 d-block mx-auto" style="background:#F27625; color:white;">
-        Finish Booking
-    </button>
+            <button type="submit" class="btn w-50 mt-3 d-block mx-auto" style="background:#F27625; color:white;">
+                Finish Booking
+            </button>
 
-    </form>
+        </form>
     </div>
 
 
@@ -359,7 +359,7 @@
                     if (targetElement) {
                         // Close all other collapse items
                         document.querySelectorAll('.accordion .collapse').forEach(function(
-                            collapse) {
+                        collapse) {
                             if (collapse.id !== targetId) {
                                 collapse.classList.remove('show');
                             }
