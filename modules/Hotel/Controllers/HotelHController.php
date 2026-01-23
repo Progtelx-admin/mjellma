@@ -1375,7 +1375,7 @@ class HotelHController extends Controller
 
             $order = $infoJson['data']['orders'][0];
             $orderStatus = data_get($order, 'status');
-            
+
             // Check if the order status indicates success
             if ($orderStatus === 'ok' || $orderStatus === 'confirmed') {
                 Log::info('✅ Booking verified as successful via order/info', [
@@ -1968,7 +1968,7 @@ class HotelHController extends Controller
                     $this->clearBookingDeadline($partnerOrderId);
                     return redirect()->route('hotel.payment.success');
                 }
-                
+
                 // Before showing an error, verify the actual booking status via order/info
                 // This handles cases where polling timed out but the booking actually succeeded
                 $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
@@ -1979,7 +1979,7 @@ class HotelHController extends Controller
                         'partner_order_id' => $partnerOrderId,
                         'polling_status' => $statusData
                     ]);
-                    
+
                     $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                     if ($mjellmaBooking) {
                         $mjellmaBooking->api_status = 'ok';
@@ -1992,7 +1992,7 @@ class HotelHController extends Controller
                     $this->clearBookingDeadline($partnerOrderId);
                     return redirect()->route('hotel.payment.success');
                 }
-                
+
                 // Otherwise, display the pending page with the last status or
                 // error returned from the status call.
                 return view('Hotel::frontend.booking-pending', [
@@ -2320,7 +2320,7 @@ class HotelHController extends Controller
             'is_pcb_payment' => $isPcbPayment,
             'requires_card' => $requiresCard,
         ]);
-        
+
         // Redirect back to booking confirmation page with error message
         // This ensures B2B users see the error instead of being redirected to hotel search
         if ($bookHash) {
@@ -2880,7 +2880,7 @@ class HotelHController extends Controller
                     'partner_order_id' => $partnerOrderId,
                     'polling_status' => $statusData
                 ]);
-                
+
                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                 if ($mjellmaBooking) {
                     $mjellmaBooking->api_status = 'ok';
