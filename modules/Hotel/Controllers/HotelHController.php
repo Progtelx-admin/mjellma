@@ -281,6 +281,25 @@ class HotelHController extends Controller
     private int $bookingProcessTimeout = 300; // 5 minutes by default
 
     /**
+     * Sanitize a name string by stripping any characters that are not
+     * unicode letters, spaces or a small set of allowed punctuation
+     * (hyphens, commas, periods and apostrophes).  Used to prevent
+     * RateHawk from rejecting names that contain digits or other
+     * disallowed symbols.  Returns a trimmed string with invalid
+     * characters removed.
+     *
+     * @param string $name Raw input name
+     * @return string Cleaned name
+     */
+    private function sanitizeName(string $name): string
+    {
+        // Remove all characters except letters, spaces, hyphens, commas, periods and apostrophes
+        // The regex uses Unicode character classes to support names in many languages
+        $clean = preg_replace("/[^\\p{L}\\s\-\.,']/u", '', $name);
+        return trim($clean ?? '');
+    }
+
+    /**
      * Retrieve or initialize the booking deadline for a given partner_order_id.
      * The deadline is stored in the session under the key `booking_deadlines`.
      * If no deadline exists for the provided id, a new one is created by
@@ -1978,7 +1997,7 @@ class HotelHController extends Controller
                 // but we still verify to avoid false negatives.
                 if (in_array($error, $this->finalFinishErrors, true)) {
                     Log::error('processPayment: Final finish error encountered', ['error' => $error]);
-                    
+
                     // Verify booking status even for final errors
                     $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
                     if ($verifiedOrder) {
@@ -1988,7 +2007,7 @@ class HotelHController extends Controller
                             'partner_order_id' => $partnerOrderId,
                             'error' => $error
                         ]);
-                        
+
                         $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                         if ($mjellmaBooking) {
                             $mjellmaBooking->api_status = 'ok';
@@ -2001,7 +2020,7 @@ class HotelHController extends Controller
                         $this->clearBookingDeadline($partnerOrderId);
                         return redirect()->route('hotel.payment.success');
                     }
-                    
+
                     // Booking verification failed, fetch booking details to show user
                     $bookingDetails = $this->getBookingDetails($orderId);
                     return view('Hotel::frontend.booking-pending', [
@@ -2322,24 +2341,72 @@ class HotelHController extends Controller
         $payment->logs = json_encode($invoiceData);
         $payment->save();
 
-        // Create invoice using InvoiceService
-        $invoiceService = new \App\Services\InvoiceService();
-        $invoice = $invoiceService->createInvoice($payment);
+        // Compute the expected invoice number (INV-{orderId}-{YYYYMMDD})
+        // to detect duplicate invoice creation.  RateHawk’s numbering
+        // pattern uses the PCB order id and the current date.
+        try {
+            $dateString = Carbon::now()->format('Ymd');
+            $expectedInvoiceNumber = 'INV-' . ($pcbOrder['id'] ?? $orderId) . '-' . $dateString;
 
-        // Generate PDF
-        $invoiceService->generatePdf($invoice);
+            // Check if an invoice with the same number already exists to
+            // avoid integrity constraint violations.  If found, log and
+            // return the existing invoice instead of creating another one.
+            if (class_exists('Illuminate\\Support\\Facades\\DB')) {
+                $existing = \DB::table('invoices')->where('invoice_number', $expectedInvoiceNumber)->first();
+            } else {
+                $existing = null;
+            }
 
-        // Send invoice via email
-        $invoiceService->sendInvoice($invoice);
+            if ($existing) {
+                \Log::info('📄 Invoice already exists, skipping creation', [
+                    'invoice_number' => $expectedInvoiceNumber,
+                    'invoice_id' => $existing->id ?? null
+                ]);
+                // If an invoice exists, update the payment if needed and
+                // return an object-like array to maintain compatibility
+                $payment->invoice_id = $existing->id ?? null;
+                return (object) [
+                    'id' => $existing->id ?? null,
+                    'invoice_number' => $expectedInvoiceNumber,
+                ];
+            }
 
-        \Log::info('📄 Invoice created and sent for PCB Bank payment', [
-            'invoice_id' => $invoice->id,
-            'invoice_number' => $invoice->invoice_number,
-            'booking_id' => $booking->id,
-            'pcb_order_id' => $orderId
-        ]);
+            // Create invoice using InvoiceService
+            $invoiceService = new \App\Services\InvoiceService();
+            $invoice = $invoiceService->createInvoice($payment);
 
-        return $invoice;
+            // Generate PDF
+            $invoiceService->generatePdf($invoice);
+
+            // Send invoice via email
+            $invoiceService->sendInvoice($invoice);
+
+            \Log::info('📄 Invoice created and sent for PCB Bank payment', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'booking_id' => $booking->id,
+                'pcb_order_id' => $orderId
+            ]);
+
+            return $invoice;
+        } catch (\Exception $ex) {
+            // If a duplicate invoice is attempted, catch the exception and
+            // gracefully return without interrupting the booking flow.  All
+            // other exceptions will be rethrown to be handled by the caller.
+            if (str_contains($ex->getMessage(), 'Duplicate entry') || str_contains($ex->getMessage(), '23000')) {
+                \Log::warning('⚠️ Duplicate invoice detected during creation', [
+                    'error' => $ex->getMessage(),
+                    'invoice_number' => $expectedInvoiceNumber
+                ]);
+                // Attempt to find the existing invoice again
+                $existing = class_exists('Illuminate\\Support\\Facades\\DB') ? \DB::table('invoices')->where('invoice_number', $expectedInvoiceNumber)->first() : null;
+                return (object) [
+                    'id' => $existing->id ?? null,
+                    'invoice_number' => $expectedInvoiceNumber,
+                ];
+            }
+            throw $ex;
+        }
     }
 
 
@@ -2745,6 +2812,45 @@ class HotelHController extends Controller
 
     public function finishBooking(Request $request)
     {
+        // Sanitize user and guest names before validation and processing to ensure
+        // that they contain only allowed characters. This prevents the
+        // `invalid_params` error returned by RateHawk when names include
+        // digits or other disallowed symbols (e.g. "b2b" or "01").  We
+        // perform the sanitation before merging into the payload so that
+        // validation rules still apply to the cleaned values.
+
+        // Clean top‑level first and last name fields
+        $cleanFirst = $this->sanitizeName($request->input('first_name', ''));
+        $cleanLast  = $this->sanitizeName($request->input('last_name', ''));
+        // If sanitisation results in empty strings, provide sensible defaults
+        $cleanFirst = $cleanFirst ?: 'Guest';
+        $cleanLast  = $cleanLast ?: 'User';
+
+        // Merge the cleaned names back into the request so that subsequent
+        // validation and payload construction use the safe values
+        $request->merge([
+            'first_name' => $cleanFirst,
+            'last_name'  => $cleanLast,
+        ]);
+
+        // Clean each guest name inside the rooms array
+        $roomsInput = $request->input('rooms', []);
+        if (is_array($roomsInput)) {
+            foreach ($roomsInput as $rIndex => $room) {
+                if (!isset($room['guests']) || !is_array($room['guests'])) {
+                    continue;
+                }
+                foreach ($room['guests'] as $gIndex => $guest) {
+                    $fn = isset($guest['first_name']) ? $this->sanitizeName($guest['first_name']) : '';
+                    $ln = isset($guest['last_name']) ? $this->sanitizeName($guest['last_name']) : '';
+                    // Provide defaults if sanitised values are empty
+                    $roomsInput[$rIndex]['guests'][$gIndex]['first_name'] = $fn ?: 'Guest';
+                    $roomsInput[$rIndex]['guests'][$gIndex]['last_name']  = $ln ?: 'Guest';
+                }
+            }
+            // Merge the cleaned rooms back into the request
+            $request->merge(['rooms' => $roomsInput]);
+        }
         $request->validate([
             'order_id' => 'required|string',
             'partner_order_id' => 'required|string',
@@ -2758,8 +2864,12 @@ class HotelHController extends Controller
             'payment_type.currency_code' => 'required|string',
             'rooms' => 'required|array',
             'rooms.*.guests' => 'required|array',
-            'rooms.*.guests.*.first_name' => 'required|string',
-            'rooms.*.guests.*.last_name' => 'required|string',
+            // Restrict guest names to allowed characters via regex.  Unicode
+            // letters (\p{L}), spaces and the following punctuation are permitted:
+            // hyphens, commas, periods and apostrophes.  This mirrors the
+            // RateHawk validation rules and prevents invalid_params.
+            'rooms.*.guests.*.first_name' => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
+            'rooms.*.guests.*.last_name'  => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
         ]);
 
         $partnerOrderId = $request->input('partner_order_id');
@@ -2862,7 +2972,7 @@ class HotelHController extends Controller
             // as sometimes the booking may have succeeded despite the error response.
             if (in_array($error, $this->finalFinishErrors, true)) {
                 Log::error('❌ Final finish error encountered', ['error' => $error]);
-                
+
                 // Verify booking status even for final errors, as the booking might have succeeded
                 $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
                 if ($verifiedOrder) {
@@ -2872,7 +2982,7 @@ class HotelHController extends Controller
                         'partner_order_id' => $partnerOrderId,
                         'error' => $error
                     ]);
-                    
+
                     $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                     if ($mjellmaBooking) {
                         $mjellmaBooking->api_status = 'ok';
@@ -2888,7 +2998,7 @@ class HotelHController extends Controller
                         'partner_order_id' => $partnerOrderId,
                     ]);
                 }
-                
+
                 // Booking verification failed, fetch booking details to show user
                 $bookingDetails = $this->getBookingDetails($payload['order_id']);
                 return view('Hotel::frontend.booking-pending', [
@@ -3098,7 +3208,7 @@ class HotelHController extends Controller
                             'partner_order_id' => $partnerId,
                             'error' => $error
                         ]);
-                        
+
                         $booking->update(['status' => 'ok', 'api_status' => 'ok']);
                         $this->clearBookingDeadline($partnerId);
                         return view('Hotel::frontend.payment-success', [
@@ -3106,7 +3216,7 @@ class HotelHController extends Controller
                             'statusData' => $verifiedOrder,
                         ]);
                     }
-                    
+
                     // Booking verification failed, show the error
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
