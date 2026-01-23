@@ -93,12 +93,14 @@
             <div class="mb-3">
                 <label class="form-label">Your First Name</label>
                 <input type="text" id="first_name" name="first_name" class="form-control"
-                    value="{{ old('first_name', $defaultFirstName) }}" required>
+                    value="{{ old('first_name', $defaultFirstName) }}" required pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s\-\.,]+"
+                    title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
             </div>
             <div class="mb-3">
                 <label class="form-label">Your Last Name</label>
                 <input type="text" id="last_name" name="last_name" class="form-control"
-                    value="{{ old('last_name', $defaultLastName) }}" required>
+                    value="{{ old('last_name', $defaultLastName) }}" required pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s\-\.,]+"
+                    title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
             </div>
             <div class="mb-3">
                 <label class="form-label">Email</label>
@@ -124,11 +126,15 @@
                     <div class="row">
                         <div class="col-md-6">
                             <label class="form-label">Guest First Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][0][first_name]" required>
+                            <input type="text" class="form-control" name="rooms[0][guests][0][first_name]" required
+                                pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s\-\.,]+"
+                                title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Guest Last Name</label>
-                            <input type="text" class="form-control" name="rooms[0][guests][0][last_name]" required>
+                            <input type="text" class="form-control" name="rooms[0][guests][0][last_name]" required
+                                pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s\-\.,]+"
+                                title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
                         </div>
                     </div>
                 </div>
@@ -359,7 +365,7 @@
                     if (targetElement) {
                         // Close all other collapse items
                         document.querySelectorAll('.accordion .collapse').forEach(function(
-                        collapse) {
+                            collapse) {
                             if (collapse.id !== targetId) {
                                 collapse.classList.remove('show');
                             }
@@ -519,16 +525,69 @@
                 <div class="row">
                     <div class="col-md-6">
                         <label class="form-label">Guest First Name</label>
-                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required>
+                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][first_name]" required
+                            pattern="[A-Za-zÀ-ÖØ-öø-ÿ\\s\\-\\.,]+"
+                            title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Guest Last Name</label>
-                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required>
+                        <input type="text" class="form-control" name="rooms[0][guests][${guestIndex}][last_name]" required
+                            pattern="[A-Za-zÀ-ÖØ-öø-ÿ\\s\\-\\.,]+"
+                            title="Only letters, spaces, hyphens (-), commas (,), and periods (.) are allowed in names.">
                     </div>
                 </div>
             `;
                 guestsContainer.appendChild(guestDiv);
+                // Attach validation listener to the new guest name inputs
+                guestDiv.querySelectorAll('input').forEach(function(input) {
+                    input.addEventListener('input', function() {
+                        // Use the outer function from DOMContentLoaded scope
+                        validateNameInput(this);
+                    });
+                });
                 guestIndex++;
+            });
+
+            // Real‑time name validation on all name inputs (user and guests).
+            // Allowed characters: Latin letters (including accented characters), spaces,
+            // hyphens, commas and periods. When invalid characters are typed the
+            // input will be marked with the Bootstrap `.is-invalid` class and
+            // the finish button will be disabled until corrected.
+            const nameRegex = /^[A-Za-zÀ-ÖØ-öø-ÿ\s\-\.,]+$/;
+            const finishBtn = document.querySelector('button[type="submit"]');
+
+            function validateNameInput(input) {
+                if (nameRegex.test(input.value.trim()) || input.value.trim() === '') {
+                    input.classList.remove('is-invalid');
+                } else {
+                    input.classList.add('is-invalid');
+                }
+                // Disable finish button if any name field is invalid
+                const anyInvalid = document.querySelectorAll('input.is-invalid').length > 0;
+                if (anyInvalid) {
+                    finishBtn.disabled = true;
+                    finishBtn.style.opacity = '0.5';
+                    finishBtn.style.cursor = 'not-allowed';
+                } else {
+                    // Only enable if PCB terms accepted when using PCB payment
+                    const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
+                    const termsCheckbox = document.getElementById('pcb_terms_checkbox');
+                    if (selectedRadio && selectedRadio.dataset.type === 'pcb_bank' && !termsCheckbox.checked) {
+                        finishBtn.disabled = true;
+                        finishBtn.style.opacity = '0.5';
+                        finishBtn.style.cursor = 'not-allowed';
+                    } else {
+                        finishBtn.disabled = false;
+                        finishBtn.style.opacity = '1';
+                        finishBtn.style.cursor = 'pointer';
+                    }
+                }
+            }
+            // Attach validation to existing name fields
+            document.querySelectorAll('#first_name, #last_name, input[name^="rooms"]').forEach(function(el) {
+                el.addEventListener('input', function() {
+                    validateNameInput(this);
+                });
             });
         });
 
