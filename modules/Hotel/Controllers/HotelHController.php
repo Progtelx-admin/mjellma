@@ -1333,6 +1333,55 @@ class HotelHController extends Controller
     }
 
     /**
+     * Fetches detailed booking information from the order/info endpoint.
+     * This is used to display booking status and error details to users.
+     *
+     * @param string $orderId The order_id from the API
+     * @return array|null Returns the order data if found, null otherwise
+     */
+    private function getBookingDetails(string $orderId): ?array
+    {
+        try {
+            $infoResp = Http::withOptions($this->httpOptions)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->timeout(10)
+                ->post($this->getApiUrl() . 'hotel/order/info/', [
+                    'ordering' => ['ordering_type' => 'desc', 'ordering_by' => 'created_at'],
+                    'pagination' => ['page_size' => 1, 'page_number' => 1],
+                    'search' => ['order_ids' => [(int) $orderId]],
+                    'language' => 'en',
+                ]);
+
+            if (!$infoResp->successful()) {
+                Log::warning('⚠️ order/info fetch failed', [
+                    'order_id' => $orderId,
+                    'http_status' => $infoResp->status()
+                ]);
+                return null;
+            }
+
+            $infoJson = $infoResp->json();
+            if (($infoJson['status'] ?? '') !== 'ok' || empty($infoJson['data']['orders'][0])) {
+                Log::warning('⚠️ order/info returned non-ok status or no orders', [
+                    'order_id' => $orderId,
+                    'api_status' => $infoJson['status'] ?? 'unknown',
+                    'error' => $infoJson['error'] ?? null
+                ]);
+                return null;
+            }
+
+            return $infoJson['data']['orders'][0];
+        } catch (\Exception $e) {
+            Log::error('❌ Exception while fetching booking details', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Verifies the actual booking status by calling the order/info endpoint.
      * This is used as a fallback when polling returns an error but the booking
      * may have actually completed successfully.
@@ -1903,9 +1952,11 @@ class HotelHController extends Controller
                 $json = $resp->json();
             } catch (\Exception $e) {
                 Log::error('processPayment: Unable to decode JSON', ['exception' => $e->getMessage()]);
+                $bookingDetails = $this->getBookingDetails($orderId);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => ['error' => 'decoding_json'],
                     'order_id' => $orderId,
+                    'booking_details' => $bookingDetails,
                 ]);
             }
 
@@ -1920,15 +1971,43 @@ class HotelHController extends Controller
             session(['bookingResult' => $json['data'] ?? null]);
 
             if ($error) {
-                // If a terminal error is returned from the finish call, do not
-                // poll.  Display the pending page with the error so the user
-                // knows the booking failed and can retry.  Errors listed in
-                // $finalFinishErrors are considered unrecoverable【788235750464074†L491-L501】.
+                // If a terminal error is returned from the finish call, verify
+                // the actual booking status first before showing error, as sometimes
+                // the booking may have succeeded despite the error response.
+                // Errors listed in $finalFinishErrors are considered unrecoverable,
+                // but we still verify to avoid false negatives.
                 if (in_array($error, $this->finalFinishErrors, true)) {
                     Log::error('processPayment: Final finish error encountered', ['error' => $error]);
+                    
+                    // Verify booking status even for final errors
+                    $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
+                    if ($verifiedOrder) {
+                        // Booking actually succeeded! Update DB and redirect to success
+                        Log::info('✅ Booking verified as successful despite final error in processPayment', [
+                            'order_id' => $orderId,
+                            'partner_order_id' => $partnerOrderId,
+                            'error' => $error
+                        ]);
+                        
+                        $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+                        if ($mjellmaBooking) {
+                            $mjellmaBooking->api_status = 'ok';
+                            $mjellmaBooking->save();
+
+                            // Trigger event to send customer confirmation email
+                            event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+                        }
+
+                        $this->clearBookingDeadline($partnerOrderId);
+                        return redirect()->route('hotel.payment.success');
+                    }
+                    
+                    // Booking verification failed, fetch booking details to show user
+                    $bookingDetails = $this->getBookingDetails($orderId);
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
                         'order_id' => $orderId,
+                        'booking_details' => $bookingDetails,
                     ]);
                 }
                 // Temporary errors (timeout or unknown) should trigger polling of
@@ -1939,9 +2018,11 @@ class HotelHController extends Controller
                     $shouldPoll = true;
                 } else {
                     Log::error('processPayment: Unhandled finish error', ['error' => $error]);
+                    $bookingDetails = $this->getBookingDetails($orderId);
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
                         'order_id' => $orderId,
+                        'booking_details' => $bookingDetails,
                     ]);
                 }
             } elseif ($httpStatus >= 500) {
@@ -1993,11 +2074,13 @@ class HotelHController extends Controller
                     return redirect()->route('hotel.payment.success');
                 }
 
-                // Otherwise, display the pending page with the last status or
+                // Otherwise, fetch booking details and display the pending page with the last status or
                 // error returned from the status call.
+                $bookingDetails = $this->getBookingDetails($orderId);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => $statusData,
                     'order_id' => $orderId,
+                    'booking_details' => $bookingDetails,
                 ]);
             }
 
@@ -2015,9 +2098,11 @@ class HotelHController extends Controller
             }
 
             // Fallback: show pending if the status is neither ok nor final.
+            $bookingDetails = $this->getBookingDetails($orderId);
             return view('Hotel::frontend.booking-pending', [
                 'status' => ['status' => $status, 'error' => $error],
                 'order_id' => $orderId,
+                'booking_details' => $bookingDetails,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return redirect()->back()->withErrors($e->errors());
@@ -2712,9 +2797,11 @@ class HotelHController extends Controller
                     ]);
                 }
 
+                $bookingDetails = $this->getBookingDetails($existing->order_id);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => $statusData,
                     'order_id' => $existing->order_id,
+                    'booking_details' => $bookingDetails,
                 ]);
             }
         }
@@ -2771,12 +2858,43 @@ class HotelHController extends Controller
         if ($error) {
             // If we received an error, check if it is final.  Any error in
             // $finalFinishErrors, including double_booking_finish, should
-            // immediately surface a user‑friendly message and skip polling.
+            // verify the actual booking status first before showing error,
+            // as sometimes the booking may have succeeded despite the error response.
             if (in_array($error, $this->finalFinishErrors, true)) {
                 Log::error('❌ Final finish error encountered', ['error' => $error]);
+                
+                // Verify booking status even for final errors, as the booking might have succeeded
+                $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
+                if ($verifiedOrder) {
+                    // Booking actually succeeded! Update DB and show success page
+                    Log::info('✅ Booking verified as successful despite final error', [
+                        'order_id' => $payload['order_id'],
+                        'partner_order_id' => $partnerOrderId,
+                        'error' => $error
+                    ]);
+                    
+                    $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+                    if ($mjellmaBooking) {
+                        $mjellmaBooking->api_status = 'ok';
+                        $mjellmaBooking->save();
+
+                        // Trigger event to send customer confirmation email
+                        event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+                    }
+
+                    $this->clearBookingDeadline($partnerOrderId);
+                    return view('Hotel::frontend.payment-success', [
+                        'order_id' => $payload['order_id'],
+                        'partner_order_id' => $partnerOrderId,
+                    ]);
+                }
+                
+                // Booking verification failed, fetch booking details to show user
+                $bookingDetails = $this->getBookingDetails($payload['order_id']);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => ['error' => $error],
                     'order_id' => $payload['order_id'],
+                    'booking_details' => $bookingDetails,
                 ]);
             }
             // For timeout/unknown errors we should poll
@@ -2786,9 +2904,11 @@ class HotelHController extends Controller
             } else {
                 // Unexpected error code: treat as unrecoverable and surface to user
                 Log::error('❌ Unhandled finish error', ['error' => $error]);
+                $bookingDetails = $this->getBookingDetails($payload['order_id']);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => ['error' => $error],
                     'order_id' => $payload['order_id'],
+                    'booking_details' => $bookingDetails,
                 ]);
             }
         } elseif ($httpStatus >= 500) {
@@ -2897,10 +3017,12 @@ class HotelHController extends Controller
                 ]);
             }
 
-            // Booking not completed yet; return pending with the last status
+            // Booking not completed yet; fetch booking details and return pending with the last status
+            $bookingDetails = $this->getBookingDetails($payload['order_id']);
             return view('Hotel::frontend.booking-pending', [
                 'status' => $statusData,
                 'order_id' => $payload['order_id'],
+                'booking_details' => $bookingDetails,
             ]);
         }
 
@@ -2963,9 +3085,29 @@ class HotelHController extends Controller
             // Determine if we should poll finish/status
             $shouldPoll = false;
             if ($error) {
-                // Final finish errors (including double_booking_finish) should be surfaced
-                // immediately and not retried or polled.
+                // Final finish errors (including double_booking_finish) should verify
+                // the actual booking status first before showing error, as sometimes
+                // the booking may have succeeded despite the error response.
                 if (in_array($error, $this->finalFinishErrors, true)) {
+                    // Verify booking status even for final errors
+                    $verifiedOrder = $this->verifyBookingStatus($booking->order_id, $partnerId);
+                    if ($verifiedOrder) {
+                        // Booking actually succeeded! Update DB and show success page
+                        Log::info('✅ Booking verified as successful despite final error in completeBooking', [
+                            'order_id' => $booking->order_id,
+                            'partner_order_id' => $partnerId,
+                            'error' => $error
+                        ]);
+                        
+                        $booking->update(['status' => 'ok', 'api_status' => 'ok']);
+                        $this->clearBookingDeadline($partnerId);
+                        return view('Hotel::frontend.payment-success', [
+                            'booking' => $booking,
+                            'statusData' => $verifiedOrder,
+                        ]);
+                    }
+                    
+                    // Booking verification failed, show the error
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
                         'order_id' => $booking->order_id,
@@ -2977,9 +3119,11 @@ class HotelHController extends Controller
                     $shouldPoll = true;
                 } else {
                     // Any other error is treated as unrecoverable
+                    $bookingDetails = $this->getBookingDetails($booking->order_id);
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
                         'order_id' => $booking->order_id,
+                        'booking_details' => $bookingDetails,
                     ]);
                 }
             } elseif ($httpStatus >= 500) {
@@ -3017,9 +3161,12 @@ class HotelHController extends Controller
                         'statusData' => $statusData,
                     ]);
                 }
+                $bookingDetails = $this->getBookingDetails($booking->order_id);
                 return view('Hotel::frontend.booking-pending', [
                     'booking' => $booking,
                     'status' => $statusData,
+                    'order_id' => $booking->order_id,
+                    'booking_details' => $bookingDetails,
                 ]);
             }
 
@@ -3037,9 +3184,12 @@ class HotelHController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+            $bookingDetails = $this->getBookingDetails($booking->order_id);
             return view('Hotel::frontend.booking-pending', [
                 'booking' => $booking,
                 'status' => ['error' => 'unknown'],
+                'order_id' => $booking->order_id,
+                'booking_details' => $bookingDetails,
             ]);
         }
     }
