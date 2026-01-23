@@ -17,6 +17,7 @@
                 'charge' => 'Payment processing failed. Please check your payment method and try again.',
                 'provider' => 'The hotel provider encountered an issue. Please contact support.',
                 'order_not_found' => 'The booking order could not be found. Please contact support.',
+                'invalid_params' => 'Invalid booking parameters were provided. Please contact support with your order ID.',
             ];
             
             $displayMessage = null;
@@ -35,8 +36,56 @@
                 <hr>
                 <p class="mb-0">
                     <a href="{{ url('/hotels') }}" class="btn btn-secondary">Search Again</a>
-                    <a href="{{ route('hotel.booking.details', ['orderId' => $order_id ?? '']) }}" class="btn btn-primary">Check Booking Status</a>
                 </p>
+                
+                {{-- Show booking details if available --}}
+                @if(isset($booking_details))
+                    <div class="mt-4">
+                        <h5>Booking Information</h5>
+                        <table class="table table-sm table-bordered mt-2">
+                            <tr>
+                                <th width="30%">Order ID:</th>
+                                <td>{{ $booking_details['order_id'] ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    <span class="badge badge-{{ ($booking_details['status'] ?? '') === 'ok' ? 'success' : 'warning' }}">
+                                        {{ ucfirst($booking_details['status'] ?? 'Unknown') }}
+                                    </span>
+                                </td>
+                            </tr>
+                            @if(isset($booking_details['hotel_data']) && isset($booking_details['hotel_data']['name']))
+                            <tr>
+                                <th>Hotel:</th>
+                                <td>{{ $booking_details['hotel_data']['name'] ?? 'N/A' }}</td>
+                            </tr>
+                            @endif
+                            @if(isset($booking_details['checkin']) && isset($booking_details['checkout']))
+                            <tr>
+                                <th>Check-in:</th>
+                                <td>{{ $booking_details['checkin'] }}</td>
+                            </tr>
+                            <tr>
+                                <th>Check-out:</th>
+                                <td>{{ $booking_details['checkout'] }}</td>
+                            </tr>
+                            @endif
+                            @if(isset($booking_details['client_price']))
+                            <tr>
+                                <th>Amount:</th>
+                                <td>{{ $booking_details['client_price']['amount'] ?? '' }} {{ $booking_details['client_price']['currency_code'] ?? '' }}</td>
+                            </tr>
+                            @endif
+                            @if(isset($booking_details['error']))
+                            <tr>
+                                <th>Error Details:</th>
+                                <td class="text-danger">{{ $booking_details['error'] }}</td>
+                            </tr>
+                            @endif
+                        </table>
+                    </div>
+                @endif
             </div>
         @else
             <div class="alert alert-info">
