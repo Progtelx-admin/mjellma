@@ -31,9 +31,9 @@
             <td class="label">{{ __('Guests') }}</td>
             <td class="val">
                 <ul>
-                    @foreach ($booking['rooms_data'] as $room)
-                        @foreach ($room['guest_data']['guests'] as $guest)
-                            <li>{{ $guest['first_name'] }} {{ $guest['last_name'] }}</li>
+                    @foreach ($booking['rooms_data'] ?? [] as $room)
+                        @foreach ($room['guest_data']['guests'] ?? [] as $guest)
+                            <li>{{ $guest['first_name'] ?? '' }} {{ $guest['last_name'] ?? '' }}</li>
                         @endforeach
                     @endforeach
                 </ul>
@@ -41,11 +41,15 @@
         </tr>
         <tr>
             <td class="label">{{ __('Room Name') }}</td>
-            <td class="val">{{ $booking['rooms_data'][0]['room_name'] ?? '-' }}</td>
+            <td class="val">
+                {{ isset($booking['rooms_data'][0]['room_name']) ? $booking['rooms_data'][0]['room_name'] : '-' }}
+            </td>
         </tr>
         <tr>
             <td class="label">{{ __('Meal') }}</td>
-            <td class="val">{{ $booking['rooms_data'][0]['meal_name'] ?? '-' }}</td>
+            <td class="val">
+                {{ isset($booking['rooms_data'][0]['meal_name']) ? $booking['rooms_data'][0]['meal_name'] : '-' }}
+            </td>
         </tr>
         <tr>
             <td class="label">{{ __('Amount Payable') }}</td>
