@@ -2841,14 +2841,227 @@ class HotelHController extends Controller
     //     ]);
     // }
 
+    // public function finishBooking(Request $request)
+    // {
+    //     // --- Sanitize names ---
+    //     $cleanFirst = $this->sanitizeName($request->input('first_name', '')) ?: 'Guest';
+    //     $cleanLast  = $this->sanitizeName($request->input('last_name', '')) ?: 'User';
+    //     $request->merge(['first_name' => $cleanFirst, 'last_name' => $cleanLast]);
+
+    //     // --- Clean guest names in rooms ---
+    //     $roomsInput = $request->input('rooms', []);
+    //     if (is_array($roomsInput)) {
+    //         foreach ($roomsInput as $rIndex => $room) {
+    //             if (!isset($room['guests']) || !is_array($room['guests'])) continue;
+    //             foreach ($room['guests'] as $gIndex => $guest) {
+    //                 $fn = isset($guest['first_name']) ? $this->sanitizeName($guest['first_name']) : '';
+    //                 $ln = isset($guest['last_name']) ? $this->sanitizeName($guest['last_name']) : '';
+    //                 $roomsInput[$rIndex]['guests'][$gIndex]['first_name'] = $fn ?: 'Guest';
+    //                 $roomsInput[$rIndex]['guests'][$gIndex]['last_name']  = $ln ?: 'Guest';
+    //             }
+    //         }
+    //         $request->merge(['rooms' => $roomsInput]);
+    //     }
+
+    //     // --- Validate input ---
+    //     $request->validate([
+    //         'order_id' => 'required|string',
+    //         'partner_order_id' => 'required|string',
+    //         'first_name' => 'required|string',
+    //         'last_name' => 'required|string',
+    //         'email' => 'required|email',
+    //         'phone' => 'required|string|min:5',
+    //         'payment_type' => 'required|array',
+    //         'payment_type.type' => 'required|string',
+    //         'payment_type.amount' => 'required|numeric',
+    //         'payment_type.currency_code' => 'required|string',
+    //         'rooms' => 'required|array',
+    //         'rooms.*.guests' => 'required|array',
+    //         'rooms.*.guests.*.first_name' => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
+    //         'rooms.*.guests.*.last_name'  => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
+    //     ]);
+
+    //     $partnerOrderId = $request->input('partner_order_id');
+
+    //     // --- Ensure booking deadline ---
+    //     $this->getBookingDeadline($partnerOrderId);
+
+    //     $existing = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //     if ($existing) {
+    //         if ($existing->api_status === 'ok') {
+    //             return view('Hotel::frontend.payment-success', [
+    //                 'order_id' => $existing->order_id,
+    //                 'partner_order_id' => $existing->partner_order_id,
+    //             ]);
+    //         }
+    //         if ($existing->api_status === 'processing') {
+    //             $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+    //             $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+    //             if (data_get($statusData, 'status') === 'ok') {
+    //                 $existing->update(['api_status' => 'ok']);
+    //                 $this->clearBookingDeadline($partnerOrderId);
+    //                 event(new MjellmaBookingCreatedEvent($existing));
+    //                 return view('Hotel::frontend.payment-success', [
+    //                     'order_id' => $existing->order_id,
+    //                     'partner_order_id' => $existing->partner_order_id,
+    //                 ]);
+    //             }
+    //             $bookingDetails = $this->getBookingDetails($existing->order_id);
+    //             return view('Hotel::frontend.booking-pending', [
+    //                 'status' => $statusData,
+    //                 'order_id' => $existing->order_id,
+    //                 'booking_details' => $bookingDetails,
+    //             ]);
+    //         }
+    //     }
+
+    //     // --- Prepare payload ---
+    //     $payload = [
+    //         'order_id' => $request->input('order_id'),
+    //         'partner' => ['partner_order_id' => $partnerOrderId],
+    //         'user' => [
+    //             'first_name' => $request->input('first_name'),
+    //             'last_name' => $request->input('last_name'),
+    //             'email' => $request->input('email'),
+    //             'phone' => $request->input('phone'),
+    //         ],
+    //         'supplier_data' => $request->input('supplier_data', []),
+    //         'rooms' => $request->input('rooms'),
+    //         'payment_type' => $request->input('payment_type'),
+    //         'language' => $request->input('language', 'en'),
+    //         'return_path' => $request->input('return_path'),
+    //         'item_id' => $request->input('item_id'),
+    //         'book_hash' => $request->input('book_hash'),
+    //     ];
+
+    //     // --- Call finish API ---
+    //     $response = Http::withOptions($this->httpOptions)
+    //         ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+    //         ->withHeaders(['Content-Type' => 'application/json'])
+    //         ->timeout(30)
+    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
+
+    //     $json = $response->json();
+    //     $status = data_get($json, 'status');
+    //     $error = data_get($json, 'error');
+    //     $httpStatus = $response->status();
+
+    //     $shouldPoll = false;
+
+    //     // --- Error handling ---
+    //     if ($error) {
+    //         if (in_array($error, $this->finalFinishErrors, true)) {
+    //             $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
+    //             if ($verifiedOrder) {
+    //                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //                 if ($mjellmaBooking) {
+    //                     $mjellmaBooking->api_status = 'ok';
+    //                     $mjellmaBooking->save();
+    //                     event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+    //                 }
+    //                 $this->clearBookingDeadline($partnerOrderId);
+    //                 return view('Hotel::frontend.payment-success', [
+    //                     'order_id' => $payload['order_id'],
+    //                     'partner_order_id' => $partnerOrderId,
+    //                 ]);
+    //             }
+    //             $bookingDetails = $this->getBookingDetails($payload['order_id']);
+    //             return view('Hotel::frontend.booking-pending', [
+    //                 'status' => ['error' => $error],
+    //                 'order_id' => $payload['order_id'],
+    //                 'booking_details' => $bookingDetails,
+    //             ]);
+    //         }
+    //         if (in_array($error, ['timeout', 'unknown'], true) || !$error) {
+    //             $shouldPoll = true; // temporary or unknown error → poll
+    //         } else {
+    //             $bookingDetails = $this->getBookingDetails($payload['order_id']);
+    //             return view('Hotel::frontend.booking-pending', [
+    //                 'status' => ['error' => $error],
+    //                 'order_id' => $payload['order_id'],
+    //                 'booking_details' => $bookingDetails,
+    //             ]);
+    //         }
+    //     } elseif ($httpStatus >= 500 || $status === 'ok' || $status === 'processing') {
+    //         $shouldPoll = true;
+    //     }
+
+    //     // --- Save as processing in DB ---
+    //     if ($status === 'ok' || $status === 'processing') {
+    //         MjellmaBooking::updateOrCreate(
+    //             ['partner_order_id' => $partnerOrderId],
+    //             [
+    //                 'order_id' => $payload['order_id'],
+    //                 'payment_type' => $payload['payment_type']['type'],
+    //                 'payment_amount' => $payload['payment_type']['amount'],
+    //                 'currency_code' => $payload['payment_type']['currency_code'],
+    //                 'user_email' => $payload['user']['email'] ?? null,
+    //                 'user_phone' => $payload['user']['phone'] ?? null,
+    //                 'api_status' => 'processing',
+    //             ]
+    //         );
+    //     }
+
+    //     // --- Poll status if needed ---
+    //     if ($shouldPoll) {
+    //         $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+    //         $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+
+    //         if (data_get($statusData, 'status') === 'ok') {
+    //             $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //             if ($mjellmaBooking) {
+    //                 $mjellmaBooking->api_status = 'ok';
+    //                 $mjellmaBooking->save();
+    //                 event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+    //             }
+    //             $this->clearBookingDeadline($partnerOrderId);
+    //             return view('Hotel::frontend.payment-success', [
+    //                 'order_id' => $payload['order_id'],
+    //                 'partner_order_id' => $partnerOrderId,
+    //             ]);
+    //         }
+
+    //         $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
+    //         if ($verifiedOrder) {
+    //             $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //             if ($mjellmaBooking) {
+    //                 $mjellmaBooking->api_status = 'ok';
+    //                 $mjellmaBooking->save();
+    //                 event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+    //             }
+    //             $this->clearBookingDeadline($partnerOrderId);
+    //             return view('Hotel::frontend.payment-success', [
+    //                 'order_id' => $payload['order_id'],
+    //                 'partner_order_id' => $partnerOrderId,
+    //             ]);
+    //         }
+
+    //         $bookingDetails = $this->getBookingDetails($payload['order_id']);
+    //         return view('Hotel::frontend.booking-pending', [
+    //             'status' => $statusData,
+    //             'order_id' => $payload['order_id'],
+    //             'booking_details' => $bookingDetails,
+    //         ]);
+    //     }
+
+    //     // --- Final success fallback ---
+    //     MjellmaBooking::where('partner_order_id', $partnerOrderId)->update(['api_status' => 'ok']);
+    //     $this->clearBookingDeadline($partnerOrderId);
+
+    //     return view('Hotel::frontend.payment-success', [
+    //         'order_id' => $payload['order_id'],
+    //         'partner_order_id' => $partnerOrderId,
+    //     ]);
+    // }
+
     public function finishBooking(Request $request)
     {
-        // --- Sanitize names ---
+        // --- Sanitize top-level names ---
         $cleanFirst = $this->sanitizeName($request->input('first_name', '')) ?: 'Guest';
         $cleanLast  = $this->sanitizeName($request->input('last_name', '')) ?: 'User';
         $request->merge(['first_name' => $cleanFirst, 'last_name' => $cleanLast]);
 
-        // --- Clean guest names in rooms ---
+        // --- Sanitize guest names in rooms ---
         $roomsInput = $request->input('rooms', []);
         if (is_array($roomsInput)) {
             foreach ($roomsInput as $rIndex => $room) {
@@ -2886,6 +3099,7 @@ class HotelHController extends Controller
         // --- Ensure booking deadline ---
         $this->getBookingDeadline($partnerOrderId);
 
+        // --- Check for existing booking ---
         $existing = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
         if ($existing) {
             if ($existing->api_status === 'ok') {
@@ -2948,15 +3162,14 @@ class HotelHController extends Controller
 
         $shouldPoll = false;
 
-        // --- Error handling ---
+        // --- Determine if polling needed ---
         if ($error) {
             if (in_array($error, $this->finalFinishErrors, true)) {
                 $verifiedOrder = $this->verifyBookingStatus($payload['order_id'], $partnerOrderId);
                 if ($verifiedOrder) {
                     $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                     if ($mjellmaBooking) {
-                        $mjellmaBooking->api_status = 'ok';
-                        $mjellmaBooking->save();
+                        $mjellmaBooking->update(['api_status' => 'ok']);
                         event(new MjellmaBookingCreatedEvent($mjellmaBooking));
                     }
                     $this->clearBookingDeadline($partnerOrderId);
@@ -2973,7 +3186,7 @@ class HotelHController extends Controller
                 ]);
             }
             if (in_array($error, ['timeout', 'unknown'], true) || !$error) {
-                $shouldPoll = true; // temporary or unknown error → poll
+                $shouldPoll = true;
             } else {
                 $bookingDetails = $this->getBookingDetails($payload['order_id']);
                 return view('Hotel::frontend.booking-pending', [
@@ -2986,21 +3199,25 @@ class HotelHController extends Controller
             $shouldPoll = true;
         }
 
-        // --- Save as processing in DB ---
-        if ($status === 'ok' || $status === 'processing') {
-            MjellmaBooking::updateOrCreate(
-                ['partner_order_id' => $partnerOrderId],
-                [
-                    'order_id' => $payload['order_id'],
-                    'payment_type' => $payload['payment_type']['type'],
-                    'payment_amount' => $payload['payment_type']['amount'],
-                    'currency_code' => $payload['payment_type']['currency_code'],
-                    'user_email' => $payload['user']['email'] ?? null,
-                    'user_phone' => $payload['user']['phone'] ?? null,
-                    'api_status' => 'processing',
-                ]
-            );
-        }
+        // --- Capture PCB bank response ---
+        $pcbResponse = session("pcb_response_{$partnerOrderId}") ?? $json['payment_response'] ?? null;
+
+        // --- Save booking as processing ---
+        MjellmaBooking::updateOrCreate(
+            ['partner_order_id' => $partnerOrderId],
+            [
+                'order_id' => $payload['order_id'],
+                'payment_type' => $payload['payment_type']['type'],
+                'payment_amount' => $payload['payment_type']['amount'],
+                'currency_code' => $payload['payment_type']['currency_code'],
+                'user_email' => $payload['user']['email'] ?? null,
+                'user_phone' => $payload['user']['phone'] ?? null,
+                'api_status' => 'processing',
+                'pcb_bank_response' => $pcbResponse ? json_encode($pcbResponse) : null,
+                'pcb_status' => $pcbResponse['status'] ?? null,
+                'payment_successful' => isset($pcbResponse['status']) && $pcbResponse['status'] === 'success',
+            ]
+        );
 
         // --- Poll status if needed ---
         if ($shouldPoll) {
@@ -3010,8 +3227,7 @@ class HotelHController extends Controller
             if (data_get($statusData, 'status') === 'ok') {
                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                 if ($mjellmaBooking) {
-                    $mjellmaBooking->api_status = 'ok';
-                    $mjellmaBooking->save();
+                    $mjellmaBooking->update(['api_status' => 'ok']);
                     event(new MjellmaBookingCreatedEvent($mjellmaBooking));
                 }
                 $this->clearBookingDeadline($partnerOrderId);
@@ -3025,8 +3241,7 @@ class HotelHController extends Controller
             if ($verifiedOrder) {
                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
                 if ($mjellmaBooking) {
-                    $mjellmaBooking->api_status = 'ok';
-                    $mjellmaBooking->save();
+                    $mjellmaBooking->update(['api_status' => 'ok']);
                     event(new MjellmaBookingCreatedEvent($mjellmaBooking));
                 }
                 $this->clearBookingDeadline($partnerOrderId);
@@ -3053,6 +3268,7 @@ class HotelHController extends Controller
             'partner_order_id' => $partnerOrderId,
         ]);
     }
+
 
 
 
