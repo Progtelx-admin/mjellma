@@ -23,6 +23,7 @@ class MjellmaBooking  extends Bookable
         'api_status',
         'api_error',
         'pcb_bank_response',
+        'payment_successful',
     ];
 
     protected $casts = [
