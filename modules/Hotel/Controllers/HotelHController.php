@@ -871,97 +871,6 @@ class HotelHController extends Controller
     }
 
 
-    // public function hotelInfo($id, Request $request)
-    // {
-    //     Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
-
-    //     try {
-    //         $checkin = $request->query('checkin', now()->format('Y-m-d'));
-    //         $checkout = $request->query('checkout', now()->addDay()->format('Y-m-d'));
-    //         $residency = $request->query('residency', 'gb');
-    //         $language = $request->query('language', 'en');
-    //         $currency = $request->query('currency', 'EUR');
-    //         $adults = (int) $request->query('adults', 1);
-
-    //         // Handle children properly
-    //         $childrenParam = $request->query('children', []);
-    //         if (is_string($childrenParam)) {
-    //             $children = array_filter(array_map('intval', explode(',', $childrenParam)));
-    //         } elseif (is_array($childrenParam)) {
-    //             $children = array_map('intval', $childrenParam);
-    //         } else {
-    //             $children = [];
-    //         }
-
-    //         // Fetch hotel from DB
-    //         $dbHotel = DB::table('hotels')->where('hotel_id', $id)->first();
-    //         if (!$dbHotel) {
-    //             Log::error('Hotel not found in DB', ['hotel_id' => $id]);
-    //             return redirect()->back()->withErrors(['error' => 'Hotel not found']);
-    //         }
-
-    //         $hotelImages = DB::table('hotel_images')
-    //             ->where('hotel_id', $id)
-    //             ->pluck('image_url')
-    //             ->toArray();
-
-    //         // Build API request
-    //         $apiBody = [
-    //             'checkin' => $checkin,
-    //             'checkout' => $checkout,
-    //             'residency' => $residency,
-    //             'language' => $language,
-    //             'currency' => $currency,
-    //             'id' => $id,
-    //             'guests' => [[
-    //                 'adults' => $adults,
-    //                 'children' => $children,
-    //             ]]
-    //         ];
-
-    //         $response = Http::withBasicAuth($this->username, $this->password)
-    //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->getApiUrl() . 'search/hp/', $apiBody);
-
-    //         if ($response->failed()) {
-    //             Log::error('API call failed', ['response' => $response->body()]);
-    //             throw new \Exception('Failed to fetch hotel details');
-    //         }
-
-    //         $apiData = $response->json()['data']['hotels'][0] ?? null;
-    //         if (!$apiData) {
-    //             return redirect()->back()->withErrors(['error' => 'Hotel not found in API']);
-    //         }
-
-    //         $hotel = [
-    //             'id' => $apiData['id'] ?? $dbHotel->hotel_id,
-    //             'name' => $dbHotel->name ?? $apiData['name'] ?? 'N/A',
-    //             'address' => $dbHotel->address ?? $apiData['address'] ?? 'N/A',
-    //             'star_rating' => $dbHotel->star_rating ?? $apiData['star_rating'] ?? 0,
-    //             'check_in_time' => $apiData['check_in_time'] ?? 'N/A',
-    //             'check_out_time' => $apiData['check_out_time'] ?? 'N/A',
-    //             'images_ext' => $hotelImages,
-    //             'price_per_night' => $apiData['rates'][0]['daily_prices'][0] ?? 'N/A',
-    //         ];
-
-    //         $roomRates = $apiData['rates'] ?? [];
-    //         $hasRoomRates = count($roomRates) > 0;
-
-    //         return view('Hotel::frontend.info-ha', compact(
-    //             'hotel', 'roomRates', 'hasRoomRates',
-    //             'checkin', 'checkout', 'residency', 'language',
-    //             'adults', 'children', 'currency'
-    //         ));
-
-    //     } catch (\Exception $e) {
-    //         Log::error('Error fetching hotel info', [
-    //             'hotel_id' => $id,
-    //             'error' => $e->getMessage(),
-    //         ]);
-    //         return redirect()->back()->withErrors(['error' => 'Could not load hotel information.']);
-    //     }
-    // }
-
     public function hotelInfo($id, Request $request)
     {
         Log::info('Fetching detailed info for hotel', ['hotel_id' => $id]);
@@ -1614,84 +1523,6 @@ class HotelHController extends Controller
     }
 
 
-    // public function bookRoom(Request $request)
-    // {
-    //     try {
-    //         $request->validate([
-    //             'book_hash' => 'required|string',
-    //             'partner_order_id' => 'required|string',
-    //             'user_ip' => 'required|ip',
-    //             'hotel_id' => 'required|string',
-    //             'checkin' => 'required|date',
-    //             'checkout' => 'required|date',
-    //             'meal_plan' => 'nullable|string',
-    //         ]);
-
-    //         $bookHash = $request->input('book_hash');
-    //         $partnerOrderId = $request->input('partner_order_id');
-    //         $userIp = $request->input('user_ip');
-
-    //         // Save booking data in session
-    //         session([
-    //             'booking.partner_order_id' => $partnerOrderId,
-    //             'booking.book_hash' => $bookHash,
-    //             'booking.user_ip' => $userIp,
-    //             'booking.hotel_id' => $request->input('hotel_id'),
-    //             'booking.checkin' => $request->input('checkin'),
-    //             'booking.checkout' => $request->input('checkout'),
-    //             'booking.meal_plan' => $request->input('meal_plan'),
-    //             'booking.adults' => $request->input('adults', 1),
-    //             'booking.children' => json_decode($request->input('children', '[]'), true),
-    //         ]);
-
-    //         $apiBody = [
-    //             'partner_order_id' => $partnerOrderId,
-    //             'book_hash' => $bookHash,
-    //             'language' => 'en',
-    //             'user_ip' => $userIp,
-    //         ];
-
-    //         Log::info('📤 Sending booking form request to API', ['payload' => $apiBody]);
-
-    //         $response = Http::withBasicAuth($this->username, $this->password)
-    //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->getApiUrl() . 'hotel/order/booking/form/', $apiBody);
-
-    //         Log::info('📥 Booking API Response', [
-    //             'status' => $response->status(),
-    //             'body' => $response->body(),
-    //         ]);
-
-    //         if ($response->failed()) {
-    //             throw new \Exception('Booking API request failed: ' . $response->body());
-    //         }
-
-    //         $bookingData = $response->json();
-
-    //         if (isset($bookingData['status']) && $bookingData['status'] === 'ok') {
-    //             $data = $bookingData['data'];
-    //             session(['bookingData' => $data]);
-
-    //             // 🔥 Store with order_id in cache for PCB
-    //             $token = Str::random(32);
-    //             Cache::put("pending_booking_{$token}", array_merge($request->all(), [
-    //                 'order_id' => $data['order_id'],
-    //             ]), now()->addMinutes(10));
-
-    //             return redirect()->route('hotel.booking.confirmation', ['book_hash' => $bookHash]);
-    //         } else {
-    //             throw new \Exception('Booking failed: ' . ($bookingData['error'] ?? 'Unknown error'));
-    //         }
-
-    //     } catch (\Exception $e) {
-    //         Log::error('❌ Booking failed', [
-    //             'error' => $e->getMessage(),
-    //             'trace' => $e->getTraceAsString(),
-    //         ]);
-    //         return redirect()->back()->withErrors(['error' => 'Booking failed: ' . $e->getMessage()]);
-    //     }
-    // }
-
     public function bookRoom(Request $request)
     {
         try {
@@ -1875,10 +1706,265 @@ class HotelHController extends Controller
         return view('Hotel::frontend.booking-confirmation-ha', compact('bookingData', 'vendors', 'book_hash', 'displayFinalPrice', 'displayCurrency'));
     }
 
+    // LM 11.02.2026
+    // public function processPayment(Request $request)
+    // {
+    //     // 1) Basic validation
+    //     $request->validate([
+    //         'order_id' => 'required|string',
+    //         'partner_order_id' => 'required|string',
+    //         'payment_method' => 'required|integer|min:0',
+    //         'guests' => 'required|array|min:1',
+    //         'guests.*.first_name' => 'required|string',
+    //         'guests.*.last_name' => 'required|string',
+    //     ]);
+
+    //     try {
+    //         $orderId = $request->input('order_id');
+    //         $partnerOrderId = $request->input('partner_order_id');
+
+    //         // Ensure a booking deadline exists for this partner order id so that
+    //         // all subsequent polling respects a single timeout window across
+    //         // booking finish and status calls.  If the deadline is already
+    //         // present from the form step, this call will return the existing
+    //         // value; otherwise it will initialise one.
+    //         $this->getBookingDeadline($partnerOrderId);
+    //         $pmIndex = $request->input('payment_method');
+    //         $guests = $request->input('guests');
+
+    //         $bookingData = session('bookingData');
+    //         if (!$bookingData) {
+    //             throw new \Exception('Session bookingData missing');
+    //         }
+
+    //         $paymentTypes = data_get($bookingData, 'payment_types', []);
+    //         if (!isset($paymentTypes[$pmIndex])) {
+    //             throw new \Exception('Invalid payment method index');
+    //         }
+    //         $selectedPayment = $paymentTypes[$pmIndex];
+
+    //         // 2) If CC data is needed, validate
+    //         if (!empty($selectedPayment['is_need_credit_card_data'])) {
+    //             $request->validate([
+    //                 'card_number' => 'required|digits:16',
+    //                 'card_holder' => 'required|string',
+    //                 'expiry_month' => 'required|digits:2',
+    //                 'expiry_year' => 'required|digits:2',
+    //                 'cvc' => 'required|digits_between:3,4',
+    //             ]);
+    //             $creditCardData = [
+    //                 'card_number' => $request->input('card_number'),
+    //                 'card_holder' => $request->input('card_holder'),
+    //                 'expiry_month' => $request->input('expiry_month'),
+    //                 'expiry_year' => $request->input('expiry_year'),
+    //                 'cvc' => $request->input('cvc'),
+    //             ];
+    //         }
+
+    //         $rooms = session('rooms', []);
+    //         if (empty($rooms)) {
+    //             throw new \Exception('Rooms data missing from session');
+    //         }
+
+    //         // 3) Build payload
+    //         $apiBody = [
+    //             'partner_order_id' => $partnerOrderId,
+    //             'order_id' => $orderId,
+    //             'payment_type' => [
+    //                 'type' => $selectedPayment['type'],
+    //                 'amount' => $selectedPayment['amount'],
+    //                 'currency_code' => $selectedPayment['currency_code'],
+    //             ],
+    //             'language' => 'en',
+    //             'rooms' => $rooms,
+    //             'guests' => $guests,
+    //             'credit_card_data' => $creditCardData ?? null,
+    //         ];
+
+    //         Log::info('Sending payment payload', ['payload' => $apiBody]);
+
+    //         // Send the booking finish request to RateHawk.  Do not assume that a
+    //         // successful HTTP response from this endpoint means the booking
+    //         // itself has completed.  According to the ETG documentation, the
+    //         // final status of a booking can only be obtained by polling the
+    //         // `/hotel/order/booking/finish/status/` endpoint until a terminal
+    //         // status is returned【788235750464074†L491-L501】.  See finishBooking()
+    //         // for an example of the recommended logic.
+    //         $resp = Http::withOptions($this->httpOptions)
+    //             ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+    //             ->withHeaders(['Content-Type' => 'application/json'])
+    //             ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $apiBody);
+
+    //         // Attempt to decode the JSON response.  Even if the HTTP status is
+    //         // not 2xx, we still want to inspect the status and error fields.
+    //         $json = null;
+    //         try {
+    //             $json = $resp->json();
+    //         } catch (\Exception $e) {
+    //             Log::error('processPayment: Unable to decode JSON', ['exception' => $e->getMessage()]);
+    //             $bookingDetails = $this->getBookingDetails($orderId);
+    //             return view('Hotel::frontend.booking-pending', [
+    //                 'status' => ['error' => 'decoding_json'],
+    //                 'order_id' => $orderId,
+    //                 'booking_details' => $bookingDetails,
+    //             ]);
+    //         }
+
+    //         $status = data_get($json, 'status');
+    //         $error = data_get($json, 'error');
+    //         $httpStatus = $resp->status();
+    //         $shouldPoll = false;
+
+    //         // Persist provisional booking result (if present) so later pages can
+    //         // display details while polling.  If no data is provided this will
+    //         // simply store null.
+    //         session(['bookingResult' => $json['data'] ?? null]);
+
+    //         if ($error) {
+    //             // If a terminal error is returned from the finish call, verify
+    //             // the actual booking status first before showing error, as sometimes
+    //             // the booking may have succeeded despite the error response.
+    //             // Errors listed in $finalFinishErrors are considered unrecoverable,
+    //             // but we still verify to avoid false negatives.
+    //             if (in_array($error, $this->finalFinishErrors, true)) {
+    //                 Log::error('processPayment: Final finish error encountered', ['error' => $error]);
+
+    //                 // Verify booking status even for final errors
+    //                 $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
+    //                 if ($verifiedOrder) {
+    //                     // Booking actually succeeded! Update DB and redirect to success
+    //                     Log::info('✅ Booking verified as successful despite final error in processPayment', [
+    //                         'order_id' => $orderId,
+    //                         'partner_order_id' => $partnerOrderId,
+    //                         'error' => $error
+    //                     ]);
+
+    //                     $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //                     if ($mjellmaBooking) {
+    //                         $mjellmaBooking->api_status = 'ok';
+    //                         $mjellmaBooking->save();
+
+    //                         // Trigger event to send customer confirmation email
+    //                         event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+    //                     }
+
+    //                     $this->clearBookingDeadline($partnerOrderId);
+    //                     return redirect()->route('hotel.payment.success');
+    //                 }
+
+    //                 // Booking verification failed, fetch booking details to show user
+    //                 $bookingDetails = $this->getBookingDetails($orderId);
+    //                 return view('Hotel::frontend.booking-pending', [
+    //                     'status' => ['error' => $error],
+    //                     'order_id' => $orderId,
+    //                     'booking_details' => $bookingDetails,
+    //                 ]);
+    //             }
+    //             // Temporary errors (timeout or unknown) should trigger polling of
+    //             // the status endpoint to see if the booking eventually
+    //             // completes【788235750464074†L491-L501】.  Any other error code is
+    //             // treated as unrecoverable and surfaced to the user immediately.
+    //             if (in_array($error, ['timeout', 'unknown'], true)) {
+    //                 $shouldPoll = true;
+    //             } else {
+    //                 Log::error('processPayment: Unhandled finish error', ['error' => $error]);
+    //                 $bookingDetails = $this->getBookingDetails($orderId);
+    //                 return view('Hotel::frontend.booking-pending', [
+    //                     'status' => ['error' => $error],
+    //                     'order_id' => $orderId,
+    //                     'booking_details' => $bookingDetails,
+    //                 ]);
+    //             }
+    //         } elseif ($httpStatus >= 500) {
+    //             // 5xx responses are considered temporary; poll status until a
+    //             // final result is obtained.
+    //             $shouldPoll = true;
+    //         } else {
+    //             // When no error is present, the status field will be `ok` or
+    //             // `processing`.  Both cases require polling until the final
+    //             // status arrives.  We set shouldPoll accordingly.
+    //             if ($status === 'ok' || $status === 'processing') {
+    //                 $shouldPoll = true;
+    //             }
+    //         }
+
+    //         if ($shouldPoll) {
+    //             // Poll the finish/status endpoint repeatedly until a final
+    //             // response or until the remaining booking window expires.
+    //             $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
+    //             $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
+    //             Log::info('processPayment: finish/status response after polling', ['statusData' => $statusData]);
+    //             if (data_get($statusData, 'status') === 'ok') {
+    //                 // Booking confirmed after polling.  Clear the deadline and redirect.
+    //                 $this->clearBookingDeadline($partnerOrderId);
+    //                 return redirect()->route('hotel.payment.success');
+    //             }
+
+    //             // Before showing an error, verify the actual booking status via order/info
+    //             // This handles cases where polling timed out but the booking actually succeeded
+    //             $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
+    //             if ($verifiedOrder) {
+    //                 // Booking actually succeeded! Update DB and redirect to success
+    //                 Log::info('✅ Booking verified as successful after polling returned error in processPayment', [
+    //                     'order_id' => $orderId,
+    //                     'partner_order_id' => $partnerOrderId,
+    //                     'polling_status' => $statusData
+    //                 ]);
+
+    //                 $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
+    //                 if ($mjellmaBooking) {
+    //                     $mjellmaBooking->api_status = 'ok';
+    //                     $mjellmaBooking->save();
+
+    //                     // Trigger event to send customer confirmation email
+    //                     event(new MjellmaBookingCreatedEvent($mjellmaBooking));
+    //                 }
+
+    //                 $this->clearBookingDeadline($partnerOrderId);
+    //                 return redirect()->route('hotel.payment.success');
+    //             }
+
+    //             // Otherwise, fetch booking details and display the pending page with the last status or
+    //             // error returned from the status call.
+    //             $bookingDetails = $this->getBookingDetails($orderId);
+    //             return view('Hotel::frontend.booking-pending', [
+    //                 'status' => $statusData,
+    //                 'order_id' => $orderId,
+    //                 'booking_details' => $bookingDetails,
+    //             ]);
+    //         }
+
+    //         // If no polling is required and no unrecoverable error occurred,
+    //         // consider the booking successful and redirect to the success page.
+    //         // This branch covers the rare case when RateHawk finishes the
+    //         // booking immediately and returns a final `ok` status from
+    //         // /booking/finish/.  If status is not ok, fall back to pending.
+    //         if ($status === 'ok') {
+    //             // In the unlikely event that the finish call immediately returns
+    //             // a final ok status and no polling was deemed necessary,
+    //             // clear the booking deadline and treat the booking as complete.
+    //             $this->clearBookingDeadline($partnerOrderId);
+    //             return redirect()->route('hotel.payment.success');
+    //         }
+
+    //         // Fallback: show pending if the status is neither ok nor final.
+    //         $bookingDetails = $this->getBookingDetails($orderId);
+    //         return view('Hotel::frontend.booking-pending', [
+    //             'status' => ['status' => $status, 'error' => $error],
+    //             'order_id' => $orderId,
+    //             'booking_details' => $bookingDetails,
+    //         ]);
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return redirect()->back()->withErrors($e->errors());
+    //     } catch (\Exception $e) {
+    //         Log::error('processPayment error', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+    //         return redirect()->back()->withErrors(['error' => 'Payment processing failed: ' . $e->getMessage()]);
+    //     }
+    // }
+
 
     public function processPayment(Request $request)
     {
-        // 1) Basic validation
         $request->validate([
             'order_id' => 'required|string',
             'partner_order_id' => 'required|string',
@@ -1892,16 +1978,12 @@ class HotelHController extends Controller
             $orderId = $request->input('order_id');
             $partnerOrderId = $request->input('partner_order_id');
 
-            // Ensure a booking deadline exists for this partner order id so that
-            // all subsequent polling respects a single timeout window across
-            // booking finish and status calls.  If the deadline is already
-            // present from the form step, this call will return the existing
-            // value; otherwise it will initialise one.
             $this->getBookingDeadline($partnerOrderId);
+
             $pmIndex = $request->input('payment_method');
             $guests = $request->input('guests');
-
             $bookingData = session('bookingData');
+
             if (!$bookingData) {
                 throw new \Exception('Session bookingData missing');
             }
@@ -1912,7 +1994,7 @@ class HotelHController extends Controller
             }
             $selectedPayment = $paymentTypes[$pmIndex];
 
-            // 2) If CC data is needed, validate
+            // CC validation
             if (!empty($selectedPayment['is_need_credit_card_data'])) {
                 $request->validate([
                     'card_number' => 'required|digits:16',
@@ -1935,7 +2017,6 @@ class HotelHController extends Controller
                 throw new \Exception('Rooms data missing from session');
             }
 
-            // 3) Build payload
             $apiBody = [
                 'partner_order_id' => $partnerOrderId,
                 'order_id' => $orderId,
@@ -1952,76 +2033,50 @@ class HotelHController extends Controller
 
             Log::info('Sending payment payload', ['payload' => $apiBody]);
 
-            // Send the booking finish request to RateHawk.  Do not assume that a
-            // successful HTTP response from this endpoint means the booking
-            // itself has completed.  According to the ETG documentation, the
-            // final status of a booking can only be obtained by polling the
-            // `/hotel/order/booking/finish/status/` endpoint until a terminal
-            // status is returned【788235750464074†L491-L501】.  See finishBooking()
-            // for an example of the recommended logic.
             $resp = Http::withOptions($this->httpOptions)
                 ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $apiBody);
 
-            // Attempt to decode the JSON response.  Even if the HTTP status is
-            // not 2xx, we still want to inspect the status and error fields.
-            $json = null;
-            try {
-                $json = $resp->json();
-            } catch (\Exception $e) {
-                Log::error('processPayment: Unable to decode JSON', ['exception' => $e->getMessage()]);
-                $bookingDetails = $this->getBookingDetails($orderId);
-                return view('Hotel::frontend.booking-pending', [
-                    'status' => ['error' => 'decoding_json'],
-                    'order_id' => $orderId,
-                    'booking_details' => $bookingDetails,
-                ]);
-            }
-
+            $json = $resp->json();
             $status = data_get($json, 'status');
             $error = data_get($json, 'error');
             $httpStatus = $resp->status();
             $shouldPoll = false;
 
-            // Persist provisional booking result (if present) so later pages can
-            // display details while polling.  If no data is provided this will
-            // simply store null.
-            session(['bookingResult' => $json['data'] ?? null]);
+            // Mark payment as successful immediately
+            MjellmaBooking::updateOrCreate(
+                ['partner_order_id' => $partnerOrderId],
+                [
+                    'order_id' => $orderId,
+                    'payment_type' => $selectedPayment['type'],
+                    'payment_amount' => $selectedPayment['amount'],
+                    'currency_code' => $selectedPayment['currency_code'],
+                    'user_email' => $bookingData['user_email'] ?? null,
+                    'user_phone' => $bookingData['user_phone'] ?? null,
+                    'payment_successful' => true,
+                    'api_status' => 'processing', // booking not confirmed yet
+                ]
+            );
 
+            // --- Handle errors and polling ---
             if ($error) {
-                // If a terminal error is returned from the finish call, verify
-                // the actual booking status first before showing error, as sometimes
-                // the booking may have succeeded despite the error response.
-                // Errors listed in $finalFinishErrors are considered unrecoverable,
-                // but we still verify to avoid false negatives.
                 if (in_array($error, $this->finalFinishErrors, true)) {
-                    Log::error('processPayment: Final finish error encountered', ['error' => $error]);
-
-                    // Verify booking status even for final errors
                     $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
                     if ($verifiedOrder) {
-                        // Booking actually succeeded! Update DB and redirect to success
-                        Log::info('✅ Booking verified as successful despite final error in processPayment', [
-                            'order_id' => $orderId,
-                            'partner_order_id' => $partnerOrderId,
-                            'error' => $error
-                        ]);
-
-                        $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
-                        if ($mjellmaBooking) {
-                            $mjellmaBooking->api_status = 'ok';
-                            $mjellmaBooking->save();
-
-                            // Trigger event to send customer confirmation email
-                            event(new MjellmaBookingCreatedEvent($mjellmaBooking));
-                        }
-
+                        // Booking actually succeeded
+                        MjellmaBooking::where('partner_order_id', $partnerOrderId)
+                            ->update(['api_status' => 'ok']);
                         $this->clearBookingDeadline($partnerOrderId);
+                        event(new MjellmaBookingCreatedEvent(
+                            MjellmaBooking::where('partner_order_id', $partnerOrderId)->first()
+                        ));
                         return redirect()->route('hotel.payment.success');
                     }
 
-                    // Booking verification failed, fetch booking details to show user
+                    // Booking failed despite payment
+                    MjellmaBooking::where('partner_order_id', $partnerOrderId)
+                        ->update(['api_status' => 'failed']);
                     $bookingDetails = $this->getBookingDetails($orderId);
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
@@ -2029,14 +2084,10 @@ class HotelHController extends Controller
                         'booking_details' => $bookingDetails,
                     ]);
                 }
-                // Temporary errors (timeout or unknown) should trigger polling of
-                // the status endpoint to see if the booking eventually
-                // completes【788235750464074†L491-L501】.  Any other error code is
-                // treated as unrecoverable and surfaced to the user immediately.
+
                 if (in_array($error, ['timeout', 'unknown'], true)) {
                     $shouldPoll = true;
                 } else {
-                    Log::error('processPayment: Unhandled finish error', ['error' => $error]);
                     $bookingDetails = $this->getBookingDetails($orderId);
                     return view('Hotel::frontend.booking-pending', [
                         'status' => ['error' => $error],
@@ -2044,57 +2095,25 @@ class HotelHController extends Controller
                         'booking_details' => $bookingDetails,
                     ]);
                 }
-            } elseif ($httpStatus >= 500) {
-                // 5xx responses are considered temporary; poll status until a
-                // final result is obtained.
+            } elseif ($httpStatus >= 500 || $status === 'ok' || $status === 'processing') {
                 $shouldPoll = true;
-            } else {
-                // When no error is present, the status field will be `ok` or
-                // `processing`.  Both cases require polling until the final
-                // status arrives.  We set shouldPoll accordingly.
-                if ($status === 'ok' || $status === 'processing') {
-                    $shouldPoll = true;
-                }
             }
 
+            // Polling logic
             if ($shouldPoll) {
-                // Poll the finish/status endpoint repeatedly until a final
-                // response or until the remaining booking window expires.
                 $remainingTime = $this->getRemainingBookingTime($partnerOrderId);
                 $statusData = $this->pollFinishStatus($partnerOrderId, $remainingTime);
-                Log::info('processPayment: finish/status response after polling', ['statusData' => $statusData]);
+
                 if (data_get($statusData, 'status') === 'ok') {
-                    // Booking confirmed after polling.  Clear the deadline and redirect.
+                    MjellmaBooking::where('partner_order_id', $partnerOrderId)
+                        ->update(['api_status' => 'ok']);
                     $this->clearBookingDeadline($partnerOrderId);
                     return redirect()->route('hotel.payment.success');
                 }
 
-                // Before showing an error, verify the actual booking status via order/info
-                // This handles cases where polling timed out but the booking actually succeeded
-                $verifiedOrder = $this->verifyBookingStatus($orderId, $partnerOrderId);
-                if ($verifiedOrder) {
-                    // Booking actually succeeded! Update DB and redirect to success
-                    Log::info('✅ Booking verified as successful after polling returned error in processPayment', [
-                        'order_id' => $orderId,
-                        'partner_order_id' => $partnerOrderId,
-                        'polling_status' => $statusData
-                    ]);
-
-                    $mjellmaBooking = MjellmaBooking::where('partner_order_id', $partnerOrderId)->first();
-                    if ($mjellmaBooking) {
-                        $mjellmaBooking->api_status = 'ok';
-                        $mjellmaBooking->save();
-
-                        // Trigger event to send customer confirmation email
-                        event(new MjellmaBookingCreatedEvent($mjellmaBooking));
-                    }
-
-                    $this->clearBookingDeadline($partnerOrderId);
-                    return redirect()->route('hotel.payment.success');
-                }
-
-                // Otherwise, fetch booking details and display the pending page with the last status or
-                // error returned from the status call.
+                // Booking failed after polling
+                MjellmaBooking::where('partner_order_id', $partnerOrderId)
+                    ->update(['api_status' => 'failed']);
                 $bookingDetails = $this->getBookingDetails($orderId);
                 return view('Hotel::frontend.booking-pending', [
                     'status' => $statusData,
@@ -2103,28 +2122,11 @@ class HotelHController extends Controller
                 ]);
             }
 
-            // If no polling is required and no unrecoverable error occurred,
-            // consider the booking successful and redirect to the success page.
-            // This branch covers the rare case when RateHawk finishes the
-            // booking immediately and returns a final `ok` status from
-            // /booking/finish/.  If status is not ok, fall back to pending.
-            if ($status === 'ok') {
-                // In the unlikely event that the finish call immediately returns
-                // a final ok status and no polling was deemed necessary,
-                // clear the booking deadline and treat the booking as complete.
-                $this->clearBookingDeadline($partnerOrderId);
-                return redirect()->route('hotel.payment.success');
-            }
+            // Fallback success
+            MjellmaBooking::where('partner_order_id', $partnerOrderId)->update(['api_status' => 'ok']);
+            $this->clearBookingDeadline($partnerOrderId);
+            return redirect()->route('hotel.payment.success');
 
-            // Fallback: show pending if the status is neither ok nor final.
-            $bookingDetails = $this->getBookingDetails($orderId);
-            return view('Hotel::frontend.booking-pending', [
-                'status' => ['status' => $status, 'error' => $error],
-                'order_id' => $orderId,
-                'booking_details' => $bookingDetails,
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return redirect()->back()->withErrors($e->errors());
         } catch (\Exception $e) {
             Log::error('processPayment error', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return redirect()->back()->withErrors(['error' => 'Payment processing failed: ' . $e->getMessage()]);
@@ -2132,70 +2134,6 @@ class HotelHController extends Controller
     }
 
 
-    // public function finishBooking(Request $request)
-    // {
-    //     try {
-    //         // Validate the request
-    //         $request->validate([
-    //             'partner_order_id' => 'required|string',
-    //             'user.email' => 'required|email',
-    //             'user.phone' => 'required|string',
-    //             'supplier_data.first_name_original' => 'required|string',
-    //             'supplier_data.last_name_original' => 'required|string',
-    //             'supplier_data.phone' => 'required|string',
-    //             'supplier_data.email' => 'required|email',
-    //             'rooms' => 'required|array',
-    //             'rooms.*.guests' => 'required|array',
-    //             'rooms.*.guests.*.first_name' => 'required|string',
-    //             'rooms.*.guests.*.last_name' => 'required|string',
-    //             'payment_type.type' => 'required|string',
-    //             'payment_type.amount' => 'required|string',
-    //             'payment_type.currency_code' => 'required|string',
-    //         ]);
-
-    //         // Extract data from the request
-    //         $data = $request->all();
-
-    //         // Prepare the API payload
-    //         $apiPayload = [
-    //             'user' => $data['user'],
-    //             'supplier_data' => $data['supplier_data'],
-    //             'partner' => [
-    //                 'partner_order_id' => $data['partner_order_id'],
-    //             ],
-    //             'language' => 'en',
-    //             'rooms' => $data['rooms'],
-    //             'payment_type' => $data['payment_type'],
-    //         ];
-
-    //         // Add return_path if payment_type is 'now'
-    //         if (isset($data['payment_type']['type']) && $data['payment_type']['type'] === 'now') {
-    //             $apiPayload['return_path'] = route('hotel.payment.success');
-    //         }
-
-
-    //         // Call the API
-    //         $response = Http::withBasicAuth($this->username, $this->password)
-    //             ->withHeaders(['Content-Type' => 'application/json'])
-    //             ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $apiPayload);
-
-    //         if ($response->failed()) {
-    //             throw new \Exception('API request failed: ' . $response->body());
-    //         }
-
-    //         $responseData = $response->json();
-
-    //         // Handle the response
-    //         if ($responseData['status'] === 'ok') {
-    //             return redirect()->route('hotel.payment.success')->with('success', 'Booking completed successfully!');
-    //         } else {
-    //             throw new \Exception($responseData['error'] ?? 'Unknown error occurred.');
-    //         }
-    //     } catch (\Exception $e) {
-    //         Log::error('Booking finish failed', ['error' => $e->getMessage()]);
-    //         return redirect()->back()->withErrors(['error' => $e->getMessage()]);
-    //     }
-    // }
 
     /**
      * Called after PCB returns "FullyPaid"
@@ -2560,255 +2498,6 @@ class HotelHController extends Controller
         Log::error('❌ Failed to get credit card token from RateHawk', ['response' => $response->body()]);
         return null;
     }
-
-    //me card data
-
-    // public function finishBooking(Request $request)
-    // {
-    //     $data = $request->all();
-
-    //     // Overriding supplier data: always use fixed name and email and generate a random phone number.
-    //     $supplierData = [
-    //         'first_name_original' => 'Mjellma Travel',
-    //         'last_name_original'  => 'Mjellma Travel',
-    //         // Generate a random 10-digit phone number. Adjust the range as needed.
-    //         'phone'               => (string) rand(1000000000, 9999999999),
-    //         'email'               => 'mjellmatravel@hotmail.com',
-    //     ];
-
-    //     $payload = [
-    //         'user' => [
-    //             'email' => $data['user']['email'],
-    //             'phone' => $data['user']['phone'],
-    //         ],
-    //         'supplier_data' => $supplierData,
-    //         'partner' => [
-    //             'partner_order_id' => $data['partner_order_id'],
-    //         ],
-    //         'language' => 'en',
-    //         'rooms' => $data['rooms'],
-    //         'payment_type' => [
-    //             'type'                  => $data['payment_type']['type'],
-    //             'amount'                => $data['payment_type']['amount'],
-    //             'currency_code'         => $data['payment_type']['currency_code'],
-    //             'is_need_credit_card_data' => $data['payment_type']['is_need_credit_card_data'],
-    //         ],
-    //         'return_path' => $data['return_path'],
-    //     ];
-
-    //     Log::debug('Final payload before credit card data check', ['payload' => $payload]);
-
-    //     // Add credit card data if required
-    //     if (!empty($data['payment_type']['is_need_credit_card_data'])) {
-    //         if (empty($data['init_uuid']) || empty($data['pay_uuid'])) {
-    //             Log::error('Credit card data missing: init_uuid or pay_uuid not found', [
-    //                 'init_uuid' => $data['init_uuid'] ?? 'not set',
-    //                 'pay_uuid'  => $data['pay_uuid'] ?? 'not set'
-    //             ]);
-    //         }
-    //         $payload['credit_card_data'] = [
-    //             'init_uuid' => (string)$data['init_uuid'], // Cast to string just in case
-    //             'pay_uuid'  => $data['pay_uuid'],
-    //         ];
-    //     } else {
-    //         Log::debug('Payment type does not require credit card data');
-    //     }
-
-    //     Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
-
-    //     $response = Http::withBasicAuth($this->username, $this->password)
-    //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
-
-    //     Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
-
-    //     $json = $response->json();
-
-    //     if ($response->successful() && $json['status'] === 'ok') {
-    //         Log::info('✅ Booking success', ['response' => $json]);
-    //         return response()->json(['success' => true, 'result' => $json]);
-    //     }
-
-    //     Log::error('❌ Booking failed', [
-    //         'payload_sent' => $payload,
-    //         'response_body' => $response->body()
-    //     ]);
-
-    //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
-    // }
-
-    //insufficient_b2b_balance
-
-    // public function finishBooking(Request $request)
-    // {
-    //     $data = $request->all();
-
-    //     // Validate we have an order_id
-    //     if (!isset($data['order_id'])) {
-    //         \Log::error('Missing order_id in booking data.');
-    //         return response()->json(['error' => 'Missing order_id'], 422);
-    //     }
-
-    //     // Build final payload for RateHawk with deposit payment type
-    //     $payload = [
-    //         'user' => [
-    //             'first_name' => $data['first_name'] ?? '',
-    //             'last_name'  => $data['last_name'] ?? '',
-    //             'email'      => $data['email'] ?? 'guest@example.com',
-    //             // use phone fallback if needed
-    //             'phone'      => (isset($data['phone']) && strlen($data['phone']) >= 5)
-    //                                 ? $data['phone'] : '+0000000000',
-    //         ],
-    //         'supplier_data' => [
-    //             'first_name_original' => $data['supplier_data']['first_name_original'] ?? '',
-    //             'last_name_original'  => $data['supplier_data']['last_name_original'] ?? '',
-    //             'phone'               => $data['supplier_data']['phone'] ?? '',
-    //             'email'               => $data['supplier_data']['email'] ?? '',
-    //         ],
-    //         'partner' => [
-    //             'partner_order_id'  => $data['partner_order_id'] ?? '',
-    //         ],
-    //         'order_id'     => $data['order_id'],
-    //         'language'     => $data['language'] ?? 'en',
-    //         'rooms'        => $data['rooms'] ?? [],
-    //         'payment_type' => [
-    //             'type'          => $data['payment_type']['type'] ?? 'deposit', // deposit/offline
-    //             'amount'        => $data['payment_type']['amount'] ?? '0',
-    //             'currency_code' => $data['payment_type']['currency_code'] ?? 'EUR',
-    //             'is_need_credit_card_data' => false,
-    //         ],
-    //         'return_path' => $data['return_path'] ?? '',
-    //     ];
-
-    //     \Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
-
-    //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
-    //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
-
-    //     \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
-
-    //     $json = $response->json();
-    //     if ($response->successful() && isset($json['status']) && $json['status'] === 'ok') {
-    //         \Log::info('Booking success', ['response' => $json]);
-
-    //         // Here you can store the final booking details in your DB
-    //         // and then redirect to a final "Booking Completed" page or similar
-    //         return response()->json(['success' => true, 'result' => $json]);
-    //     }
-
-    //     \Log::error('Booking failed', [
-    //         'payload_sent'  => $payload,
-    //         'response_body' => $response->body()
-    //     ]);
-
-    //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
-    // }
-
-    // public function finishBooking(Request $request)
-    // {
-    //     $data = $request->all();
-
-    //     if (!isset($data['order_id'])) {
-    //         \Log::error('Missing order_id in booking data.');
-    //         return response()->json(['error' => 'Missing order_id'], 422);
-    //     }
-
-    //     // Normalize user details.
-    //     $userFirstName = isset($data['first_name']) ? trim($data['first_name']) : '';
-    //     $userLastName  = isset($data['last_name']) ? trim($data['last_name']) : '';
-    //     $userEmail     = (isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL))
-    //                         ? trim($data['email'])
-    //                         : 'guest@example.com';
-    //     $userPhone     = isset($data['phone']) ? trim($data['phone']) : '';
-    //     if (strlen($userPhone) < 5) {
-    //         $userPhone = '+0000000000';
-    //     }
-
-    //     // Determine the original payment type from the input (it may be "now" for a PCB flow or something else)
-    //     $originalPaymentType = $data['payment_type']['type'] ?? 'deposit';
-
-    //     // For testing: if it's a PCB ("now") flow, keep type "now" but override credit card requirement to false.
-    //     // Otherwise, use "deposit".
-    //     if ($originalPaymentType === 'now') {
-    //         $finalPaymentType = 'now';
-    //     } else {
-    //         $finalPaymentType = 'deposit';
-    //     }
-
-    //     $payload = [
-    //         'user' => [
-    //             'first_name' => $userFirstName,
-    //             'last_name'  => $userLastName,
-    //             'email'      => $userEmail,
-    //             'phone'      => $userPhone,
-    //         ],
-    //         'supplier_data' => [
-    //             'first_name_original' => $data['supplier_data']['first_name_original'] ?? '',
-    //             'last_name_original'  => $data['supplier_data']['last_name_original'] ?? '',
-    //             'phone'               => $data['supplier_data']['phone'] ?? '',
-    //             'email'               => $data['supplier_data']['email'] ?? '',
-    //         ],
-    //         'partner' => [
-    //             'partner_order_id'  => $data['partner_order_id'] ?? '',
-    //             'comment'           => $data['partner_comment'] ?? '',
-    //             'amount_sell_b2b2c' => isset($data['amount_sell_b2b2c']) && is_numeric($data['amount_sell_b2b2c'])
-    //                                     ? number_format($data['amount_sell_b2b2c'], 2, '.', '')
-    //                                     : '0.00',
-    //         ],
-    //         'order_id'   => $data['order_id'],
-    //         'language'   => $data['language'] ?? 'en',
-    //         'rooms'      => $data['rooms'] ?? [],
-    //         'payment_type' => [
-    //             'type'          => $finalPaymentType,
-    //             'amount'        => $data['payment_type']['amount'] ?? '',
-    //             'currency_code' => $data['payment_type']['currency_code'] ?? 'EUR',
-    //             // For testing, always mark as not requiring credit card data
-    //             'is_need_credit_card_data' => false,
-    //         ],
-    //         'return_path' => $data['return_path'] ?? '',
-    //     ];
-
-    //     \Log::debug('Sending final booking payload to RateHawk', ['payload' => $payload]);
-
-    //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
-    //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->getApiUrl() . 'hotel/order/booking/finish/', $payload);
-
-    //     \Log::debug('Received response from RateHawk booking finish', ['response_body' => $response->body()]);
-
-    //     $json = $response->json();
-
-    //     // For testing only: if RateHawk returns "insufficient_b2b_balance", simulate a successful booking.
-    //     if (isset($json['error']) && $json['error'] === 'insufficient_b2b_balance') {
-    //         \Log::warning('Simulating booking success due to insufficient_b2b_balance for testing.');
-    //         $json = [
-    //             'status' => 'ok',
-    //             'data'   => [
-    //                 'order_id' => $payload['order_id'],
-    //                 'item_id'  => $payload['rooms'][0]['guests'][0]['first_name'] . '_simulated',
-    //                 // Add additional simulated booking details as needed.
-    //             ],
-    //         ];
-    //     }
-
-    //     if (isset($json['status']) && $json['status'] === 'ok') {
-    //         \Log::info('Booking success', ['response' => $json]);
-
-    //         // Return the view with order_id and partner_order_id for displaying to the user.
-    //         return view('Hotel::frontend.payment-success', [
-    //             'order_id' => $payload['order_id'],
-    //             'partner_order_id' => $data['partner_order_id'] ?? null,
-    //         ]);
-    //     }
-
-    //     \Log::error('Booking failed', [
-    //         'payload_sent'  => $payload,
-    //         'response_body' => $response->body()
-    //     ]);
-
-    //     return response()->json(['error' => $json['error'] ?? 'Unknown error'], 500);
-    // }
 
     //LM 11.02.2026
 
@@ -3654,24 +3343,6 @@ class HotelHController extends Controller
             'finishData' => $finishData,
         ]);
     }
-
-    //cancel
-    // public function cancelBooking(Request $request, $partnerOrderId)
-    // {
-    //     $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->username, $this->password)
-    //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->getApiUrl() . 'hotel/order/cancel/', [
-    //             'partner_order_id' => $partnerOrderId
-    //         ]);
-
-    //     $json = $response->json();
-
-    //     if ($json['status'] === 'ok') {
-    //         return redirect()->back()->with('success', 'Booking cancelled successfully.');
-    //     }
-
-    //     return redirect()->back()->with('error', $json['error'] ?? 'Failed to cancel booking.');
-    // }
 
 
     public function cancelBooking(Request $request, $partnerOrderId)
