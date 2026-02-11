@@ -3642,7 +3642,7 @@ class HotelHController extends Controller
 
         $query->where(function ($q) use ($user) {
             $q->where('user_id', $user->id)
-                ->orWhere('agent_id', $user->id);
+                ->orWhere('create_user', $user->id);
         });
 
         if ($status = $request->input('status')) {
