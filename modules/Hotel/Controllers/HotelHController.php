@@ -3512,8 +3512,8 @@ class HotelHController extends Controller
         'language' => 'en'
     ];
 
-    // --- If not admin, filter by user's bookings ---
-    if ($user->role_id !== 1) {
+    // --- Only filter for non-admin users ---
+    if (!$user->hasRole('admin')) {
         $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
             $query->where('user_id', $user->id)
                   ->orWhere('agent_id', $user->id);
