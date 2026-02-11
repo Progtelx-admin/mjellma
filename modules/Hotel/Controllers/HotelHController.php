@@ -3444,7 +3444,7 @@ class HotelHController extends Controller
         if ($user->role_id !== 1) {
             $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
                 $query->where('user_id', $user->id)
-                    ->orWhere('agent_id', $user->id);
+                    ->orWhere('create_user', $user->id);
             })->pluck('partner_order_id')->filter()->values()->toArray();
 
             if (empty($partnerOrderIds)) {
