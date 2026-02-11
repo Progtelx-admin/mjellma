@@ -3425,79 +3425,10 @@ class HotelHController extends Controller
         }
     }
 
-    // public function index(Request $request)
-    // {
-    //     $user = auth()->user();
-
-    //     $payload = [
-    //         'ordering' => [
-    //             'ordering_type' => 'desc',
-    //             'ordering_by' => 'created_at'
-    //         ],
-    //         'pagination' => [
-    //             'page_size' => 50,
-    //             'page_number' => 1
-    //         ],
-    //         'language' => 'en'
-    //     ];
-
-    //     if ($user->role_id !== 1) {
-    //         $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
-    //             $query->where('user_id', $user->id)
-    //                 ->orWhere('agent_id', $user->id);
-    //         })->pluck('partner_order_id')->filter()->values()->toArray();
-
-    //         if (empty($partnerOrderIds)) {
-    //             return view('Hotel::admin.booking', ['bookings' => [], 'statuses' => []]);
-    //         }
-
-    //         $payload['search'] = [
-    //             'partner_order_ids' => $partnerOrderIds
-    //         ];
-    //     }
-
-    //     $response = Http::withOptions($this->httpOptions)
-    //         ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
-    //         ->withHeaders(['Content-Type' => 'application/json'])
-    //         ->post($this->getApiUrl() . 'hotel/order/info/', $payload);
-
-    //     $bookings = [];
-    //     $statuses = [];
-
-    //     if ($response->successful() && isset($response['data']['orders'])) {
-    //         foreach ($response['data']['orders'] as $order) {
-    //             $bookings[] = [
-    //                 'order_id' => $order['order_id'] ?? '',
-    //                 'client_name' => collect(data_get($order, 'rooms_data.0.guest_data.guests', []))
-    //                     ->map(function ($guest) {
-    //                         return trim(($guest['first_name'] ?? '') . ' ' . ($guest['last_name'] ?? ''));
-    //                     })
-    //                     ->filter()
-    //                     ->implode(', '),
-    //                 'user_email' => data_get($order, 'user.email', 'N/A'),
-    //                 'user_phone' => data_get($order, 'user.phone', 'N/A'),
-    //                 'payment_amount' => data_get($order, 'client_price.amount', 'N/A'),
-    //                 'currency_code' => data_get($order, 'client_price.currency_code', ''),
-    //                 'created_at' => data_get($order, 'created_at', 'N/A'),
-    //                 'invoice_id' => data_get($order, 'invoice_id', 'N/A'),
-    //                 'status' => data_get($order, 'status', 'unknown'),
-    //                 'partner_order_id' => data_get($order, 'partner_data.order_id'),
-    //             ];
-
-    //             $statuses[$order['order_id']] = $order['status'] ?? 'unknown';
-    //         }
-    //     } else {
-    //         Log::error('Failed to fetch bookings from RateHawk', [
-    //             'response' => $response->body()
-    //         ]);
-    //     }
-
-    //     return view('Hotel::admin.booking', compact('bookings', 'statuses'));
-    // }
-
     public function index(Request $request)
     {
-        // --- Prepare payload to fetch all orders ---
+        $user = auth()->user();
+
         $payload = [
             'ordering' => [
                 'ordering_type' => 'desc',
@@ -3510,7 +3441,21 @@ class HotelHController extends Controller
             'language' => 'en'
         ];
 
-        // --- Call RateHawk API ---
+        if ($user->role_id !== 1) {
+            $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
+                $query->where('user_id', $user->id)
+                    ->orWhere('agent_id', $user->id);
+            })->pluck('partner_order_id')->filter()->values()->toArray();
+
+            if (empty($partnerOrderIds)) {
+                return view('Hotel::admin.booking', ['bookings' => [], 'statuses' => []]);
+            }
+
+            $payload['search'] = [
+                'partner_order_ids' => $partnerOrderIds
+            ];
+        }
+
         $response = Http::withOptions($this->httpOptions)
             ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
             ->withHeaders(['Content-Type' => 'application/json'])
@@ -3519,7 +3464,6 @@ class HotelHController extends Controller
         $bookings = [];
         $statuses = [];
 
-        // --- Parse response ---
         if ($response->successful() && isset($response['data']['orders'])) {
             foreach ($response['data']['orders'] as $order) {
                 $bookings[] = [
@@ -3550,7 +3494,6 @@ class HotelHController extends Controller
 
         return view('Hotel::admin.booking', compact('bookings', 'statuses'));
     }
-
 
 
 
