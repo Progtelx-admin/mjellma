@@ -3441,20 +3441,20 @@ class HotelHController extends Controller
             'language' => 'en'
         ];
 
-        if ($user->role_id !== 1) {
-            $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
-                $query->where('user_id', $user->id)
-                    ->orWhere('create_user', $user->id);
-            })->pluck('partner_order_id')->filter()->values()->toArray();
+        // if ($user->role_id !== 1) {
+        //     $partnerOrderIds = MjellmaBooking::where(function ($query) use ($user) {
+        //         $query->where('user_id', $user->id)
+        //             ->orWhere('create_user', $user->id);
+        //     })->pluck('partner_order_id')->filter()->values()->toArray();
 
-            if (empty($partnerOrderIds)) {
-                return view('Hotel::admin.booking', ['bookings' => [], 'statuses' => []]);
-            }
+        //     if (empty($partnerOrderIds)) {
+        //         return view('Hotel::admin.booking', ['bookings' => [], 'statuses' => []]);
+        //     }
 
-            $payload['search'] = [
-                'partner_order_ids' => $partnerOrderIds
-            ];
-        }
+        //     $payload['search'] = [
+        //         'partner_order_ids' => $partnerOrderIds
+        //     ];
+        // }
 
         $response = Http::withOptions($this->httpOptions)
             ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
