@@ -141,21 +141,31 @@ class HotelHController extends Controller
 
 
 
-    private function getManualApiUsername()
+    private function getManualApiCredentials()
     {
         $type = request()->get('type'); // ?type=b2b or ?type=b2c
 
         if ($type === 'b2b') {
-            return env('API_USERNAME_B2B', env('API_USERNAME'));
+            return [
+                'username' => env('API_USERNAME_B2B', env('API_USERNAME')),
+                'password' => env('API_PASSWORD_B2B', env('API_PASSWORD')),
+            ];
         }
 
         if ($type === 'b2c') {
-            return env('API_USERNAME_B2C', env('API_USERNAME'));
+            return [
+                'username' => env('API_USERNAME_B2C', env('API_USERNAME')),
+                'password' => env('API_PASSWORD_B2C', env('API_PASSWORD')),
+            ];
         }
 
-        // fallback to original logic
-        return $this->getApiUsername();
+        // fallback to original automatic logic
+        return [
+            'username' => $this->getApiUsername(),
+            'password' => $this->getApiPassword(),
+        ];
     }
+
 
 
     /**
@@ -3529,8 +3539,11 @@ class HotelHController extends Controller
             'language' => 'en'
         ];
 
+        // Get correct credentials (manual override or automatic)
+        $credentials = $this->getManualApiCredentials();
+
         $response = Http::withOptions($this->httpOptions)
-            ->withBasicAuth($this->getManualApiUsername(), $this->getApiPassword()) // 👈 changed here
+            ->withBasicAuth($credentials['username'], $credentials['password'])
             ->withHeaders(['Content-Type' => 'application/json'])
             ->post($this->getApiUrl() . 'hotel/order/info/', $payload);
 
@@ -3567,6 +3580,7 @@ class HotelHController extends Controller
 
         return view('Hotel::admin.booking', compact('bookings', 'statuses'));
     }
+
 
 
 
