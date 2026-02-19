@@ -3712,10 +3712,17 @@ class HotelHController extends Controller
         $bookingData = $json['data']['orders'][0];
 
         // 3. Send the email
-        Mail::to($storedBooking->user_email)
+        //Lindori Koment
+        // Mail::to($storedBooking->user_email)
+        //     ->send(new BookingConfirmationEmail($bookingData));
+
+        // Log::info("📧 Booking confirmation email sent to {$storedBooking->user_email} for partner_order_id: $partnerOrderId");
+
+        Mail::to('blerimmi@hotmail.com')
             ->send(new BookingConfirmationEmail($bookingData));
 
-        Log::info("📧 Booking confirmation email sent to {$storedBooking->user_email} for partner_order_id: $partnerOrderId");
+        Log::info("📧 Booking confirmation email sent to admin@rezervo24.com for partner_order_id: $partnerOrderId");
+
 
         return true;
     }
