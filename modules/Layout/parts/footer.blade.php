@@ -72,7 +72,7 @@
     </div>
 @endif
 
-<a href="https://wa.me/+38343555527?text=Hi!%20I%20have%20a%20question%20about%20Reservation" class="whatsapp-float"
+<a href="https://wa.me/+38348870870?text=Hi!%20I%20have%20a%20question%20about%20Reservation" class="whatsapp-float"
     target="_blank" title="Chat with us on WhatsApp">
     <i class="fa fa-whatsapp"></i>
 </a>
