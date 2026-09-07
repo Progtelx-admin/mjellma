@@ -35,6 +35,23 @@ return [
         'secret' => env('SPARKPOST_SECRET'),
     ],
 
+    'recaptcha' => [
+        'site_key' => env('RECAPTCHA_SITE_KEY'),
+        'secret_key' => env('RECAPTCHA_SECRET_KEY'),
+        'local' => [
+            'site_key' => env('RECAPTCHA_LOCAL_SITE_KEY'),
+            'secret_key' => env('RECAPTCHA_LOCAL_SECRET_KEY'),
+        ],
+        'laratest' => [
+            'site_key' => env('RECAPTCHA_LARATEST_SITE_KEY'),
+            'secret_key' => env('RECAPTCHA_LARATEST_SECRET_KEY'),
+        ],
+        'live' => [
+            'site_key' => env('RECAPTCHA_LIVE_SITE_KEY'),
+            'secret_key' => env('RECAPTCHA_LIVE_SECRET_KEY'),
+        ],
+    ],
+
     'stripe' => [
         'model' => App\User::class,
         'key' => env('STRIPE_KEY'),

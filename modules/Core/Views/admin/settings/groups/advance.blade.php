@@ -205,16 +205,42 @@
                     </div>
                 </div>
                 <div class="form-group" data-condition="recaptcha_enable:is(1)">
-                    <label>{{__("Api Key")}}</label>
+                    <label>{{__("Live Site Key")}}</label>
                     <div class="form-controls">
                         <input type="text" name="recaptcha_api_key" value="{{setting_item('recaptcha_api_key')}}" class="form-control">
                         <p><i><a href="http://www.google.com/recaptcha/admin" target="blank">{{__("Learn how to get an api key")}}</a></i></p>
                     </div>
                 </div>
                 <div class="form-group" data-condition="recaptcha_enable:is(1)">
-                    <label>{{__("Api Secret")}}</label>
+                    <label>{{__("Live Secret Key")}}</label>
                     <div class="form-controls">
                         <input type="text" name="recaptcha_api_secret" value="{{setting_item('recaptcha_api_secret')}}" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group" data-condition="recaptcha_enable:is(1)">
+                    <label>{{__("Local Site Key")}}</label>
+                    <div class="form-controls">
+                        <input type="text" name="recaptcha_api_key_local" value="{{setting_item('recaptcha_api_key_local')}}" class="form-control">
+                        <p class="form-text text-muted">{{__("Used on localhost / .test. Leave empty to use live keys.")}}</p>
+                    </div>
+                </div>
+                <div class="form-group" data-condition="recaptcha_enable:is(1)">
+                    <label>{{__("Local Secret Key")}}</label>
+                    <div class="form-controls">
+                        <input type="text" name="recaptcha_api_secret_local" value="{{setting_item('recaptcha_api_secret_local')}}" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group" data-condition="recaptcha_enable:is(1)">
+                    <label>{{__("Laratest Site Key")}}</label>
+                    <div class="form-controls">
+                        <input type="text" name="recaptcha_api_key_laratest" value="{{setting_item('recaptcha_api_key_laratest')}}" class="form-control">
+                        <p class="form-text text-muted">{{__("Used on laratest / staging. Leave empty to use live keys.")}}</p>
+                    </div>
+                </div>
+                <div class="form-group" data-condition="recaptcha_enable:is(1)">
+                    <label>{{__("Laratest Secret Key")}}</label>
+                    <div class="form-controls">
+                        <input type="text" name="recaptcha_api_secret_laratest" value="{{setting_item('recaptcha_api_secret_laratest')}}" class="form-control">
                     </div>
                 </div>
             </div>

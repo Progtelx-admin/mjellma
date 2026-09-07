@@ -20,7 +20,7 @@ class ReCaptchaEngine
             return  self::scriptsV3();
         }
         ?>
-        <script src="https://www.google.com/recaptcha/api.js?render=<?php e(self::$api_key) ?>&onload=BravoReCaptchaCallBack" async defer></script>
+        <script src="https://www.google.com/recaptcha/api.js?onload=BravoReCaptchaCallBack&render=explicit" async defer></script>
         <script>
             window.BravoReCaptcha = {
                 is_loaded : false,
@@ -39,10 +39,15 @@ class ReCaptchaEngine
                     }
                 },
                 reset(action) {
-                    grecaptcha.reset(this.widgetIds[action]);
+                    if (typeof this.widgetIds[action] !== 'undefined') {
+                        grecaptcha.reset(this.widgetIds[action]);
+                    }
                 },
                 getToken(action) {
-                    grecaptcha.getResponse(this.widgetIds[action])
+                    if (typeof this.widgetIds[action] === 'undefined') {
+                        return '';
+                    }
+                    return grecaptcha.getResponse(this.widgetIds[action]);
                 },
                 validateCallback(){
 
@@ -96,7 +101,6 @@ class ReCaptchaEngine
                     }
                 },
                 reset(action) {
-                    console.log(action,this.widgetIds[action],this.widgetIds)
                     this.getToken(action,this.widgetIds[action])
                 },
                 getToken(action,id) {
@@ -127,15 +131,95 @@ class ReCaptchaEngine
         return true;
     }
 
+    public static function isRequiredForAuth()
+    {
+        return self::isEnable();
+    }
+
     public static function maybeInit()
     {
         if (self::$is_init)
             return;
-        self::$api_key = setting_item('recaptcha_api_key');
-        self::$api_secret = setting_item('recaptcha_api_secret');
+        $keys = self::resolveKeys(self::detectEnvironment());
+        self::$api_key = $keys['site_key'];
+        self::$api_secret = $keys['secret_key'];
         self::$is_enable = setting_item('recaptcha_enable');
         self::$is_init = true;
         self::$version = setting_item('recaptcha_version','v2');
+    }
+
+    public static function detectEnvironment()
+    {
+        $env = strtolower((string) config('app.env'));
+        $url = strtolower((string) config('app.url'));
+        $host = '';
+
+        if (!app()->runningInConsole()) {
+            try {
+                $host = strtolower((string) request()->getHost());
+            } catch (\Throwable $e) {
+                $host = '';
+            }
+        }
+
+        $haystack = $host.' '.$url;
+
+        if (str_contains($haystack, 'laratest') || in_array($env, ['laratest', 'staging'], true)) {
+            return 'laratest';
+        }
+
+        $isLocalHost = in_array($host, ['localhost', '127.0.0.1', '::1'], true)
+            || str_ends_with($host, '.test')
+            || str_ends_with($host, '.local')
+            || str_contains($haystack, 'localhost');
+
+        if ($env === 'local' || $isLocalHost) {
+            return 'local';
+        }
+
+        return 'live';
+    }
+
+    protected static function resolveKeys($environment)
+    {
+        $site = config('services.recaptcha.site_key');
+        $secret = config('services.recaptcha.secret_key');
+        if (!empty($site) && !empty($secret)) {
+            return [
+                'site_key' => $site,
+                'secret_key' => $secret,
+            ];
+        }
+
+        $envSite = config('services.recaptcha.'.$environment.'.site_key');
+        $envSecret = config('services.recaptcha.'.$environment.'.secret_key');
+        if (!empty($envSite) && !empty($envSecret)) {
+            return [
+                'site_key' => $envSite,
+                'secret_key' => $envSecret,
+            ];
+        }
+
+        $settingMap = [
+            'local' => ['recaptcha_api_key_local', 'recaptcha_api_secret_local'],
+            'laratest' => ['recaptcha_api_key_laratest', 'recaptcha_api_secret_laratest'],
+            'live' => ['recaptcha_api_key', 'recaptcha_api_secret'],
+        ];
+
+        $names = $settingMap[$environment] ?? $settingMap['live'];
+        $site = setting_item($names[0]);
+        $secret = setting_item($names[1]);
+        if (!empty($site) && !empty($secret)) {
+            return [
+                'site_key' => $site,
+                'secret_key' => $secret,
+            ];
+        }
+
+        return [
+            'site_key' => setting_item('recaptcha_api_key'),
+            'secret_key' => setting_item('recaptcha_api_secret'),
+        ];
     }
 
     public static function verify($response)
@@ -147,20 +231,10 @@ class ReCaptchaEngine
             'secret'   => self::$api_secret,
             'response' => $response
         ];
-        $query = http_build_query($data);
-        $options = [
-            'http' => [
-                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n" . "Content-Length: " . strlen($query) . "\r\n" . "User-Agent:MyAgent/1.0\r\n",
-                'method'  => 'POST',
-                'content' => $query
-            ]
-        ];
-        $context = stream_context_create($options);
-
         $verify = static::file_get_contents_curl($url, true, $data);
 
         $captchaVerify = json_decode($verify, true);
-        if ($captchaVerify['success'] == true) {
+        if (is_array($captchaVerify) && !empty($captchaVerify['success'])) {
             return true;
         }
         return false;

@@ -2,13 +2,13 @@
 namespace Modules\Vendor\Controllers;
 
 use App\Helpers\ReCaptchaEngine;
+use App\Rules\ValidCaptcha;
 use App\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\MessageBag;
 use Illuminate\Validation\Rules\Password;
 use Matrix\Exception;
 use Modules\FrontendController;
@@ -71,9 +71,9 @@ class VendorController extends FrontendController
             'business_name.required'  => __('The business name is required field'),
             'term.required'       => __('The terms and conditions field is required'),
         ];
-        if (ReCaptchaEngine::isEnable() and setting_item("user_enable_register_recaptcha")) {
+        if (ReCaptchaEngine::isRequiredForAuth()) {
             $messages['g-recaptcha-response.required'] = __('Please verify the captcha');
-            $rules['g-recaptcha-response'] = ['required'];
+            $rules['g-recaptcha-response'] = ['required', new ValidCaptcha()];
         }
         $validator = Validator::make($request->all(), $rules, $messages);
         if ($validator->fails()) {
@@ -82,16 +82,6 @@ class VendorController extends FrontendController
                 'messages' => $validator->errors()
             ], 200);
         } else {
-            if (ReCaptchaEngine::isEnable() and setting_item("user_enable_register_recaptcha")) {
-                $codeCapcha = $request->input('g-recaptcha-response');
-                if (!ReCaptchaEngine::verify($codeCapcha)) {
-                    $errors = new MessageBag(['message_error' => __('Please verify the captcha')]);
-                    return response()->json([
-                        'error'    => true,
-                        'messages' => $errors
-                    ], 200);
-                }
-            }
             $user = new \App\User();
 
             $user = $user->fill([

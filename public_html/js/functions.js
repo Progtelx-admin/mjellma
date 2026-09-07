@@ -1,6 +1,20 @@
+function bravoCsrfToken(form) {
+    var token = '';
+    if (form) {
+        token = $(form).find('input[name="_token"]').val() || '';
+    }
+    if (!token && typeof bookingCore !== 'undefined' && bookingCore.csrf) {
+        token = bookingCore.csrf;
+    }
+    if (!token) {
+        token = $('meta[name="csrf-token"]').attr('content') || '';
+    }
+    return token;
+}
+
 $.ajaxSetup({
     headers: {
-        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        'X-CSRF-TOKEN': bravoCsrfToken()
     }
 });
 
