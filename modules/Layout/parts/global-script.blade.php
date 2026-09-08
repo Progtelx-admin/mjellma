@@ -3,6 +3,7 @@
         url:'{{url( app_get_locale() )}}',
         url_root:'{{ url('') }}',
         admin_url:'{{ route('admin.index') }}',
+        csrf:'{{ csrf_token() }}',
         booking_decimals:{{(int)get_current_currency('currency_no_decimal',2)}},
         thousand_separator:'{{get_current_currency('currency_thousand')}}',
         decimal_separator:'{{get_current_currency('currency_decimal')}}',
@@ -20,7 +21,7 @@
         },
         routes:{
             login:'{{route('login')}}',
-            register:'{{route('auth.register')}}',
+            register:'{{route('auth.register.store')}}',
             checkout:'{{is_api() ? route('api.booking.doCheckout') : route('booking.doCheckout')}}'
         },
         currentUser: {{(int)Auth::id()}},

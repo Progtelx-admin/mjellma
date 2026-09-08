@@ -43,7 +43,7 @@
                         </label>
                         <div><span class="invalid-feedback error error-term"></span></div>
                     </div>
-                    @if(setting_item("user_enable_register_recaptcha"))
+                    @if(\App\Helpers\ReCaptchaEngine::isRequiredForAuth())
                         <div class="form-group">
                             {{recaptcha_field($captcha_action ?? 'register_vendor')}}
                             <div><span class="invalid-feedback error error-g-recaptcha-response"></span></div>

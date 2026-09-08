@@ -3,7 +3,6 @@
 namespace Modules\Hotel\Controllers;
 
 use App\Http\Controllers\Controller;
-use Modules\Hotel\Models\HotelH;
 use Modules\Hotel\Models\MjellmaBooking;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -447,6 +446,132 @@ class HotelHController extends Controller
         return view('Hotel::frontend.form-search-ha');
     }
 
+    /**
+     * Collect HA search identifiers separately from the visible input labels.
+     */
+    private function haSearchParamsFromRequest(Request $request): array
+    {
+        return [
+            'hotel_name' => $request->input('hotel_name'),
+            'hid' => $request->input('hid'),
+            'etg_hotel_id' => $request->input('etg_hotel_id'),
+            'hotel_region_id' => $request->input('hotel_region_id'),
+            'location' => $request->input('location'),
+            'region_id' => $request->input('region_id'),
+            'region_type' => $request->input('region_type'),
+            'region_country_code' => $request->input('region_country_code'),
+            'latitude' => $request->input('latitude'),
+            'longitude' => $request->input('longitude'),
+            'radius' => $request->input('radius'),
+            'star_rating' => $request->input('star_rating'),
+            'checkin' => $request->input('checkin'),
+            'checkout' => $request->input('checkout'),
+            'adults' => $request->input('adults'),
+            'rooms' => $request->input('rooms'),
+            'children_count' => $request->input('children_count'),
+            'children' => $request->input('children'),
+        ];
+    }
+
+    /**
+     * Ranked ETG hotel IDs for a city/region. Used by Search-by-Region.
+     */
+    private function getHotelIdsForRegion(int $regionId): array
+    {
+        if ($regionId <= 0) {
+            return [];
+        }
+
+        $sortType = $this->getUserType() === 'b2b' ? 'b2b' : 'b2c';
+        $cacheKey = "etg_region_hotel_ids_{$regionId}_{$sortType}";
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        try {
+            $response = Http::timeout(20)
+                ->withOptions($this->httpOptions)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->getApiUrl() . 'search/hotelsort/', [
+                    'region_id' => $regionId,
+                    'sort_type' => $sortType,
+                    'hotels_limit' => 250,
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('ETG hotelsort rejected', [
+                    'region_id' => $regionId,
+                    'status' => $response->status(),
+                ]);
+                return [];
+            }
+
+            $ids = $response->json()['data']['hotels'] ?? [];
+            if (!is_array($ids)) {
+                return [];
+            }
+
+            $ids = array_values(array_unique(array_filter($ids, function ($id) {
+                return is_string($id) ? $id !== '' : $id !== null && $id !== '';
+            })));
+
+            Cache::put($cacheKey, $ids, now()->addMinutes(15));
+            return $ids;
+        } catch (\Exception $e) {
+            Log::error('ETG hotelsort failed', [
+                'region_id' => $regionId,
+                'message' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Apply hotel-name / hid / city-region constraints to a hotels query.
+     */
+    private function applyHaSearchConstraints($query, array $params, bool $applyRegionOrder = false)
+    {
+        if (!empty($params['hid'])) {
+            $query->where('hid', (int) $params['hid']);
+        } elseif (!empty($params['etg_hotel_id'])) {
+            $query->where('hotel_id', $params['etg_hotel_id']);
+        } elseif (!empty($params['hotel_name'])) {
+            $query->where('name', 'like', '%' . $params['hotel_name'] . '%');
+        }
+
+        if (!empty($params['star_rating'])) {
+            $query->whereIn('star_rating', $params['star_rating']);
+        }
+
+        if (!empty($params['region_id'])) {
+            $regionHotelIds = $this->getHotelIdsForRegion((int) $params['region_id']);
+            if (empty($regionHotelIds)) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('hotel_id', $regionHotelIds);
+                if ($applyRegionOrder) {
+                    $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
+                    $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
+                }
+            }
+        } elseif (!empty($params['latitude']) && !empty($params['longitude'])) {
+            $lat = $params['latitude'];
+            $lng = $params['longitude'];
+            $radius = $params['radius'] ?? 4;
+            $query->whereBetween('latitude', [
+                $lat - ($radius / 111),
+                $lat + ($radius / 111),
+            ])->whereBetween('longitude', [
+                $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                $lng + ($radius / (111 * cos(deg2rad($lat)))),
+            ]);
+        }
+
+        return $query;
+    }
+
     public function searchHotels(Request $request)
     {
         // Extend execution time for large dataset searches
@@ -461,7 +586,13 @@ class HotelHController extends Controller
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
                 'hotel_name' => 'nullable|string',
+                'hid' => 'nullable|numeric',
+                'etg_hotel_id' => 'nullable|string',
+                'hotel_region_id' => 'nullable|numeric',
                 'location' => 'nullable|string',
+                'region_id' => 'nullable|numeric',
+                'region_type' => 'nullable|string',
+                'region_country_code' => 'nullable|string|max:8',
                 'latitude' => 'nullable|numeric',
                 'longitude' => 'nullable|numeric',
                 'radius' => 'nullable|integer|min:1',
@@ -483,7 +614,10 @@ class HotelHController extends Controller
             // 2) Build cache key including both count and ages
             $searchHash = md5(json_encode([
                 $request->hotel_name,
+                $request->hid,
+                $request->etg_hotel_id,
                 $request->location,
+                $request->region_id,
                 $request->latitude,
                 $request->longitude,
                 $request->radius,
@@ -509,27 +643,12 @@ class HotelHController extends Controller
             }
 
             // 4) Get hotels from database immediately (no API calls)
-            $hotelQuery = DB::table('hotels')
-                ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
-
-            if ($request->filled('hotel_name')) {
-                $hotelQuery->where('name', 'like', '%' . $request->hotel_name . '%');
-            }
-            if ($request->filled('star_rating')) {
-                $hotelQuery->whereIn('star_rating', $request->star_rating);
-            }
-            if ($request->filled('latitude') && $request->filled('longitude')) {
-                $lat = $request->latitude;
-                $lng = $request->longitude;
-                $radius = $request->radius ?? 4;
-                $hotelQuery->whereBetween('latitude', [
-                    $lat - ($radius / 111),
-                    $lat + ($radius / 111)
-                ])->whereBetween('longitude', [
-                            $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                            $lng + ($radius / (111 * cos(deg2rad($lat))))
-                        ]);
-            }
+            $haParams = $this->haSearchParamsFromRequest($request);
+            $hotelQuery = $this->applyHaSearchConstraints(
+                DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
+                $haParams,
+                true
+            );
 
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
@@ -556,7 +675,13 @@ class HotelHController extends Controller
             $cacheKey = "search_params_{$searchHash}";
             Cache::put($cacheKey, [
                 'hotel_name' => $request->hotel_name,
+                'hid' => $request->hid,
+                'etg_hotel_id' => $request->etg_hotel_id,
+                'hotel_region_id' => $request->hotel_region_id,
                 'location' => $request->location,
+                'region_id' => $request->region_id,
+                'region_type' => $request->region_type,
+                'region_country_code' => $request->region_country_code,
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude,
                 'radius' => $request->radius,
@@ -571,27 +696,8 @@ class HotelHController extends Controller
 
             // Cache total count to avoid slow COUNT queries on large datasets
             $totalCountCacheKey = "hotel_count_{$searchHash}";
-            $totalCount = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($request) {
-                return DB::table('hotels')
-                    ->when($request->filled('hotel_name'), function ($q) use ($request) {
-                        return $q->where('name', 'like', '%' . $request->hotel_name . '%');
-                    })
-                    ->when($request->filled('star_rating'), function ($q) use ($request) {
-                        return $q->whereIn('star_rating', $request->star_rating);
-                    })
-                    ->when($request->filled('latitude') && $request->filled('longitude'), function ($q) use ($request) {
-                        $lat = $request->latitude;
-                        $lng = $request->longitude;
-                        $radius = $request->radius ?? 4;
-                        return $q->whereBetween('latitude', [
-                            $lat - ($radius / 111),
-                            $lat + ($radius / 111)
-                        ])->whereBetween('longitude', [
-                                    $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                                    $lng + ($radius / (111 * cos(deg2rad($lat))))
-                                ]);
-                    })
-                    ->count();
+            $totalCount = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($haParams) {
+                return $this->applyHaSearchConstraints(DB::table('hotels'), $haParams, false)->count();
             });
 
             // Return page with first 10 hotels immediately
@@ -632,40 +738,22 @@ class HotelHController extends Controller
             }
 
             // Build base query for counting and fetching
-            $baseQuery = function () use ($searchParams) {
-                $query = DB::table('hotels')
-                    ->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address');
-
-                if (!empty($searchParams['hotel_name'])) {
-                    $query->where('name', 'like', '%' . $searchParams['hotel_name'] . '%');
-                }
-                if (!empty($searchParams['star_rating'])) {
-                    $query->whereIn('star_rating', $searchParams['star_rating']);
-                }
-                if (!empty($searchParams['latitude']) && !empty($searchParams['longitude'])) {
-                    $lat = $searchParams['latitude'];
-                    $lng = $searchParams['longitude'];
-                    $radius = $searchParams['radius'] ?? 4;
-                    $query->whereBetween('latitude', [
-                        $lat - ($radius / 111),
-                        $lat + ($radius / 111)
-                    ])->whereBetween('longitude', [
-                                $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                                $lng + ($radius / (111 * cos(deg2rad($lat))))
-                            ]);
-                }
-
-                return $query;
+            $baseQuery = function ($applyRegionOrder = false) use ($searchParams) {
+                return $this->applyHaSearchConstraints(
+                    DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
+                    $searchParams,
+                    $applyRegionOrder
+                );
             };
 
             // Get total count (cached to avoid recounting on each chunk)
             $totalCountCacheKey = "hotel_count_{$searchHash}";
             $totalHotels = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($baseQuery) {
-                return $baseQuery()->count();
+                return $baseQuery(false)->count();
             });
 
             // Fetch only the current chunk from database
-            $chunkHotels = $baseQuery()
+            $chunkHotels = $baseQuery(true)
                 ->skip($chunk * $chunkSize)
                 ->take($chunkSize)
                 ->get();
@@ -1409,16 +1497,100 @@ class HotelHController extends Controller
 
     public function getHotelSuggestions(Request $request)
     {
-        $query = $request->input('query');
-        if (strlen($query) < 3) {
-            return response()->json([]);
+        $query = trim((string) $request->input('query', ''));
+        $type = strtolower((string) $request->input('type', ''));
+
+        $empty = [
+            'hotels' => [],
+            'regions' => [],
+            'error' => false,
+        ];
+
+        if (mb_strlen($query) < 1) {
+            return response()->json($empty);
         }
 
-        $hotels = HotelH::where('name', 'like', '%' . $query . '%')
-            ->limit(10)
-            ->get(['name']);
+        try {
+            $response = Http::timeout(10)
+                ->withOptions($this->httpOptions)
+                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($this->getApiUrl() . 'search/multicomplete/', [
+                    'query' => $query,
+                    'language' => 'en',
+                ]);
 
-        return response()->json($hotels);
+            $json = $response->json() ?? [];
+            if (!$response->successful() || (($json['status'] ?? '') !== 'ok' && !empty($json['error']))) {
+                Log::warning('ETG multicomplete rejected', [
+                    'status' => $response->status(),
+                    'error' => $json['error'] ?? null,
+                ]);
+                return response()->json(['hotels' => [], 'regions' => [], 'error' => true]);
+            }
+
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+            $hotelsRaw = is_array($data['hotels'] ?? null) ? $data['hotels'] : [];
+            $regionsRaw = is_array($data['regions'] ?? null) ? $data['regions'] : [];
+
+            $hotels = [];
+            $seenHids = [];
+            foreach ($hotelsRaw as $hotel) {
+                if (!is_array($hotel)) {
+                    continue;
+                }
+                $hid = $hotel['hid'] ?? null;
+                if ($hid === null || $hid === '' || isset($seenHids[(string) $hid])) {
+                    continue;
+                }
+                $seenHids[(string) $hid] = true;
+                $hotels[] = [
+                    'hid' => (int) $hid,
+                    'id' => $hotel['id'] ?? null,
+                    'name' => (string) ($hotel['name'] ?? ''),
+                    'region_id' => isset($hotel['region_id']) && $hotel['region_id'] !== ''
+                        ? (int) $hotel['region_id']
+                        : null,
+                ];
+            }
+
+            $regions = [];
+            $seenRegionIds = [];
+            foreach ($regionsRaw as $region) {
+                if (!is_array($region)) {
+                    continue;
+                }
+                if (($region['type'] ?? '') !== 'City') {
+                    continue;
+                }
+                $id = $region['id'] ?? null;
+                if ($id === null || $id === '' || isset($seenRegionIds[(string) $id])) {
+                    continue;
+                }
+                $seenRegionIds[(string) $id] = true;
+                $regions[] = [
+                    'id' => is_numeric($id) ? (int) $id : $id,
+                    'name' => (string) ($region['name'] ?? ''),
+                    'type' => (string) ($region['type'] ?? 'City'),
+                    'country_code' => (string) ($region['country_code'] ?? ''),
+                ];
+            }
+
+            if ($type === 'hotels') {
+                $regions = [];
+            } elseif ($type === 'cities' || $type === 'regions') {
+                $hotels = [];
+            }
+
+            return response()->json([
+                'hotels' => $hotels,
+                'regions' => $regions,
+                'error' => false,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('ETG multicomplete failed', ['message' => $e->getMessage()]);
+            return response()->json(['hotels' => [], 'regions' => [], 'error' => true]);
+        }
     }
 
     public function prebookRoom(Request $request)

@@ -24,6 +24,7 @@
     </div>
     <div class="form-group">
         {{ recaptcha_field($captcha_action ?? 'login') }}
+        <span class="invalid-feedback error error-g-recaptcha-response"></span>
     </div>
     <div class="error message-error invalid-feedback"></div>
     <div class="form-group">

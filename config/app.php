@@ -231,7 +231,7 @@ return [
     ])->toArray(),
 
     'version' => "3.4.2",
-    'asset_version' => env('APP_ASSET_VERSION', '3.4.1'),
+    'asset_version' => env('APP_ASSET_VERSION', '3.4.2'),
 
     'updater_url' => "http://check.bookingcore.co/updater.php"
 
