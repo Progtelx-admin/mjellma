@@ -29,7 +29,11 @@
         };
 @endphp
 
-<a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link">
+<a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link"
+    data-hotel-price="{{ $hotel->daily_price ?? '' }}"
+    data-hotel-rating="{{ $hotel->star_rating ?? 0 }}"
+    data-hotel-lat="{{ $hotel->latitude ?? '' }}"
+    data-hotel-lng="{{ $hotel->longitude ?? '' }}">
     <article class="hotel-listcard">
         {{-- IMAGE --}}
         <div class="hotel-listcard__media">

@@ -154,7 +154,7 @@
                             </div>
 
                             {{-- Row 3: Dynamic Child Ages --}}
-                            <div id="children-ages-row" class="row g-2 g-md-3 mt-2" style="display:none;"></div>
+                            <div id="children-ages-row" class="row g-2 g-md-3 mt-2 mt-md-3" style="display:none;"></div>
 
                             {{-- Row 4: Full-width Search --}}
                             <div class="row mt-3 mt-md-4">
@@ -339,26 +339,53 @@
             // Children age inputs
             const countInput = document.getElementById('children_count');
             const agesRow = document.getElementById('children-ages-row');
+            const initialChildAges = @json(old('children', request('children', [])));
 
-            function renderAges(n) {
+            function ageLabel(age) {
+                if (age === 0) return 'Under 1';
+                return age === 1 ? '1 year' : age + ' years';
+            }
+
+            function currentAgeValues() {
+                return Array.from(agesRow.querySelectorAll('select[name="children[]"]'))
+                    .map(function(sel) { return sel.value; });
+            }
+
+            function renderAges(n, presetAges) {
+                const previous = presetAges || currentAgeValues();
                 agesRow.innerHTML = '';
                 if (n < 1) {
                     agesRow.style.display = 'none';
                     return;
                 }
                 agesRow.style.display = 'flex';
+
+                const heading = document.createElement('div');
+                heading.className = 'col-12';
+                heading.innerHTML = '<p class="form-label mb-1">Ages of children</p>';
+                agesRow.append(heading);
+
                 for (let i = 1; i <= n; i++) {
+                    const selected = previous[i - 1] !== undefined && previous[i - 1] !== ''
+                        ? String(previous[i - 1])
+                        : '';
                     const col = document.createElement('div');
-                    col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
-                    col.innerHTML = `
-                        <div class="form-floating">
-                            <select name="children[]" id="child_age_${i}"
-                                    class="form-select form-select-sm border border-2 border-danger" required>
-                                <option value="" selected>Age needed</option>
-                                ${[...Array(18).keys()].map(a => `<option value="${a}">${a}</option>`).join('')}
-                            </select>
-                            <label for="child_age_${i}" class="small">Child ${i}</label>
-                        </div>`;
+                    col.className = 'col-6 col-sm-4 col-md-2';
+                    col.innerHTML =
+                        '<label for="child_age_' + i + '" class="form-label">Child ' + i + '</label>' +
+                        '<select name="children[]" id="child_age_' + i + '"' +
+                        ' class="form-control child-age-select' + (selected === '' ? ' is-empty' : '') + '" required>' +
+                        '<option value="" disabled' + (selected === '' ? ' selected' : '') + '>Select age</option>' +
+                        [...Array(18).keys()].map(function(a) {
+                            const isSel = selected === String(a) ? ' selected' : '';
+                            return '<option value="' + a + '"' + isSel + '>' + ageLabel(a) + '</option>';
+                        }).join('') +
+                        '</select>';
+                    const select = col.querySelector('select');
+                    select.addEventListener('change', function() {
+                        this.classList.toggle('is-empty', this.value === '');
+                        this.classList.remove('is-invalid');
+                    });
                     agesRow.append(col);
                 }
             }
@@ -370,7 +397,7 @@
                 this.value = v;
                 renderAges(v);
             });
-            renderAges(parseInt(countInput.value) || 0);
+            renderAges(parseInt(countInput.value) || 0, initialChildAges);
 
             // Date validation
             const checkinInput = document.getElementById('checkin');
@@ -471,6 +498,15 @@
                         errors.push('Number of children is required.');
                         hasErrors = true;
                     }
+
+                    const childAgeSelects = form.querySelectorAll('select[name="children[]"]');
+                    childAgeSelects.forEach(function(select, index) {
+                        if (select.value === '') {
+                            select.classList.add('is-invalid');
+                            errors.push('Please select the age for Child ' + (index + 1) + '.');
+                            hasErrors = true;
+                        }
+                    });
 
                     // Validate location if provided
                     const locationValue = locationInput.value.trim();
@@ -739,6 +775,49 @@
 
         .form-label {
             font-weight: bold;
+        }
+
+        /* Child age selects — match other form-control fields */
+        #children-ages-row .child-age-select {
+            display: block;
+            width: 100%;
+            height: calc(1.5em + 0.75rem + 2px);
+            padding: 0.375rem 2rem 0.375rem 0.75rem;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #495057;
+            background-color: #fff;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 12px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        #children-ages-row .child-age-select.is-empty {
+            color: #6c757d;
+        }
+
+        #children-ages-row .child-age-select:focus {
+            color: #495057;
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        #children-ages-row .child-age-select:invalid {
+            box-shadow: none;
+            border-color: #ced4da;
+        }
+
+        #children-ages-row .child-age-select.is-invalid,
+        #children-ages-row .child-age-select.is-invalid:invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
         }
 
         /* Form control responsiveness */
