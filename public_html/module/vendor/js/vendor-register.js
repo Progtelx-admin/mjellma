@@ -1,15 +1,21 @@
 $('.bravo-form-register-vendor [type=submit]').click(function (e) {
     e.preventDefault();
     let form = $(this).closest('.bravo-form-register-vendor');
-    $.ajaxSetup({
-        headers: {
-            'X-CSRF-TOKEN': form.find('meta[name="csrf-token"]').attr('content')
-        }
-    });
+    var csrfToken = typeof bravoCsrfToken === 'function' ? bravoCsrfToken(form) : (form.find('input[name="_token"]').val() || $('meta[name="csrf-token"]').attr('content'));
+    var captchaResponse = form.find('[name=g-recaptcha-response]').val();
+    if (!captchaResponse && typeof BravoReCaptcha !== 'undefined') {
+        captchaResponse = BravoReCaptcha.getToken('register_vendor') || '';
+    }
+    if (form.find('.bravo-recaptcha').length && !captchaResponse) {
+        form.find('.error-g-recaptcha-response').show().text('Please verify the captcha');
+        form.find('.message-error').show().html('<div class="alert alert-danger">Please verify the captcha</div>');
+        return;
+    }
     var url = form.attr('action');
     $.ajax({
         'url': url,
         'data': {
+            '_token': csrfToken,
             'email': form.find('input[name=email]').val(),
             'password': form.find('input[name=password]').val(),
             'first_name': form.find('input[name=first_name]').val(),
@@ -17,9 +23,12 @@ $('.bravo-form-register-vendor [type=submit]').click(function (e) {
             'business_name': form.find('input[name=business_name]').val(),
             'phone': form.find('input[name=phone]').val(),
             'term': form.find('input[name=term]').is(":checked") ? 1 : '',
-            'g-recaptcha-response': form.find('[name=g-recaptcha-response]').val(),
+            'g-recaptcha-response': captchaResponse,
         },
         'type': 'POST',
+        headers: {
+            'X-CSRF-TOKEN': csrfToken
+        },
         beforeSend: function () {
             form.find('.error').hide();
             form.find('.icon-loading').css("display", 'inline-block');

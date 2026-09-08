@@ -5,13 +5,13 @@
 
 
 	use App\Helpers\ReCaptchaEngine;
+    use App\Rules\ValidCaptcha;
     use Illuminate\Auth\Events\Registered;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Auth;
     use Illuminate\Support\Facades\Hash;
     use Illuminate\Support\Facades\Log;
     use Illuminate\Support\Facades\Validator;
-    use Illuminate\Support\MessageBag;
     use Illuminate\Validation\Rules\Password;
     use Matrix\Exception;
     use Modules\User\Events\SendMailUserRegistered;
@@ -63,15 +63,9 @@
                 'last_name.required'  => __('The last name is required field'),
                 'term.required'       => __('The terms and conditions field is required'),
             ];
-            if (ReCaptchaEngine::isEnable() and setting_item("user_enable_register_recaptcha")) {
-                $codeCapcha = $request->input('g-recaptcha-response');
-                if (!$codeCapcha or !ReCaptchaEngine::verify($codeCapcha)) {
-                    $errors = new MessageBag(['message_error' => __('Please verify the captcha')]);
-                    return response()->json([
-                        'error'    => true,
-                        'messages' => $errors
-                    ], 200);
-                }
+            if (ReCaptchaEngine::isRequiredForAuth()) {
+                $rules['g-recaptcha-response'] = ['required', new ValidCaptcha()];
+                $messages['g-recaptcha-response.required'] = __('Please verify the captcha');
             }
             $validator = Validator::make($request->all(), $rules, $messages);
             if ($validator->fails()) {

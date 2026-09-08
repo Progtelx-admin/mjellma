@@ -84,20 +84,26 @@
                                     <label for="hotel_name" class="form-label">Hotel Name</label>
                                     <input type="text" id="hotel_name" name="hotel_name"
                                         class="form-control @error('hotel_name') is-invalid @enderror"
-                                        placeholder="Enter hotel name" value="{{ old('hotel_name') }}">
+                                        placeholder="Enter hotel name" value="{{ old('hotel_name') }}"
+                                        autocomplete="off">
                                     @error('hotel_name')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                    <ul id="hotel_suggestions"
+                                        class="list-group position-absolute w-100 mt-1 d-none etg-autocomplete-list"
+                                        style="max-height:200px;overflow-y:auto;z-index:1000;"></ul>
                                 </div>
                                 <div class="col-12 col-md-6 position-relative">
                                     <label for="location" class="form-label">Location</label>
                                     <input type="text" id="location" name="location"
                                         class="form-control @error('location') is-invalid @enderror"
-                                        placeholder="Where are you going?" autocomplete="off">
+                                        placeholder="Where are you going?" autocomplete="off"
+                                        value="{{ old('location') }}">
                                     @error('location')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
-                                    <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
+                                    <ul id="suggestions"
+                                        class="list-group position-absolute w-100 mt-1 d-none etg-autocomplete-list"
                                         style="max-height:200px;overflow-y:auto;z-index:1000;"></ul>
                                 </div>
                             </div>
@@ -154,7 +160,7 @@
                             </div>
 
                             {{-- Row 3: Dynamic Child Ages --}}
-                            <div id="children-ages-row" class="row g-2 g-md-3 mt-2" style="display:none;"></div>
+                            <div id="children-ages-row" class="row g-2 g-md-3 mt-2 mt-md-3" style="display:none;"></div>
 
                             {{-- Row 4: Full-width Search --}}
                             <div class="row mt-3 mt-md-4">
@@ -168,9 +174,20 @@
                                 </div>
                             </div>
 
-                            <input type="hidden" id="latitude" name="latitude">
-                            <input type="hidden" id="longitude" name="longitude">
-                            <input type="hidden" id="locationSelected" name="locationSelected" value="false">
+                            <input type="hidden" id="latitude" name="latitude" value="{{ old('latitude') }}">
+                            <input type="hidden" id="longitude" name="longitude" value="{{ old('longitude') }}">
+                            <input type="hidden" id="locationSelected" name="locationSelected"
+                                value="{{ old('region_id') ? 'true' : 'false' }}">
+                            <input type="hidden" id="hid" name="hid" value="{{ old('hid') }}">
+                            <input type="hidden" id="etg_hotel_id" name="etg_hotel_id"
+                                value="{{ old('etg_hotel_id') }}">
+                            <input type="hidden" id="hotel_region_id" name="hotel_region_id"
+                                value="{{ old('hotel_region_id') }}">
+                            <input type="hidden" id="region_id" name="region_id" value="{{ old('region_id') }}">
+                            <input type="hidden" id="region_type" name="region_type"
+                                value="{{ old('region_type') }}">
+                            <input type="hidden" id="region_country_code" name="region_country_code"
+                                value="{{ old('region_country_code') }}">
                         </form>
                     </div>
 
@@ -292,73 +309,303 @@
                 wrap: true
             });
 
-            // Location autocomplete & validation
-            const locationInput = document.getElementById("location");
-            const suggestionsList = document.getElementById("suggestions");
-            const latInput = document.getElementById("latitude");
-            const lonInput = document.getElementById("longitude");
-            const locationSelectedInput = document.getElementById("locationSelected");
+            const etgSuggestUrl = @json(route('hotel.suggestions'));
+            const etgCountryNames = @json(get_country_lists());
+            const etgAutocompleteClosers = [];
+            const hotelNameInput = document.getElementById('hotel_name');
+            const hotelSuggestionsList = document.getElementById('hotel_suggestions');
+            const hidInput = document.getElementById('hid');
+            const etgHotelIdInput = document.getElementById('etg_hotel_id');
+            const hotelRegionIdInput = document.getElementById('hotel_region_id');
 
-            locationInput.addEventListener("input", function() {
-                locationSelectedInput.value = "false"; // reset flag
-                const q = this.value.trim();
-                if (q.length < 3) {
-                    suggestionsList.innerHTML = "";
-                    suggestionsList.classList.add("d-none");
+            const locationInput = document.getElementById('location');
+            const suggestionsList = document.getElementById('suggestions');
+            const locationSelectedInput = document.getElementById('locationSelected');
+            const regionIdInput = document.getElementById('region_id');
+            const regionTypeInput = document.getElementById('region_type');
+            const regionCountryInput = document.getElementById('region_country_code');
+
+            function bindEtgAutocomplete(config) {
+                const input = config.input;
+                const list = config.list;
+                if (!input || !list) {
                     return;
                 }
-                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`)
-                    .then(r => r.json()).then(data => {
-                        suggestionsList.innerHTML = "";
-                        suggestionsList.classList.toggle("d-none", data.length === 0);
-                        data.forEach(loc => {
-                            const li = document.createElement("li");
-                            li.textContent = loc.display_name;
-                            li.className = "list-group-item";
-                            li.style.cursor = "pointer";
-                            li.onclick = () => {
-                                locationInput.value = loc.display_name;
-                                latInput.value = loc.lat;
-                                lonInput.value = loc.lon;
-                                locationSelectedInput.value = "true";
-                                suggestionsList.innerHTML = "";
-                                suggestionsList.classList.add("d-none");
-                            };
-                            suggestionsList.append(li);
+                const minChars = 1;
+                const debounceMs = 300;
+                let timer = null;
+                let abortController = null;
+                let seq = 0;
+                let selectedLabel = (config.hasSelection && input.value) ? input.value.trim() : '';
+
+                function hideList() {
+                    list.innerHTML = '';
+                    list.classList.add('d-none');
+                }
+                etgAutocompleteClosers.push(hideList);
+
+                input.addEventListener('focus', function() {
+                    etgAutocompleteClosers.forEach(function(closeFn) {
+                        if (closeFn !== hideList) {
+                            closeFn();
+                        }
+                    });
+                });
+
+                function showMessage(text) {
+                    list.innerHTML = '';
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item text-muted';
+                    li.textContent = text;
+                    list.appendChild(li);
+                    list.classList.remove('d-none');
+                }
+
+                function uniqueItems(items, keyFn) {
+                    const seen = new Set();
+                    const out = [];
+                    (items || []).forEach(function(item) {
+                        const key = keyFn(item);
+                        if (key === '' || key === 'undefined' || key === 'null' || seen.has(key)) {
+                            return;
+                        }
+                        seen.add(key);
+                        out.push(item);
+                    });
+                    return out;
+                }
+
+                function render(items) {
+                    list.innerHTML = '';
+                    items.forEach(function(item) {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.style.cursor = 'pointer';
+                        li.textContent = config.label(item);
+                        li.setAttribute('data-key', config.key(item));
+                        li.addEventListener('click', function() {
+                            selectedLabel = config.value(item);
+                            input.value = selectedLabel;
+                            input.classList.remove('is-invalid');
+                            config.onSelect(item);
+                            hideList();
                         });
-                    }).catch(console.error);
+                        list.appendChild(li);
+                    });
+                    list.classList.remove('d-none');
+                }
+
+                function fetchSuggestions(q) {
+                    const thisSeq = ++seq;
+                    if (abortController) {
+                        abortController.abort();
+                    }
+                    abortController = new AbortController();
+                    showMessage('Searching...');
+
+                    const url = etgSuggestUrl +
+                        '?query=' + encodeURIComponent(q) +
+                        '&type=' + encodeURIComponent(config.type);
+
+                    fetch(url, {
+                        signal: abortController.signal,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }).then(function(res) {
+                        return res.text().then(function(text) {
+                            var data = {};
+                            try {
+                                data = text ? JSON.parse(text) : {};
+                            } catch (parseErr) {
+                                data = { error: true };
+                            }
+                            return { ok: res.ok, data: data };
+                        });
+                    }).then(function(result) {
+                        if (thisSeq !== seq) {
+                            return;
+                        }
+                        const data = result.data;
+                        if (!result.ok || data.error) {
+                            showMessage('Unable to load suggestions');
+                            return;
+                        }
+                        const items = uniqueItems(config.pickItems(data), config.key);
+                        if (!items.length) {
+                            showMessage(config.emptyText);
+                            return;
+                        }
+                        render(items);
+                    }).catch(function(err) {
+                        if (err && err.name === 'AbortError') {
+                            return;
+                        }
+                        if (thisSeq !== seq) {
+                            return;
+                        }
+                        showMessage('Unable to load suggestions');
+                    });
+                }
+
+                input.addEventListener('input', function() {
+                    const q = this.value.trim();
+                    if (q !== selectedLabel) {
+                        config.onClear();
+                        selectedLabel = '';
+                    }
+                    if (timer) {
+                        clearTimeout(timer);
+                    }
+                    if (abortController) {
+                        abortController.abort();
+                    }
+                    if (q.length < minChars) {
+                        hideList();
+                        return;
+                    }
+                    timer = setTimeout(function() {
+                        fetchSuggestions(q);
+                    }, debounceMs);
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        hideList();
+                    }
+                });
+
+                list.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                });
+
+                document.addEventListener('click', function(e) {
+                    if (!list.contains(e.target) && e.target !== input) {
+                        hideList();
+                    }
+                });
+            }
+
+            bindEtgAutocomplete({
+                input: hotelNameInput,
+                list: hotelSuggestionsList,
+                type: 'hotels',
+                emptyText: 'No hotels found',
+                hasSelection: !!(hidInput && hidInput.value),
+                pickItems: function(data) {
+                    return Array.isArray(data.hotels) ? data.hotels : [];
+                },
+                key: function(item) {
+                    return String(item.hid || '');
+                },
+                label: function(item) {
+                    return item.name || '';
+                },
+                value: function(item) {
+                    return item.name || '';
+                },
+                onSelect: function(item) {
+                    hidInput.value = item.hid || '';
+                    etgHotelIdInput.value = item.id || '';
+                    hotelRegionIdInput.value = item.region_id || '';
+                },
+                onClear: function() {
+                    hidInput.value = '';
+                    etgHotelIdInput.value = '';
+                    hotelRegionIdInput.value = '';
+                }
             });
 
-            document.addEventListener("click", function(e) {
-                if (!suggestionsList.contains(e.target) && e.target !== locationInput) {
-                    suggestionsList.innerHTML = "";
-                    suggestionsList.classList.add("d-none");
+            bindEtgAutocomplete({
+                input: locationInput,
+                list: suggestionsList,
+                type: 'cities',
+                emptyText: 'No cities found',
+                hasSelection: !!(regionIdInput && regionIdInput.value),
+                pickItems: function(data) {
+                    const regions = Array.isArray(data.regions) ? data.regions : [];
+                    return regions.filter(function(region) {
+                        return String(region.type || '') === 'City';
+                    });
+                },
+                key: function(item) {
+                    return String(item.id != null ? item.id : '');
+                },
+                label: function(item) {
+                    const code = String(item.country_code || '').toUpperCase();
+                    const country = etgCountryNames[code] || '';
+                    return [item.name, country]
+                        .filter(function(part) { return part; })
+                        .join(', ');
+                },
+                value: function(item) {
+                    return item.name || '';
+                },
+                onSelect: function(item) {
+                    regionIdInput.value = item.id != null ? item.id : '';
+                    regionTypeInput.value = item.type || '';
+                    regionCountryInput.value = item.country_code || '';
+                    locationSelectedInput.value = 'true';
+                },
+                onClear: function() {
+                    regionIdInput.value = '';
+                    regionTypeInput.value = '';
+                    regionCountryInput.value = '';
+                    locationSelectedInput.value = 'false';
                 }
             });
 
             // Children age inputs
             const countInput = document.getElementById('children_count');
             const agesRow = document.getElementById('children-ages-row');
+            const initialChildAges = @json(old('children', request('children', [])));
 
-            function renderAges(n) {
+            function ageLabel(age) {
+                if (age === 0) return 'Under 1';
+                return age === 1 ? '1 year' : age + ' years';
+            }
+
+            function currentAgeValues() {
+                return Array.from(agesRow.querySelectorAll('select[name="children[]"]'))
+                    .map(function(sel) { return sel.value; });
+            }
+
+            function renderAges(n, presetAges) {
+                const previous = presetAges || currentAgeValues();
                 agesRow.innerHTML = '';
                 if (n < 1) {
                     agesRow.style.display = 'none';
                     return;
                 }
                 agesRow.style.display = 'flex';
+
+                const heading = document.createElement('div');
+                heading.className = 'col-12';
+                heading.innerHTML = '<p class="form-label mb-1">Ages of children</p>';
+                agesRow.append(heading);
+
                 for (let i = 1; i <= n; i++) {
+                    const selected = previous[i - 1] !== undefined && previous[i - 1] !== ''
+                        ? String(previous[i - 1])
+                        : '';
                     const col = document.createElement('div');
-                    col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
-                    col.innerHTML = `
-                        <div class="form-floating">
-                            <select name="children[]" id="child_age_${i}"
-                                    class="form-select form-select-sm border border-2 border-danger" required>
-                                <option value="" selected>Age needed</option>
-                                ${[...Array(18).keys()].map(a => `<option value="${a}">${a}</option>`).join('')}
-                            </select>
-                            <label for="child_age_${i}" class="small">Child ${i}</label>
-                        </div>`;
+                    col.className = 'col-6 col-sm-4 col-md-2';
+                    col.innerHTML =
+                        '<label for="child_age_' + i + '" class="form-label">Child ' + i + '</label>' +
+                        '<select name="children[]" id="child_age_' + i + '"' +
+                        ' class="form-control child-age-select' + (selected === '' ? ' is-empty' : '') + '" required>' +
+                        '<option value="" disabled' + (selected === '' ? ' selected' : '') + '>Select age</option>' +
+                        [...Array(18).keys()].map(function(a) {
+                            const isSel = selected === String(a) ? ' selected' : '';
+                            return '<option value="' + a + '"' + isSel + '>' + ageLabel(a) + '</option>';
+                        }).join('') +
+                        '</select>';
+                    const select = col.querySelector('select');
+                    select.addEventListener('change', function() {
+                        this.classList.toggle('is-empty', this.value === '');
+                        this.classList.remove('is-invalid');
+                    });
                     agesRow.append(col);
                 }
             }
@@ -370,7 +617,7 @@
                 this.value = v;
                 renderAges(v);
             });
-            renderAges(parseInt(countInput.value) || 0);
+            renderAges(parseInt(countInput.value) || 0, initialChildAges);
 
             // Date validation
             const checkinInput = document.getElementById('checkin');
@@ -472,9 +719,19 @@
                         hasErrors = true;
                     }
 
+                    const childAgeSelects = form.querySelectorAll('select[name="children[]"]');
+                    childAgeSelects.forEach(function(select, index) {
+                        if (select.value === '') {
+                            select.classList.add('is-invalid');
+                            errors.push('Please select the age for Child ' + (index + 1) + '.');
+                            hasErrors = true;
+                        }
+                    });
+
                     // Validate location if provided
                     const locationValue = locationInput.value.trim();
-                    const locationSelected = locationSelectedInput.value === "true";
+                    const hasRegionId = regionIdInput && regionIdInput.value !== '';
+                    const locationSelected = locationSelectedInput.value === "true" || hasRegionId;
 
                     if (locationValue !== "" && !locationSelected) {
                         locationInput.classList.add('is-invalid');
@@ -741,6 +998,49 @@
             font-weight: bold;
         }
 
+        /* Child age selects — match other form-control fields */
+        #children-ages-row .child-age-select {
+            display: block;
+            width: 100%;
+            height: calc(1.5em + 0.75rem + 2px);
+            padding: 0.375rem 2rem 0.375rem 0.75rem;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #495057;
+            background-color: #fff;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 12px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        #children-ages-row .child-age-select.is-empty {
+            color: #6c757d;
+        }
+
+        #children-ages-row .child-age-select:focus {
+            color: #495057;
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        #children-ages-row .child-age-select:invalid {
+            box-shadow: none;
+            border-color: #ced4da;
+        }
+
+        #children-ages-row .child-age-select.is-invalid,
+        #children-ages-row .child-age-select.is-invalid:invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
         /* Form control responsiveness */
         @media (max-width: 767.98px) {
 
@@ -760,12 +1060,16 @@
         }
 
         /* Suggestions list responsive */
-        #suggestions {
+        .etg-autocomplete-list,
+        #suggestions,
+        #hotel_suggestions {
             font-size: 0.9rem;
         }
 
         @media (max-width: 575.98px) {
-            #suggestions {
+            .etg-autocomplete-list,
+            #suggestions,
+            #hotel_suggestions {
                 font-size: 0.85rem;
             }
         }
