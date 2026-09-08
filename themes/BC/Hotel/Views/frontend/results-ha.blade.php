@@ -27,6 +27,12 @@
 
                 <form method="GET" action="{{ route('hotel.search') }}">
                     <input type="hidden" name="location" value="{{ request('location') }}">
+                    <input type="hidden" name="hid" value="{{ request('hid') }}">
+                    <input type="hidden" name="etg_hotel_id" value="{{ request('etg_hotel_id') }}">
+                    <input type="hidden" name="hotel_region_id" value="{{ request('hotel_region_id') }}">
+                    <input type="hidden" name="region_id" value="{{ request('region_id') }}">
+                    <input type="hidden" name="region_type" value="{{ request('region_type') }}">
+                    <input type="hidden" name="region_country_code" value="{{ request('region_country_code') }}">
                     <input type="hidden" name="checkin" value="{{ request('checkin') }}">
                     <input type="hidden" name="checkout" value="{{ request('checkout') }}">
                     <input type="hidden" name="adults" value="{{ request('adults') }}">
@@ -102,6 +108,12 @@
                         <hr>
                         <form method="GET" action="{{ route('hotel.search') }}">
                             <input type="hidden" name="location" value="{{ request('location') }}">
+                            <input type="hidden" name="hid" value="{{ request('hid') }}">
+                            <input type="hidden" name="etg_hotel_id" value="{{ request('etg_hotel_id') }}">
+                            <input type="hidden" name="hotel_region_id" value="{{ request('hotel_region_id') }}">
+                            <input type="hidden" name="region_id" value="{{ request('region_id') }}">
+                            <input type="hidden" name="region_type" value="{{ request('region_type') }}">
+                            <input type="hidden" name="region_country_code" value="{{ request('region_country_code') }}">
                             <input type="hidden" name="checkin" value="{{ request('checkin') }}">
                             <input type="hidden" name="checkout" value="{{ request('checkout') }}">
                             <input type="hidden" name="adults" value="{{ request('adults') }}">

@@ -84,20 +84,26 @@
                                     <label for="hotel_name" class="form-label">Hotel Name</label>
                                     <input type="text" id="hotel_name" name="hotel_name"
                                         class="form-control @error('hotel_name') is-invalid @enderror"
-                                        placeholder="Enter hotel name" value="{{ old('hotel_name') }}">
+                                        placeholder="Enter hotel name" value="{{ old('hotel_name') }}"
+                                        autocomplete="off">
                                     @error('hotel_name')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                    <ul id="hotel_suggestions"
+                                        class="list-group position-absolute w-100 mt-1 d-none etg-autocomplete-list"
+                                        style="max-height:200px;overflow-y:auto;z-index:1000;"></ul>
                                 </div>
                                 <div class="col-12 col-md-6 position-relative">
                                     <label for="location" class="form-label">Location</label>
                                     <input type="text" id="location" name="location"
                                         class="form-control @error('location') is-invalid @enderror"
-                                        placeholder="Where are you going?" autocomplete="off">
+                                        placeholder="Where are you going?" autocomplete="off"
+                                        value="{{ old('location') }}">
                                     @error('location')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
-                                    <ul id="suggestions" class="list-group position-absolute w-100 mt-1 d-none"
+                                    <ul id="suggestions"
+                                        class="list-group position-absolute w-100 mt-1 d-none etg-autocomplete-list"
                                         style="max-height:200px;overflow-y:auto;z-index:1000;"></ul>
                                 </div>
                             </div>
@@ -168,9 +174,20 @@
                                 </div>
                             </div>
 
-                            <input type="hidden" id="latitude" name="latitude">
-                            <input type="hidden" id="longitude" name="longitude">
-                            <input type="hidden" id="locationSelected" name="locationSelected" value="false">
+                            <input type="hidden" id="latitude" name="latitude" value="{{ old('latitude') }}">
+                            <input type="hidden" id="longitude" name="longitude" value="{{ old('longitude') }}">
+                            <input type="hidden" id="locationSelected" name="locationSelected"
+                                value="{{ old('region_id') ? 'true' : 'false' }}">
+                            <input type="hidden" id="hid" name="hid" value="{{ old('hid') }}">
+                            <input type="hidden" id="etg_hotel_id" name="etg_hotel_id"
+                                value="{{ old('etg_hotel_id') }}">
+                            <input type="hidden" id="hotel_region_id" name="hotel_region_id"
+                                value="{{ old('hotel_region_id') }}">
+                            <input type="hidden" id="region_id" name="region_id" value="{{ old('region_id') }}">
+                            <input type="hidden" id="region_type" name="region_type"
+                                value="{{ old('region_type') }}">
+                            <input type="hidden" id="region_country_code" name="region_country_code"
+                                value="{{ old('region_country_code') }}">
                         </form>
                     </div>
 
@@ -292,47 +309,250 @@
                 wrap: true
             });
 
-            // Location autocomplete & validation
-            const locationInput = document.getElementById("location");
-            const suggestionsList = document.getElementById("suggestions");
-            const latInput = document.getElementById("latitude");
-            const lonInput = document.getElementById("longitude");
-            const locationSelectedInput = document.getElementById("locationSelected");
+            const etgSuggestUrl = @json(route('hotel.suggestions'));
+            const etgCountryNames = @json(get_country_lists());
+            const etgAutocompleteClosers = [];
+            const hotelNameInput = document.getElementById('hotel_name');
+            const hotelSuggestionsList = document.getElementById('hotel_suggestions');
+            const hidInput = document.getElementById('hid');
+            const etgHotelIdInput = document.getElementById('etg_hotel_id');
+            const hotelRegionIdInput = document.getElementById('hotel_region_id');
 
-            locationInput.addEventListener("input", function() {
-                locationSelectedInput.value = "false"; // reset flag
-                const q = this.value.trim();
-                if (q.length < 3) {
-                    suggestionsList.innerHTML = "";
-                    suggestionsList.classList.add("d-none");
+            const locationInput = document.getElementById('location');
+            const suggestionsList = document.getElementById('suggestions');
+            const locationSelectedInput = document.getElementById('locationSelected');
+            const regionIdInput = document.getElementById('region_id');
+            const regionTypeInput = document.getElementById('region_type');
+            const regionCountryInput = document.getElementById('region_country_code');
+
+            function bindEtgAutocomplete(config) {
+                const input = config.input;
+                const list = config.list;
+                if (!input || !list) {
                     return;
                 }
-                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`)
-                    .then(r => r.json()).then(data => {
-                        suggestionsList.innerHTML = "";
-                        suggestionsList.classList.toggle("d-none", data.length === 0);
-                        data.forEach(loc => {
-                            const li = document.createElement("li");
-                            li.textContent = loc.display_name;
-                            li.className = "list-group-item";
-                            li.style.cursor = "pointer";
-                            li.onclick = () => {
-                                locationInput.value = loc.display_name;
-                                latInput.value = loc.lat;
-                                lonInput.value = loc.lon;
-                                locationSelectedInput.value = "true";
-                                suggestionsList.innerHTML = "";
-                                suggestionsList.classList.add("d-none");
-                            };
-                            suggestionsList.append(li);
+                const minChars = 1;
+                const debounceMs = 300;
+                let timer = null;
+                let abortController = null;
+                let seq = 0;
+                let selectedLabel = (config.hasSelection && input.value) ? input.value.trim() : '';
+
+                function hideList() {
+                    list.innerHTML = '';
+                    list.classList.add('d-none');
+                }
+                etgAutocompleteClosers.push(hideList);
+
+                input.addEventListener('focus', function() {
+                    etgAutocompleteClosers.forEach(function(closeFn) {
+                        if (closeFn !== hideList) {
+                            closeFn();
+                        }
+                    });
+                });
+
+                function showMessage(text) {
+                    list.innerHTML = '';
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item text-muted';
+                    li.textContent = text;
+                    list.appendChild(li);
+                    list.classList.remove('d-none');
+                }
+
+                function uniqueItems(items, keyFn) {
+                    const seen = new Set();
+                    const out = [];
+                    (items || []).forEach(function(item) {
+                        const key = keyFn(item);
+                        if (key === '' || key === 'undefined' || key === 'null' || seen.has(key)) {
+                            return;
+                        }
+                        seen.add(key);
+                        out.push(item);
+                    });
+                    return out;
+                }
+
+                function render(items) {
+                    list.innerHTML = '';
+                    items.forEach(function(item) {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.style.cursor = 'pointer';
+                        li.textContent = config.label(item);
+                        li.setAttribute('data-key', config.key(item));
+                        li.addEventListener('click', function() {
+                            selectedLabel = config.value(item);
+                            input.value = selectedLabel;
+                            input.classList.remove('is-invalid');
+                            config.onSelect(item);
+                            hideList();
                         });
-                    }).catch(console.error);
+                        list.appendChild(li);
+                    });
+                    list.classList.remove('d-none');
+                }
+
+                function fetchSuggestions(q) {
+                    const thisSeq = ++seq;
+                    if (abortController) {
+                        abortController.abort();
+                    }
+                    abortController = new AbortController();
+                    showMessage('Searching...');
+
+                    const url = etgSuggestUrl +
+                        '?query=' + encodeURIComponent(q) +
+                        '&type=' + encodeURIComponent(config.type);
+
+                    fetch(url, {
+                        signal: abortController.signal,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }).then(function(res) {
+                        return res.text().then(function(text) {
+                            var data = {};
+                            try {
+                                data = text ? JSON.parse(text) : {};
+                            } catch (parseErr) {
+                                data = { error: true };
+                            }
+                            return { ok: res.ok, data: data };
+                        });
+                    }).then(function(result) {
+                        if (thisSeq !== seq) {
+                            return;
+                        }
+                        const data = result.data;
+                        if (!result.ok || data.error) {
+                            showMessage('Unable to load suggestions');
+                            return;
+                        }
+                        const items = uniqueItems(config.pickItems(data), config.key);
+                        if (!items.length) {
+                            showMessage(config.emptyText);
+                            return;
+                        }
+                        render(items);
+                    }).catch(function(err) {
+                        if (err && err.name === 'AbortError') {
+                            return;
+                        }
+                        if (thisSeq !== seq) {
+                            return;
+                        }
+                        showMessage('Unable to load suggestions');
+                    });
+                }
+
+                input.addEventListener('input', function() {
+                    const q = this.value.trim();
+                    if (q !== selectedLabel) {
+                        config.onClear();
+                        selectedLabel = '';
+                    }
+                    if (timer) {
+                        clearTimeout(timer);
+                    }
+                    if (abortController) {
+                        abortController.abort();
+                    }
+                    if (q.length < minChars) {
+                        hideList();
+                        return;
+                    }
+                    timer = setTimeout(function() {
+                        fetchSuggestions(q);
+                    }, debounceMs);
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        hideList();
+                    }
+                });
+
+                list.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                });
+
+                document.addEventListener('click', function(e) {
+                    if (!list.contains(e.target) && e.target !== input) {
+                        hideList();
+                    }
+                });
+            }
+
+            bindEtgAutocomplete({
+                input: hotelNameInput,
+                list: hotelSuggestionsList,
+                type: 'hotels',
+                emptyText: 'No hotels found',
+                hasSelection: !!(hidInput && hidInput.value),
+                pickItems: function(data) {
+                    return Array.isArray(data.hotels) ? data.hotels : [];
+                },
+                key: function(item) {
+                    return String(item.hid || '');
+                },
+                label: function(item) {
+                    return item.name || '';
+                },
+                value: function(item) {
+                    return item.name || '';
+                },
+                onSelect: function(item) {
+                    hidInput.value = item.hid || '';
+                    etgHotelIdInput.value = item.id || '';
+                    hotelRegionIdInput.value = item.region_id || '';
+                },
+                onClear: function() {
+                    hidInput.value = '';
+                    etgHotelIdInput.value = '';
+                    hotelRegionIdInput.value = '';
+                }
             });
 
-            document.addEventListener("click", function(e) {
-                if (!suggestionsList.contains(e.target) && e.target !== locationInput) {
-                    suggestionsList.innerHTML = "";
-                    suggestionsList.classList.add("d-none");
+            bindEtgAutocomplete({
+                input: locationInput,
+                list: suggestionsList,
+                type: 'cities',
+                emptyText: 'No cities found',
+                hasSelection: !!(regionIdInput && regionIdInput.value),
+                pickItems: function(data) {
+                    const regions = Array.isArray(data.regions) ? data.regions : [];
+                    return regions.filter(function(region) {
+                        return String(region.type || '') === 'City';
+                    });
+                },
+                key: function(item) {
+                    return String(item.id != null ? item.id : '');
+                },
+                label: function(item) {
+                    const code = String(item.country_code || '').toUpperCase();
+                    const country = etgCountryNames[code] || '';
+                    return [item.name, country]
+                        .filter(function(part) { return part; })
+                        .join(', ');
+                },
+                value: function(item) {
+                    return item.name || '';
+                },
+                onSelect: function(item) {
+                    regionIdInput.value = item.id != null ? item.id : '';
+                    regionTypeInput.value = item.type || '';
+                    regionCountryInput.value = item.country_code || '';
+                    locationSelectedInput.value = 'true';
+                },
+                onClear: function() {
+                    regionIdInput.value = '';
+                    regionTypeInput.value = '';
+                    regionCountryInput.value = '';
+                    locationSelectedInput.value = 'false';
                 }
             });
 
@@ -510,7 +730,8 @@
 
                     // Validate location if provided
                     const locationValue = locationInput.value.trim();
-                    const locationSelected = locationSelectedInput.value === "true";
+                    const hasRegionId = regionIdInput && regionIdInput.value !== '';
+                    const locationSelected = locationSelectedInput.value === "true" || hasRegionId;
 
                     if (locationValue !== "" && !locationSelected) {
                         locationInput.classList.add('is-invalid');
@@ -839,12 +1060,16 @@
         }
 
         /* Suggestions list responsive */
-        #suggestions {
+        .etg-autocomplete-list,
+        #suggestions,
+        #hotel_suggestions {
             font-size: 0.9rem;
         }
 
         @media (max-width: 575.98px) {
-            #suggestions {
+            .etg-autocomplete-list,
+            #suggestions,
+            #hotel_suggestions {
                 font-size: 0.85rem;
             }
         }
