@@ -479,6 +479,9 @@ class HotelHController extends Controller
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
     {
+        Log::info('REGION DEBUG 1 - entered getHotelIdsForRegion', [
+            'region_id' => $regionId
+        ]);
         if ($regionId <= 0) {
             return [];
         }
@@ -527,6 +530,11 @@ class HotelHController extends Controller
         $startedAt = microtime(true);
 
         try {
+            Log::info('REGION DEBUG 2 - before RateHawk request', [
+                'region_id' => $regionId,
+                'url' => $this->getApiUrl() . 'search/serp/region/',
+            ]);
+
             $response = Http::timeout(30)
                 ->withOptions($this->httpOptions)
                 ->withBasicAuth(
@@ -540,6 +548,10 @@ class HotelHController extends Controller
                     $this->getApiUrl() . 'search/serp/region/',
                     $body
                 );
+
+            Log::info('REGION DEBUG 3 - after RateHawk request', [
+                'status' => $response->status()
+            ]);
 
             $durationMs = round((microtime(true) - $startedAt) * 1000);
             $json = $response->json();
@@ -606,6 +618,12 @@ class HotelHController extends Controller
      */
     private function applyHaSearchConstraints($query, array $params, bool $applyRegionOrder = false)
     {
+        Log::info('APPLY DEBUG 1 - entered', [
+            'region_id' => $params['region_id'] ?? null,
+            'hid' => $params['hid'] ?? null,
+            'etg_hotel_id' => $params['etg_hotel_id'] ?? null,
+        ]);
+
         if (!empty($params['hid'])) {
             $query->where('hid', (int) $params['hid']);
         } elseif (!empty($params['etg_hotel_id'])) {
@@ -619,10 +637,20 @@ class HotelHController extends Controller
         }
 
         if (!empty($params['region_id'])) {
+
+            Log::info('APPLY DEBUG 2 - before getHotelIdsForRegion', [
+                'region_id' => $params['region_id']
+            ]);
+
             $regionHotelIds = $this->getHotelIdsForRegion(
                 (int) $params['region_id'],
                 $params
             );
+
+            Log::info('APPLY DEBUG 3 - after getHotelIdsForRegion', [
+                'count' => count($regionHotelIds)
+            ]);
+
             if (empty($regionHotelIds)) {
                 $query->whereRaw('1 = 0');
             } else {
