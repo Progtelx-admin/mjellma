@@ -28,12 +28,11 @@
                  FILTERS
             ================================================================= --}}
             <div class="col-md-3 mb-5 filter-section sticky-top d-none d-md-block" style="top:1rem;">
-                <h5 class="fw-bold">Filters</h5>
-                <hr>
+                <h5 class="fw-bold filter-heading">Filters</h5>
+                <hr class="filter-divider">
 
                 <form method="GET" action="{{ route('hotel.search') }}">
-                    {{-- Preserve query --}}
-                    <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
+                    {{-- Preserve home search query --}}
                     <input type="hidden" name="location" value="{{ request('location') }}">
                     <input type="hidden" name="checkin" value="{{ request('checkin') }}">
                     <input type="hidden" name="checkout" value="{{ request('checkout') }}">
@@ -46,6 +45,9 @@
                     @foreach (request('children', []) as $age)
                         <input type="hidden" name="children[]" value="{{ $age }}">
                     @endforeach
+
+                    @include('Hotel::frontend.partials.filter-search-context', ['idPrefix' => 'desktop'])
+                    <hr class="filter-divider">
 
                     {{-- Price --}}
                     <div class="mb-4">
@@ -101,10 +103,9 @@
             <div class="col-12 d-md-none">
                 <div class="collapse" id="mobileFilters">
                     <div class="card card-body mb-3 mobile-filters-card">
-                        <h5 class="fw-bold mb-3">Filters</h5>
+                        <h5 class="fw-bold mb-3 filter-heading">Filters</h5>
                         <form method="GET" action="{{ route('hotel.search') }}">
-                            {{-- Preserve query --}}
-                            <input type="hidden" name="hotel_name" value="{{ request('hotel_name') }}">
+                            {{-- Preserve home search query --}}
                             <input type="hidden" name="location" value="{{ request('location') }}">
                             <input type="hidden" name="checkin" value="{{ request('checkin') }}">
                             <input type="hidden" name="checkout" value="{{ request('checkout') }}">
@@ -117,6 +118,9 @@
                             @foreach (request('children', []) as $age)
                                 <input type="hidden" name="children[]" value="{{ $age }}">
                             @endforeach
+
+                            @include('Hotel::frontend.partials.filter-search-context', ['idPrefix' => 'mobile'])
+                            <hr class="filter-divider">
 
                             {{-- Price --}}
                             <div class="mb-4">
@@ -184,22 +188,55 @@
             ================================================================= --}}
             <div class="col-md-9">
                 {{-- Header --}}
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <div>
+                <div class="results-toolbar mb-3">
+                    <div class="results-toolbar__count">
                         <span class="text-muted" id="results-counter">
                             Among <span class="fw-semibold"
                                 id="total-count">{{ $totalHotels ?? $hotels->count() }}</span> accommodations
                         </span>
                     </div>
 
-                    {{-- View toggle - Hidden on mobile --}}
-                    <div class="view-toggle d-flex d-none d-md-flex">
-                        <button id="extended-view-btn" type="button" class="view-tab">
-                            <i class="fa fa-list me-2"></i> Extended
-                        </button>
-                        <button id="compact-view-btn" type="button" class="view-tab active ms-4">
-                            <i class="fa fa-th me-2"></i> Compact
-                        </button>
+                    <div class="results-toolbar__controls">
+                        <div class="view-toggle d-none d-md-flex" role="group" aria-label="Result view">
+                            <button id="extended-view-btn" type="button" class="view-tab" aria-label="Extended list view"
+                                title="Extended">
+                                <i class="fa fa-list-ul" aria-hidden="true"></i>
+                            </button>
+                            <button id="compact-view-btn" type="button" class="view-tab active" aria-label="Compact grid view"
+                                title="Compact">
+                                <i class="fa fa-th" aria-hidden="true"></i>
+                            </button>
+                        </div>
+
+                        <div class="sort-by-wrap">
+                            <button type="button" id="sort-by-btn" class="sort-by-btn" aria-expanded="false"
+                                aria-haspopup="listbox">
+                                <span>Sort by: <strong id="sort-by-label">Default</strong></span>
+                                <i class="fa fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                            <ul id="sort-by-menu" class="sort-by-menu d-none" role="listbox">
+                                <li role="option">
+                                    <button type="button" class="sort-by-option active" data-sort="default">
+                                        Default
+                                    </button>
+                                </li>
+                                <li role="option">
+                                    <button type="button" class="sort-by-option" data-sort="price_asc">
+                                        Price (Low to High)
+                                    </button>
+                                </li>
+                                <li role="option">
+                                    <button type="button" class="sort-by-option" data-sort="price_desc">
+                                        Price (High to Low)
+                                    </button>
+                                </li>
+                                <li role="option">
+                                    <button type="button" class="sort-by-option" data-sort="rating">
+                                        Guest Rating (High to Low)
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -298,75 +335,131 @@
             const list = document.getElementById('hotel-list');
             const extendedBtn = document.getElementById('extended-view-btn');
             const compactBtn = document.getElementById('compact-view-btn');
+            let currentSort = 'default';
 
             function setView(mode) {
+                if (!list) return;
                 list.classList.toggle('extended-view', mode === 'extended');
                 list.classList.toggle('compact-view', mode === 'compact');
-                extendedBtn.classList.toggle('active', mode === 'extended');
-                compactBtn.classList.toggle('active', mode === 'compact');
+                if (extendedBtn) extendedBtn.classList.toggle('active', mode === 'extended');
+                if (compactBtn) compactBtn.classList.toggle('active', mode === 'compact');
             }
 
-            // Guard: only attach handlers if buttons exist (hidden on mobile)
             if (extendedBtn && compactBtn) {
                 extendedBtn.addEventListener('click', () => setView('extended'));
                 compactBtn.addEventListener('click', () => setView('compact'));
             }
 
-            // Sort hotels by availability (available first)
-            function sortHotelsByAvailability() {
-                const hotelList = document.getElementById('hotel-list');
-                const hotelListMobile = document.getElementById('hotel-list-mobile');
-
-                // Sort desktop list
-                if (hotelList) {
-                    const hotels = Array.from(hotelList.children);
-                    hotels.sort((a, b) => {
-                        const aPrice = a.querySelector('.hotel-listcard__price');
-                        const bPrice = b.querySelector('.hotel-listcard__price');
-
-                        if (!aPrice || !bPrice) return 0;
-
-                        const aText = aPrice.textContent.trim();
-                        const bText = bPrice.textContent.trim();
-
-                        // Available hotels (with price) come first
-                        const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
-                        const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
-
-                        if (aAvailable && !bAvailable) return -1; // a comes first
-                        if (!aAvailable && bAvailable) return 1; // b comes first
-                        return 0; // keep original order
-                    });
-
-                    // Re-append sorted hotels
-                    hotels.forEach(hotel => hotelList.appendChild(hotel));
+            function parseCardPrice(card) {
+                const attr = card.getAttribute('data-hotel-price');
+                if (attr !== null && attr !== '' && !Number.isNaN(parseFloat(attr))) {
+                    return parseFloat(attr);
                 }
-
-                // Sort mobile list
-                if (hotelListMobile) {
-                    const hotelsMobile = Array.from(hotelListMobile.children);
-                    hotelsMobile.sort((a, b) => {
-                        const aPrice = a.querySelector('.hotel-listcard__price');
-                        const bPrice = b.querySelector('.hotel-listcard__price');
-
-                        if (!aPrice || !bPrice) return 0;
-
-                        const aText = aPrice.textContent.trim();
-                        const bText = bPrice.textContent.trim();
-
-                        // Available hotels (with price) come first
-                        const aAvailable = aText.includes('From') && !aText.includes('No rooms available');
-                        const bAvailable = bText.includes('From') && !bText.includes('No rooms available');
-
-                        if (aAvailable && !bAvailable) return -1; // a comes first
-                        if (!aAvailable && bAvailable) return 1; // b comes first
-                        return 0; // keep original order
-                    });
-
-                    // Re-append sorted hotels
-                    hotelsMobile.forEach(hotel => hotelListMobile.appendChild(hotel));
-                }
+                const badge = card.querySelector('.grid-price-badge');
+                const priceEl = card.querySelector('.hotel-listcard__price');
+                const text = ((badge && badge.textContent) || (priceEl && priceEl.textContent) || '').replace(/,/g, '');
+                const match = text.match(/(\d+(\.\d+)?)/);
+                return match ? parseFloat(match[1]) : null;
             }
+
+            function isCardAvailable(card) {
+                const price = parseCardPrice(card);
+                const priceText = ((card.querySelector('.hotel-listcard__price') &&
+                    card.querySelector('.hotel-listcard__price').textContent) || '').trim();
+                if (priceText.includes('No rooms available')) return false;
+                return price !== null;
+            }
+
+            function compareCards(a, b, sortKey) {
+                if (sortKey === 'price_asc' || sortKey === 'price_desc') {
+                    const aPrice = parseCardPrice(a);
+                    const bPrice = parseCardPrice(b);
+                    if (aPrice === null && bPrice === null) return 0;
+                    if (aPrice === null) return 1;
+                    if (bPrice === null) return -1;
+                    return sortKey === 'price_asc' ? aPrice - bPrice : bPrice - aPrice;
+                }
+
+                if (sortKey === 'rating') {
+                    const aRating = parseFloat(a.getAttribute('data-hotel-rating') || '0');
+                    const bRating = parseFloat(b.getAttribute('data-hotel-rating') || '0');
+                    return bRating - aRating;
+                }
+
+                // default: same as before — available hotels first, then original load order
+                const aAvail = isCardAvailable(a);
+                const bAvail = isCardAvailable(b);
+                if (aAvail && !bAvail) return -1;
+                if (!aAvail && bAvail) return 1;
+                const aIndex = parseInt(a.getAttribute('data-load-index') || '0', 10);
+                const bIndex = parseInt(b.getAttribute('data-load-index') || '0', 10);
+                return aIndex - bIndex;
+            }
+
+            function ensureLoadIndexes(container) {
+                if (!container) return;
+                Array.from(container.children).forEach((card, index) => {
+                    if (!card.hasAttribute('data-load-index')) {
+                        card.setAttribute('data-load-index', String(index));
+                    }
+                });
+            }
+
+            function sortHotelLists(sortKey = currentSort) {
+                currentSort = sortKey;
+                const containers = [
+                    document.getElementById('hotel-list'),
+                    document.getElementById('hotel-list-mobile'),
+                ];
+
+                containers.forEach((container) => {
+                    if (!container) return;
+                    ensureLoadIndexes(container);
+                    const cards = Array.from(container.children);
+                    cards.sort((a, b) => compareCards(a, b, sortKey));
+                    cards.forEach((card) => container.appendChild(card));
+                });
+            }
+
+            function sortHotelsByAvailability() {
+                sortHotelLists(currentSort);
+            }
+
+            const sortBtn = document.getElementById('sort-by-btn');
+            const sortMenu = document.getElementById('sort-by-menu');
+            const sortLabel = document.getElementById('sort-by-label');
+
+            if (sortBtn && sortMenu) {
+                sortBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const open = !sortMenu.classList.contains('d-none');
+                    sortMenu.classList.toggle('d-none', open);
+                    sortBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+                });
+
+                sortMenu.querySelectorAll('.sort-by-option').forEach((option) => {
+                    option.addEventListener('click', function() {
+                        const sortKey = this.getAttribute('data-sort');
+                        const label = this.textContent.trim();
+                        sortMenu.querySelectorAll('.sort-by-option').forEach((btn) => btn.classList.remove('active'));
+                        this.classList.add('active');
+                        if (sortLabel) sortLabel.textContent = label;
+                        sortMenu.classList.add('d-none');
+                        sortBtn.setAttribute('aria-expanded', 'false');
+                        sortHotelLists(sortKey);
+                    });
+                });
+
+                document.addEventListener('click', function(e) {
+                    if (!sortMenu.contains(e.target) && e.target !== sortBtn && !sortBtn.contains(e.target)) {
+                        sortMenu.classList.add('d-none');
+                        sortBtn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+
+            ensureLoadIndexes(document.getElementById('hotel-list'));
+            ensureLoadIndexes(document.getElementById('hotel-list-mobile'));
 
             // Progressive loading
             @if (isset($searchHash))
@@ -620,39 +713,134 @@
             }
         }
 
-        /* Toggle buttons */
+        /* Results toolbar */
+        .results-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .results-toolbar__controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-left: auto;
+        }
+
+        .view-toggle {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
         .view-tab {
             background: none;
             border: none;
-            padding: 0;
+            padding: 0 0 6px;
             margin: 0;
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: #0d1b50;
-            display: flex;
+            color: #ff7a1a;
+            display: inline-flex;
             align-items: center;
-            gap: .45rem;
+            justify-content: center;
             position: relative;
             cursor: pointer;
+            line-height: 1;
         }
 
         .view-tab i {
             color: #ff7a1a;
-            font-size: 1.15rem;
-        }
-
-        .view-toggle .view-tab+.view-tab {
-            margin-left: 2rem;
+            font-size: 1.25rem;
         }
 
         .view-tab.active::after {
             content: "";
             position: absolute;
             left: 0;
-            bottom: -6px;
-            width: 100%;
+            right: 0;
+            bottom: 0;
             height: 3px;
             background: #ff7a1a;
+            border-radius: 2px;
+        }
+
+        .sort-by-wrap {
+            position: relative;
+        }
+
+        .sort-by-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border: 1px solid #c9a07a;
+            border-radius: 8px;
+            padding: 8px 14px;
+            color: #222;
+            font-size: 0.95rem;
+            line-height: 1.2;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .sort-by-btn strong {
+            font-weight: 700;
+        }
+
+        .sort-by-btn .fa-chevron-down {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .sort-by-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            min-width: 230px;
+            margin: 0;
+            padding: 8px 0;
+            list-style: none;
+            background: #fff;
+            border: 1px solid #ececec;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            z-index: 20;
+        }
+
+        .sort-by-option {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            text-align: left;
+            padding: 10px 16px;
+            color: #222;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        .sort-by-option:hover,
+        .sort-by-option.active {
+            color: #ff7a1a;
+            background: #fff7f0;
+        }
+
+        @media (max-width: 767.98px) {
+            .results-toolbar__controls {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .sort-by-btn {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .sort-by-menu {
+                left: 0;
+                right: 0;
+                min-width: 0;
+            }
         }
 
         /* Extended card (list) */
@@ -1006,6 +1194,112 @@
             border-width: 0 3px 3px 0;
             transform: rotate(45deg);
         }
+
+        .filter-heading {
+            color: #0d1b50;
+        }
+
+        .filter-section {
+            top: 1rem;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .filter-section h6,
+        .mobile-filters-card h6 {
+            color: #0d1b50;
+        }
+
+        .filter-divider {
+            border: 0;
+            border-top: 1px solid #e6e6e6;
+            margin: 14px 0;
+            opacity: 1;
+        }
+
+        .search-summary {
+            padding: 2px 0 4px;
+        }
+
+        .search-summary__hotel,
+        .search-summary__location,
+        .search-summary__occupancy {
+            color: #0d1b50;
+            font-size: 0.95rem;
+            font-weight: 700;
+            word-break: break-word;
+        }
+
+        .search-summary__hotel,
+        .search-summary__location {
+            margin-bottom: 6px;
+        }
+
+        .search-summary__dates {
+            color: #555;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .hotel-name-search {
+            background: #f3f3f3;
+            border-radius: 10px;
+            padding: 12px 12px 14px;
+        }
+
+        .hotel-name-search__label {
+            display: block;
+            color: #c47a3a;
+            font-size: 0.92rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .hotel-name-search__field {
+            position: relative;
+        }
+
+        .hotel-name-search__field .fa-search {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9aa0a6;
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+
+        .hotel-name-search__input {
+            padding-left: 36px;
+            padding-right: 32px;
+            border-radius: 8px;
+            border: 1px solid #d9d9d9;
+            background: #fff;
+            height: 42px;
+        }
+
+        .hotel-name-search__input:focus {
+            border-color: #c47a3a;
+            box-shadow: 0 0 0 0.15rem rgba(196, 122, 58, 0.15);
+        }
+
+        .hotel-name-search__clear {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: #888;
+            font-size: 1.25rem;
+            line-height: 1;
+            padding: 0 4px;
+            cursor: pointer;
+        }
+
+        .hotel-name-search__clear:hover {
+            color: #333;
+        }
     </style>
 
     <script>
@@ -1022,6 +1316,23 @@
                     filterToggle.classList.remove('rotated');
                 });
             }
+
+            document.querySelectorAll('.hotel-name-search').forEach(function(wrap) {
+                const input = wrap.querySelector('.hotel-name-search__input');
+                const clearBtn = wrap.querySelector('.hotel-name-search__clear');
+                if (!input || !clearBtn) return;
+
+                const toggleClear = function() {
+                    clearBtn.classList.toggle('d-none', input.value.trim() === '');
+                };
+
+                input.addEventListener('input', toggleClear);
+                clearBtn.addEventListener('click', function() {
+                    input.value = '';
+                    toggleClear();
+                    input.focus();
+                });
+            });
 
             // Initialize map when modal is shown
             const mapModal = document.getElementById('mapModal');
