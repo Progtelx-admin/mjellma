@@ -7,6 +7,7 @@ use Modules\Core\Models\Settings;
 
 class SettingClass extends BaseSettingsClass
 {
+    
     public static function getSettingPages()
     {
         $configs = [
