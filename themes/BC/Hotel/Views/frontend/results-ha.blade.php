@@ -83,7 +83,7 @@
                         <label class="custom-checkbox">
                             <input type="hidden" name="breakfast_included" value="0">
                             <input type="checkbox" id="breakfast_included" name="breakfast_included" value="1"
-                                @if (!request()->has('breakfast_included') || request('breakfast_included')) checked @endif>
+                                @if (request()->boolean('breakfast_included')) checked @endif>
                             <span class="checkmark"></span> Breakfast Included
                         </label>
                     </div>
@@ -173,7 +173,7 @@
                                 <label class="custom-checkbox">
                                     <input type="hidden" name="breakfast_included" value="0">
                                     <input type="checkbox" id="mobile_breakfast_included" name="breakfast_included"
-                                        value="1" @if (!request()->has('breakfast_included') || request('breakfast_included')) checked @endif>
+                                        value="1" @if (request()->boolean('breakfast_included')) checked @endif>
                                     <span class="checkmark"></span> Breakfast Included
                                 </label>
                             </div>

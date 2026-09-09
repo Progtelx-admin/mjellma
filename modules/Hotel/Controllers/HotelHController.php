@@ -666,9 +666,9 @@ class HotelHController extends Controller
 
         try {
             // Set breakfast_included to true by default if not provided
-            if (!$request->has('breakfast_included')) {
-                $request->merge(['breakfast_included' => true]);
-            }
+            // if (!$request->has('breakfast_included')) {
+            //   $request->merge(['breakfast_included' => true]);
+            // } 
 
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
