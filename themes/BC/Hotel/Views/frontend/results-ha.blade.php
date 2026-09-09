@@ -41,7 +41,7 @@
                     <input type="hidden" name="longitude" value="{{ request('longitude') }}">
                     <input type="hidden" name="currency" value="{{ request('currency', 'EUR') }}">
                     <input type="hidden" name="children_count" value="{{ request('children_count', 0) }}">
-                    <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ request('sort_by', 'popularity') }}">
+                    <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ in_array(request('sort_by'), ['price_low', 'price_high', 'rating'], true) ? request('sort_by') : 'default' }}">
                     @foreach (request('children', []) as $age)
                         <input type="hidden" name="children[]" value="{{ $age }}">
                     @endforeach
@@ -122,7 +122,7 @@
                             <input type="hidden" name="longitude" value="{{ request('longitude') }}">
                             <input type="hidden" name="currency" value="{{ request('currency', 'EUR') }}">
                             <input type="hidden" name="children_count" value="{{ request('children_count', 0) }}">
-                            <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ request('sort_by', 'popularity') }}">
+                            <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ in_array(request('sort_by'), ['price_low', 'price_high', 'rating'], true) ? request('sort_by') : 'default' }}">
                             @foreach (request('children', []) as $age)
                                 <input type="hidden" name="children[]" value="{{ $age }}">
                             @endforeach
@@ -201,16 +201,17 @@
                     $pageHotelCount = $hotels->count();
                     $totalHotelCount = $totalHotels ?? $pageHotelCount;
                     $resultWord = $pageHotelCount === 1 ? 'result' : 'results';
-                    $sortBy = request('sort_by', 'popularity');
+                    $sortBy = request('sort_by', 'default');
                     $sortLabels = [
-                        'popularity' => 'Popularity',
+                        'default' => 'Default',
                         'price_low' => 'Price (Low to High)',
                         'price_high' => 'Price (High to Low)',
-                        'distance' => 'Closest to City Center',
                         'rating' => 'Guest Rating (High to Low)',
-                        'date' => 'Date',
                     ];
-                    $sortLabel = $sortLabels[$sortBy] ?? 'Popularity';
+                    if (!isset($sortLabels[$sortBy]) || $sortBy === 'popularity') {
+                        $sortBy = 'default';
+                    }
+                    $sortLabel = $sortLabels[$sortBy];
                 @endphp
                 {{-- Header --}}
                 <div class="results-toolbar">
@@ -244,12 +245,10 @@
                                 <i class="fa fa-chevron-down" aria-hidden="true"></i>
                             </button>
                             <ul class="sort-by-menu d-none" id="sort-by-menu">
-                                <li data-value="popularity" @class(['is-selected' => $sortBy === 'popularity'])>Popularity</li>
+                                <li data-value="default" @class(['is-selected' => $sortBy === 'default'])>Default</li>
                                 <li data-value="price_low" @class(['is-selected' => $sortBy === 'price_low'])>Price (Low to High)</li>
                                 <li data-value="price_high" @class(['is-selected' => $sortBy === 'price_high'])>Price (High to Low)</li>
-                                <li data-value="distance" @class(['is-selected' => $sortBy === 'distance'])>Closest to City Center</li>
                                 <li data-value="rating" @class(['is-selected' => $sortBy === 'rating'])>Guest Rating (High to Low)</li>
-                                <li data-value="date" @class(['is-selected' => $sortBy === 'date'])>Date</li>
                             </ul>
                         </div>
                     </div>
@@ -374,15 +373,14 @@
             const searchLat = @json(request()->filled('latitude') ? (float) request('latitude') : null);
             const searchLng = @json(request()->filled('longitude') ? (float) request('longitude') : null);
             const sortLabels = {
-                popularity: 'Popularity',
+                default: 'Default',
+                popularity: 'Default',
                 price_low: 'Price (Low to High)',
                 price_high: 'Price (High to Low)',
-                distance: 'Closest to City Center',
-                rating: 'Guest Rating (High to Low)',
-                date: 'Date'
+                rating: 'Guest Rating (High to Low)'
             };
-            let currentSort = @json(request('sort_by', 'popularity'));
-            if (!sortLabels[currentSort]) currentSort = 'popularity';
+            let currentSort = @json(request('sort_by', 'default'));
+            if (!sortLabels[currentSort] || currentSort === 'popularity') currentSort = 'default';
 
             function parseCardPrice(card) {
                 const raw = card.getAttribute('data-hotel-price');
@@ -441,7 +439,7 @@
                     const bIdx = parseInt(b.dataset.hotelIndex || '0', 10);
                     return aIdx - bIdx;
                 }
-                // Popularity: available hotels first (existing behaviour)
+                // Default: available hotels first (existing behaviour)
                 const aAvailable = isCardAvailable(a);
                 const bAvailable = isCardAvailable(b);
                 if (aAvailable && !bAvailable) return -1;
