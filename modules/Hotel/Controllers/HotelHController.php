@@ -479,6 +479,8 @@ class HotelHController extends Controller
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
     {
+        ini_set('memory_limit', '512M');
+
         Log::info('REGION DEBUG 1 - entered getHotelIdsForRegion', [
             'region_id' => $regionId
         ]);
