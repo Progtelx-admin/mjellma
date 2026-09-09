@@ -20,6 +20,7 @@ Route::get('/hotel/test-api-credentials', [HotelHController::class, 'testApiCred
 // list & search
 Route::get('/', [HotelHController::class, 'showHotels'])->name('hotel.show');
 Route::get('/hotels/search', [HotelHController::class, 'searchHotels'])->name('hotel.search');
+Route::get('/hotels/map', [HotelHController::class, 'mapHotels'])->name('hotel.map');
 Route::get('/hotel-suggestions', [HotelHController::class, 'getHotelSuggestions'])->name('hotel.suggestions');
 
 // **PREBOOK** (must come before the wildcard `{id}`)

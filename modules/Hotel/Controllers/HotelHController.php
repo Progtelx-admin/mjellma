@@ -661,14 +661,23 @@ class HotelHController extends Controller
             'rooms' => $request->input('rooms'),
             'children_count' => $request->input('children_count'),
         ]);
-        // Extend execution time for large dataset searches
-        set_time_limit(120);
 
         try {
             // Set breakfast_included to true by default if not provided
             // if (!$request->has('breakfast_included')) {
             //   $request->merge(['breakfast_included' => true]);
             // } 
+
+            Log::info('DEBUG STEP 1 - entered try');
+
+            // Extend execution time if allowed by server
+            if (function_exists('set_time_limit')) {
+                set_time_limit(120);
+            }
+
+            Log::info('DEBUG STEP 2 - after set_time_limit');
+
+            Log::info('DEBUG STEP 3 - before validation');
 
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
@@ -697,6 +706,8 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
                 'chunk' => 'nullable|integer',
             ]);
+
+            Log::info('DEBUG STEP 4 - after validation');
 
             // 2) Build cache key including both count and ages
             $searchHash = md5(json_encode([
@@ -729,17 +740,32 @@ class HotelHController extends Controller
                 return $this->loadHotelChunk($request, $searchHash, $childAges);
             }
 
+            Log::info('DEBUG STEP 5 - before haSearchParamsFromRequest');
+
             // 4) Get hotels from database immediately (no API calls)
             $haParams = $this->haSearchParamsFromRequest($request);
+
+            Log::info('DEBUG STEP 6 - after haSearchParamsFromRequest', [
+                'haParams' => $haParams
+            ]);
+
+            Log::info('DEBUG STEP 7 - before applyHaSearchConstraints');
+
             $hotelQuery = $this->applyHaSearchConstraints(
                 DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
                 $haParams,
                 true
             );
+            Log::info('DEBUG STEP 8 - after applyHaSearchConstraints');
 
+            Log::info('DEBUG STEP 9 - before hotel query get');
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
             $hotels = $hotelQuery->limit(50)->get();
+
+            Log::info('DEBUG STEP 10 - hotels loaded', [
+                'count' => $hotels->count()
+            ]);
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -801,10 +827,101 @@ class HotelHController extends Controller
                 'isLoading' => false, // Show hotels immediately
                 'loadMore' => $totalCount > 50,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('Error searching hotels', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'type' => get_class($e),
+            ]);
+
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Load hotels inside the visible map viewport from the local hotels table.
+     * Isolated from hotel search: does not change search constraints and does not call RateHawk.
+     */
+    public function mapHotels(Request $request)
+    {
+        $request->validate([
+            'north' => 'required|numeric',
+            'south' => 'required|numeric',
+            'east' => 'required|numeric',
+            'west' => 'required|numeric',
+            'zoom' => 'nullable|numeric|min:0|max:22',
+        ]);
+
+        $north = min(90.0, max(-90.0, (float) $request->input('north')));
+        $south = min(90.0, max(-90.0, (float) $request->input('south')));
+        $east = $this->normalizeMapLongitude((float) $request->input('east'));
+        $west = $this->normalizeMapLongitude((float) $request->input('west'));
+        $zoom = (float) $request->input('zoom', 10);
+
+        if ($south > $north) {
+            [$south, $north] = [$north, $south];
+        }
+
+        $limit = 500;
+        $idStride = 1;
+        if ($zoom < 4) {
+            $limit = 200;
+            $idStride = 80;
+        } elseif ($zoom < 6) {
+            $limit = 280;
+            $idStride = 25;
+        } elseif ($zoom < 8) {
+            $limit = 400;
+            $idStride = 8;
+        } elseif ($zoom < 11) {
+            $limit = 500;
+            $idStride = 2;
+        } elseif ($zoom < 14) {
+            $limit = 700;
+        } else {
+            $limit = 800;
+        }
+
+        $query = DB::table('hotels')
+            ->select('hotel_id', 'hid', 'name', 'latitude', 'longitude', 'star_rating', 'address')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', '')
+            ->where('longitude', '!=', '')
+            ->whereBetween('latitude', [$south, $north]);
+
+        if ($west <= $east) {
+            $query->whereBetween('longitude', [$west, $east]);
+        } else {
+            $query->where(function ($q) use ($west, $east) {
+                $q->where('longitude', '>=', $west)
+                    ->orWhere('longitude', '<=', $east);
+            });
+        }
+
+        if ($idStride > 1) {
+            $query->whereRaw('MOD(id, ?) = 0', [$idStride]);
+        }
+
+        $hotels = $query->limit($limit)->get();
+
+        return response()->json([
+            'hotels' => $hotels,
+            'count' => $hotels->count(),
+        ]);
+    }
+
+    private function normalizeMapLongitude(float $lng): float
+    {
+        $lng = fmod($lng, 360);
+        if ($lng > 180) {
+            $lng -= 360;
+        } elseif ($lng < -180) {
+            $lng += 360;
+        }
+
+        return $lng;
     }
 
     private function loadHotelChunk(Request $request, $searchHash, $childAges)
