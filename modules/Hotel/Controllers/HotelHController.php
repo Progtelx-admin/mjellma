@@ -470,61 +470,134 @@ class HotelHController extends Controller
             'rooms' => $request->input('rooms'),
             'children_count' => $request->input('children_count'),
             'children' => $request->input('children'),
+            'currency' => $request->input('currency', 'EUR'),
         ];
     }
 
     /**
      * Ranked ETG hotel IDs for a city/region. Used by Search-by-Region.
      */
-    private function getHotelIdsForRegion(int $regionId): array
+    private function getHotelIdsForRegion(int $regionId, array $params): array
     {
         if ($regionId <= 0) {
             return [];
         }
 
-        $sortType = $this->getUserType() === 'b2b' ? 'b2b' : 'b2c';
-        $cacheKey = "etg_region_hotel_ids_{$regionId}_{$sortType}";
+        $checkin = $params['checkin'] ?? null;
+        $checkout = $params['checkout'] ?? null;
+        $adults = (int) ($params['adults'] ?? 1);
+        $children = $params['children'] ?? [];
+        $currency = $params['currency'] ?? 'EUR';
+
+        if (!$checkin || !$checkout) {
+            throw new \RuntimeException('Missing checkin/checkout for RateHawk region search.');
+        }
+
+        $cacheKey = 'etg_region_search_' . md5(json_encode([
+            'region_id' => $regionId,
+            'checkin' => $checkin,
+            'checkout' => $checkout,
+            'adults' => $adults,
+            'children' => $children,
+            'currency' => $currency,
+            'user_type' => $this->getUserType(),
+        ]));
+
         $cached = Cache::get($cacheKey);
+
         if (is_array($cached)) {
             return $cached;
         }
 
+        $body = [
+            'checkin' => $checkin,
+            'checkout' => $checkout,
+            'residency' => 'gb',
+            'language' => 'en',
+            'guests' => [
+                [
+                    'adults' => $adults,
+                    'children' => array_values($children),
+                ],
+            ],
+            'region_id' => $regionId,
+            'currency' => $currency,
+        ];
+
+        $startedAt = microtime(true);
+
         try {
-            $response = Http::timeout(20)
+            $response = Http::timeout(30)
                 ->withOptions($this->httpOptions)
-                ->withBasicAuth($this->getApiUsername(), $this->getApiPassword())
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->getApiUrl() . 'search/hotelsort/', [
-                    'region_id' => $regionId,
-                    'sort_type' => $sortType,
-                    'hotels_limit' => 250,
-                ]);
+                ->withBasicAuth(
+                    $this->getApiUsername(),
+                    $this->getApiPassword()
+                )
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                ])
+                ->post(
+                    $this->getApiUrl() . 'search/serp/region/',
+                    $body
+                );
 
-            if (!$response->successful()) {
-                Log::warning('ETG hotelsort rejected', [
-                    'region_id' => $regionId,
-                    'status' => $response->status(),
-                ]);
+            $durationMs = round((microtime(true) - $startedAt) * 1000);
+            $json = $response->json();
+
+            Log::info('ETG region search response', [
+                'region_id' => $regionId,
+                'http_status' => $response->status(),
+                'duration_ms' => $durationMs,
+                'status' => $json['status'] ?? null,
+                'error' => $json['error'] ?? null,
+                'total_hotels' => $json['data']['total_hotels'] ?? null,
+                'request_id' => $json['debug']['request_id'] ?? null,
+            ]);
+
+            if (
+                !$response->successful()
+                || ($json['status'] ?? null) !== 'ok'
+                || !empty($json['error'])
+            ) {
+                throw new \RuntimeException(
+                    'RateHawk region search failed: '
+                        . ($json['error'] ?? 'HTTP ' . $response->status())
+                );
+            }
+
+            $hotels = $json['data']['hotels'] ?? [];
+
+            if (!is_array($hotels)) {
                 return [];
             }
 
-            $ids = $response->json()['data']['hotels'] ?? [];
-            if (!is_array($ids)) {
-                return [];
+            $ids = [];
+
+            foreach ($hotels as $hotel) {
+                $id = $hotel['id'] ?? null;
+
+                if ($id !== null && $id !== '') {
+                    $ids[] = $id;
+                }
             }
 
-            $ids = array_values(array_unique(array_filter($ids, function ($id) {
-                return is_string($id) ? $id !== '' : $id !== null && $id !== '';
-            })));
+            $ids = array_values(array_unique($ids));
+
+            Log::info('ETG region hotel IDs loaded', [
+                'region_id' => $regionId,
+                'ids_count' => count($ids),
+            ]);
 
             Cache::put($cacheKey, $ids, now()->addMinutes(15));
+
             return $ids;
         } catch (\Exception $e) {
-            Log::error('ETG hotelsort failed', [
+            Log::error('ETG region search failed', [
                 'region_id' => $regionId,
                 'message' => $e->getMessage(),
             ]);
-            return [];
+
+            throw $e;
         }
     }
 
@@ -546,11 +619,15 @@ class HotelHController extends Controller
         }
 
         if (!empty($params['region_id'])) {
-            $regionHotelIds = $this->getHotelIdsForRegion((int) $params['region_id']);
+            $regionHotelIds = $this->getHotelIdsForRegion(
+                (int) $params['region_id'],
+                $params
+            );
             if (empty($regionHotelIds)) {
                 $query->whereRaw('1 = 0');
             } else {
                 $query->whereIn('hotel_id', $regionHotelIds);
+
                 if ($applyRegionOrder) {
                     $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
                     $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
@@ -574,14 +651,24 @@ class HotelHController extends Controller
 
     public function searchHotels(Request $request)
     {
+        \Log::info('HOTEL SEARCH REQUEST DEBUG', [
+            'all' => $request->all(),
+            'region_id' => $request->input('region_id'),
+            'hotel_region_id' => $request->input('hotel_region_id'),
+            'checkin' => $request->input('checkin'),
+            'checkout' => $request->input('checkout'),
+            'adults' => $request->input('adults'),
+            'rooms' => $request->input('rooms'),
+            'children_count' => $request->input('children_count'),
+        ]);
         // Extend execution time for large dataset searches
         set_time_limit(120);
 
         try {
             // Set breakfast_included to true by default if not provided
-            if (!$request->has('breakfast_included')) {
-                $request->merge(['breakfast_included' => true]);
-            }
+            // if (!$request->has('breakfast_included')) {
+            //   $request->merge(['breakfast_included' => true]);
+            // } 
 
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
@@ -668,7 +755,7 @@ class HotelHController extends Controller
             }
 
             // Take first 10 for immediate display
-            $hotels = collect($hotels)->take(10);
+            $hotels = collect($hotels)->take(50);
 
 
             // Cache search params for AJAX
@@ -712,9 +799,8 @@ class HotelHController extends Controller
                 'maxPrice' => 999,
                 'searchHash' => $searchHash,
                 'isLoading' => false, // Show hotels immediately
-                'loadMore' => $totalCount > 10,
+                'loadMore' => $totalCount > 50,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Error searching hotels', ['message' => $e->getMessage()]);
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
@@ -727,7 +813,7 @@ class HotelHController extends Controller
         set_time_limit(60);
 
         $chunk = (int) $request->input('chunk', 0);
-        $chunkSize = 10; // Process 10 hotels at a time
+        $chunkSize = 50; // Process 50 hotels at a time
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
@@ -928,7 +1014,6 @@ class HotelHController extends Controller
                 'loadedCount' => min($loadedCount, $totalHotels),
                 'hotels' => $filtered->toArray(), // Add hotel objects for map markers
             ]);
-
         } catch (\Exception $e) {
             Log::error('Error loading hotel chunk', ['message' => $e->getMessage(), 'chunk' => $chunk]);
             return response()->json(['error' => $e->getMessage()], 500);
@@ -1244,7 +1329,6 @@ class HotelHController extends Controller
                 'currency',
                 'breakfastIncluded'
             ));
-
         } catch (\Exception $e) {
             Log::error('Error fetching hotel info', [
                 'hotel_id' => $id,
@@ -1875,7 +1959,6 @@ class HotelHController extends Controller
                     'error' => __('Booking failed after retrying. Please try again.'),
                 ]);
             }
-
         } catch (\Exception $e) {
             Log::error('❌ Booking failed', [
                 'error' => $e->getMessage(),
@@ -2327,7 +2410,6 @@ class HotelHController extends Controller
             MjellmaBooking::where('partner_order_id', $partnerOrderId)->update(['api_status' => 'ok']);
             $this->clearBookingDeadline($partnerOrderId);
             return redirect()->route('hotel.payment.success');
-
         } catch (\Exception $e) {
             Log::error('processPayment error', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return redirect()->back()->withErrors(['error' => 'Payment processing failed: ' . $e->getMessage()]);
@@ -3291,8 +3373,8 @@ class HotelHController extends Controller
             'payment_type.currency_code' => 'required|string',
             'rooms' => 'required|array',
             'rooms.*.guests' => 'required|array',
-            'rooms.*.guests.*.first_name' => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
-            'rooms.*.guests.*.last_name'  => ['required','string','regex:/^[\p{L}\s\-\.,]+$/u'],
+            'rooms.*.guests.*.first_name' => ['required', 'string', 'regex:/^[\p{L}\s\-\.,]+$/u'],
+            'rooms.*.guests.*.last_name'  => ['required', 'string', 'regex:/^[\p{L}\s\-\.,]+$/u'],
         ]);
 
         $partnerOrderId = $request->input('partner_order_id');
@@ -3610,7 +3692,6 @@ class HotelHController extends Controller
                 'booking' => $booking,
                 'statusData' => $json,
             ]);
-
         } catch (\Exception $e) {
             Log::error('completeBooking finish call threw exception', [
                 'error' => $e->getMessage(),
@@ -3802,7 +3883,6 @@ class HotelHController extends Controller
             $statusJson = $statusResp->json();
             $finalStatus = $statusJson['status'] ?? 'UNKNOWN';
             $finishData = $statusJson;
-
         } catch (\Exception $e) {
             Log::error('Error in showBookingDetails', [
                 'orderId' => $orderId,
@@ -4001,6 +4081,4 @@ class HotelHController extends Controller
 
         return redirect()->back()->with('error', $json['error'] ?? 'Unable to fetch invoice.');
     }
-
-
 }
