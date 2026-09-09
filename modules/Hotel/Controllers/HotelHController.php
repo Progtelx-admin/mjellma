@@ -807,6 +807,91 @@ class HotelHController extends Controller
         }
     }
 
+    /**
+     * Load hotels inside the visible map viewport from the local hotels table.
+     * Isolated from hotel search: does not change search constraints and does not call RateHawk.
+     */
+    public function mapHotels(Request $request)
+    {
+        $request->validate([
+            'north' => 'required|numeric',
+            'south' => 'required|numeric',
+            'east' => 'required|numeric',
+            'west' => 'required|numeric',
+            'zoom' => 'nullable|numeric|min:0|max:22',
+        ]);
+
+        $north = min(90.0, max(-90.0, (float) $request->input('north')));
+        $south = min(90.0, max(-90.0, (float) $request->input('south')));
+        $east = $this->normalizeMapLongitude((float) $request->input('east'));
+        $west = $this->normalizeMapLongitude((float) $request->input('west'));
+        $zoom = (float) $request->input('zoom', 10);
+
+        if ($south > $north) {
+            [$south, $north] = [$north, $south];
+        }
+
+        $limit = 500;
+        $idStride = 1;
+        if ($zoom < 4) {
+            $limit = 200;
+            $idStride = 80;
+        } elseif ($zoom < 6) {
+            $limit = 280;
+            $idStride = 25;
+        } elseif ($zoom < 8) {
+            $limit = 400;
+            $idStride = 8;
+        } elseif ($zoom < 11) {
+            $limit = 500;
+            $idStride = 2;
+        } elseif ($zoom < 14) {
+            $limit = 700;
+        } else {
+            $limit = 800;
+        }
+
+        $query = DB::table('hotels')
+            ->select('hotel_id', 'hid', 'name', 'latitude', 'longitude', 'star_rating', 'address')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', '')
+            ->where('longitude', '!=', '')
+            ->whereBetween('latitude', [$south, $north]);
+
+        if ($west <= $east) {
+            $query->whereBetween('longitude', [$west, $east]);
+        } else {
+            $query->where(function ($q) use ($west, $east) {
+                $q->where('longitude', '>=', $west)
+                    ->orWhere('longitude', '<=', $east);
+            });
+        }
+
+        if ($idStride > 1) {
+            $query->whereRaw('MOD(id, ?) = 0', [$idStride]);
+        }
+
+        $hotels = $query->limit($limit)->get();
+
+        return response()->json([
+            'hotels' => $hotels,
+            'count' => $hotels->count(),
+        ]);
+    }
+
+    private function normalizeMapLongitude(float $lng): float
+    {
+        $lng = fmod($lng, 360);
+        if ($lng > 180) {
+            $lng -= 360;
+        } elseif ($lng < -180) {
+            $lng += 360;
+        }
+
+        return $lng;
+    }
+
     private function loadHotelChunk(Request $request, $searchHash, $childAges)
     {
         // Extend execution time for chunk processing
