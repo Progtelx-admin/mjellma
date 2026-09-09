@@ -553,8 +553,23 @@ class HotelHController extends Controller
                 'status' => $response->status()
             ]);
 
+            Log::info('REGION DEBUG 4 - before JSON decode', [
+                'content_length' => $response->header('Content-Length'),
+                'body_bytes' => strlen($response->body()),
+                'memory_limit' => ini_get('memory_limit'),
+                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
+                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
+            ]);
+
+
             $durationMs = round((microtime(true) - $startedAt) * 1000);
             $json = $response->json();
+
+            Log::info('REGION DEBUG 5 - after JSON decode', [
+                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
+                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
+            ]);
+
 
             Log::info('ETG region search response', [
                 'region_id' => $regionId,
