@@ -755,7 +755,7 @@ class HotelHController extends Controller
             }
 
             // Take first 10 for immediate display
-            $hotels = collect($hotels)->take(10);
+            $hotels = collect($hotels)->take(50);
 
 
             // Cache search params for AJAX
@@ -799,7 +799,7 @@ class HotelHController extends Controller
                 'maxPrice' => 999,
                 'searchHash' => $searchHash,
                 'isLoading' => false, // Show hotels immediately
-                'loadMore' => $totalCount > 10,
+                'loadMore' => $totalCount > 50,
             ]);
         } catch (\Exception $e) {
             Log::error('Error searching hotels', ['message' => $e->getMessage()]);
@@ -813,7 +813,7 @@ class HotelHController extends Controller
         set_time_limit(60);
 
         $chunk = (int) $request->input('chunk', 0);
-        $chunkSize = 10; // Process 10 hotels at a time
+        $chunkSize = 50; // Process 50 hotels at a time
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
