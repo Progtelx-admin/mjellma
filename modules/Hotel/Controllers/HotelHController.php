@@ -661,14 +661,23 @@ class HotelHController extends Controller
             'rooms' => $request->input('rooms'),
             'children_count' => $request->input('children_count'),
         ]);
-        // Extend execution time for large dataset searches
-        set_time_limit(120);
 
         try {
             // Set breakfast_included to true by default if not provided
             // if (!$request->has('breakfast_included')) {
             //   $request->merge(['breakfast_included' => true]);
             // } 
+
+            Log::info('DEBUG STEP 1 - entered try');
+
+            // Extend execution time if allowed by server
+            if (function_exists('set_time_limit')) {
+                set_time_limit(120);
+            }
+
+            Log::info('DEBUG STEP 2 - after set_time_limit');
+
+            Log::info('DEBUG STEP 3 - before validation');
 
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
@@ -697,6 +706,8 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
                 'chunk' => 'nullable|integer',
             ]);
+
+            Log::info('DEBUG STEP 4 - after validation');
 
             // 2) Build cache key including both count and ages
             $searchHash = md5(json_encode([
@@ -729,17 +740,32 @@ class HotelHController extends Controller
                 return $this->loadHotelChunk($request, $searchHash, $childAges);
             }
 
+            Log::info('DEBUG STEP 5 - before haSearchParamsFromRequest');
+
             // 4) Get hotels from database immediately (no API calls)
             $haParams = $this->haSearchParamsFromRequest($request);
+
+            Log::info('DEBUG STEP 6 - after haSearchParamsFromRequest', [
+                'haParams' => $haParams
+            ]);
+
+            Log::info('DEBUG STEP 7 - before applyHaSearchConstraints');
+
             $hotelQuery = $this->applyHaSearchConstraints(
                 DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
                 $haParams,
                 true
             );
+            Log::info('DEBUG STEP 8 - after applyHaSearchConstraints');
 
+            Log::info('DEBUG STEP 9 - before hotel query get');
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
             $hotels = $hotelQuery->limit(50)->get();
+
+            Log::info('DEBUG STEP 10 - hotels loaded', [
+                'count' => $hotels->count()
+            ]);
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -801,8 +827,14 @@ class HotelHController extends Controller
                 'isLoading' => false, // Show hotels immediately
                 'loadMore' => $totalCount > 50,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('Error searching hotels', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'type' => get_class($e),
+            ]);
+
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
