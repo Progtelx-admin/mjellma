@@ -302,12 +302,14 @@
                 </div>
 
                 {{-- Loading more indicator --}}
-                <div id="loading-more" class="text-center py-4 d-none">
-                    <div class="spinner-border text-primary" role="status">
+                <div id="loading-more" class="hotel-page-loading text-center py-3 d-none">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2 text-muted">Loading more hotels...</p>
+                    <p class="mt-2 mb-0 text-muted" id="loading-more-text">Loading remaining hotels...</p>
                 </div>
+
+                <nav id="hotel-pagination" class="hotel-pagination d-none" aria-label="Hotel results pages"></nav>
 
                 {{-- No results message --}}
                 <div id="no-results" class="text-center text-muted fs-5 py-5 d-none">
@@ -453,24 +455,223 @@
                 return 0;
             }
 
-            function applyHotelSort() {
-                ['hotel-list', 'hotel-list-mobile'].forEach((id) => {
-                    const hotelList = document.getElementById(id);
-                    if (!hotelList) return;
-                    const hotels = Array.from(hotelList.children);
-                    hotels.forEach((el, i) => {
-                        if (el.dataset.hotelIndex === undefined) {
-                            el.dataset.hotelIndex = String(i);
-                        }
-                    });
-                    hotels.sort((a, b) => compareCards(a, b, currentSort));
-                    hotels.forEach((hotel) => hotelList.appendChild(hotel));
+            const PAGE_SIZE = 50;
+            let currentPage = 1;
+            let pendingPage = null;
+            let allHotelCards = [];
+            let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
+            let totalHotelsCount = {{ (int) ($totalHotelCount ?? 0) }};
+            let activeRequests = 0;
+
+            function getCardId(card) {
+                return card.getAttribute('data-hotel-id') || card.getAttribute('href') || '';
+            }
+
+            function toCardThumb(src) {
+                if (!src || src.indexOf('cdn.worldota.net') === -1) return src;
+                return src.replace(/\/t\/\d+x\d+\//, '/t/640x400/');
+            }
+
+            function prepareCardForDisplay(card, index) {
+                const clone = card.cloneNode(true);
+                const img = clone.querySelector('.hotel-listcard__media img');
+                if (img) {
+                    const thumb = toCardThumb(img.getAttribute('src') || '');
+                    if (thumb && thumb !== img.getAttribute('src')) {
+                        img.setAttribute('src', thumb);
+                    }
+                    img.setAttribute('decoding', 'async');
+                    img.setAttribute('loading', index < 6 ? 'eager' : 'lazy');
+                    img.setAttribute('width', '640');
+                    img.setAttribute('height', '400');
+                }
+                return clone;
+            }
+
+            function snapshotInitialCards() {
+                const hotelList = document.getElementById('hotel-list');
+                if (!hotelList) return;
+                allHotelCards = Array.from(hotelList.querySelectorAll(':scope > .hotel-card-link')).map((el, i) => {
+                    const clone = el.cloneNode(true);
+                    clone.dataset.hotelIndex = String(i);
+                    return clone;
                 });
             }
 
-            // Keep the original name so existing chunk-load calls still sort after new hotels arrive
+            function getSortedCards() {
+                const cards = allHotelCards.slice();
+                cards.forEach((el, i) => {
+                    if (el.dataset.hotelIndex === undefined) {
+                        el.dataset.hotelIndex = String(i);
+                    }
+                });
+                cards.sort((a, b) => {
+                    const sorted = compareCards(a, b, currentSort);
+                    if (sorted !== 0) return sorted;
+                    return parseInt(a.dataset.hotelIndex || '0', 10) - parseInt(b.dataset.hotelIndex || '0', 10);
+                });
+                return cards;
+            }
+
+            function getLoadedPageCount() {
+                return Math.max(1, Math.ceil(allHotelCards.length / PAGE_SIZE) || 1);
+            }
+
+            function getTotalPages() {
+                if (allHotelCards.length === 0) {
+                    return Math.max(1, Math.ceil((totalHotelsCount || 0) / PAGE_SIZE));
+                }
+                const loadedPages = Math.ceil(allHotelCards.length / PAGE_SIZE);
+                if (hasMoreHotels && totalHotelsCount > allHotelCards.length) {
+                    return Math.max(loadedPages, Math.ceil(totalHotelsCount / PAGE_SIZE));
+                }
+                return Math.max(1, loadedPages);
+            }
+
+            function isPageReady(page) {
+                return allHotelCards.length > (page - 1) * PAGE_SIZE;
+            }
+
+            function getPageButtonNumbers(current, total) {
+                if (total <= 7) {
+                    return Array.from({ length: total }, (_, i) => i + 1);
+                }
+                const pages = new Set([1, total, current, current - 1, current + 1]);
+                if (current <= 3) {
+                    [2, 3, 4].forEach((p) => pages.add(p));
+                }
+                if (current >= total - 2) {
+                    [total - 1, total - 2, total - 3].forEach((p) => pages.add(p));
+                }
+                return Array.from(pages).filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+            }
+
+            function updateLoadingIndicator() {
+                const el = document.getElementById('loading-more');
+                const text = document.getElementById('loading-more-text');
+                if (!el) return;
+                const waitingForPage = pendingPage !== null && !isPageReady(pendingPage);
+                const backgroundLoading = activeRequests > 0;
+                if (waitingForPage || backgroundLoading) {
+                    el.classList.remove('d-none');
+                    if (text) {
+                        text.textContent = waitingForPage
+                            ? ('Loading page ' + pendingPage + '...')
+                            : 'Loading remaining hotels...';
+                    }
+                } else {
+                    el.classList.add('d-none');
+                }
+            }
+
+            function renderPagination() {
+                const nav = document.getElementById('hotel-pagination');
+                if (!nav) return;
+                const totalPages = getTotalPages();
+                if (totalPages <= 1 && !hasMoreHotels) {
+                    nav.classList.add('d-none');
+                    nav.innerHTML = '';
+                    return;
+                }
+
+                nav.classList.remove('d-none');
+                const loadedPages = getLoadedPageCount();
+                const numbers = getPageButtonNumbers(currentPage, totalPages);
+                let html = '';
+
+                html += `<button type="button" class="hotel-page-btn hotel-page-btn--nav" data-page="prev" ${currentPage <= 1 ? 'disabled' : ''} aria-label="Previous page">&lt;</button>`;
+
+                numbers.forEach((page, idx) => {
+                    if (idx > 0 && page - numbers[idx - 1] > 1) {
+                        html += '<span class="hotel-page-ellipsis">&hellip;</span>';
+                    }
+                    const isActive = page === currentPage;
+                    const isPending = pendingPage === page && !isPageReady(page);
+                    const isLoaded = page <= loadedPages || !hasMoreHotels;
+                    html += `<button type="button" class="hotel-page-btn${isActive ? ' is-active' : ''}${isPending ? ' is-pending' : ''}${isLoaded ? '' : ' is-unloaded'}" data-page="${page}" ${isActive ? 'aria-current="page"' : ''}>${page}</button>`;
+                });
+
+                html += `<button type="button" class="hotel-page-btn hotel-page-btn--nav" data-page="next" ${currentPage >= totalPages ? 'disabled' : ''} aria-label="Next page">&gt;</button>`;
+                nav.innerHTML = html;
+            }
+
+            function visibleCardIds() {
+                const hotelList = document.getElementById('hotel-list');
+                if (!hotelList) return [];
+                return Array.from(hotelList.querySelectorAll(':scope > .hotel-card-link')).map(getCardId);
+            }
+
+            function sameIdList(a, b) {
+                if (a.length !== b.length) return false;
+                return a.every((id, i) => id === b[i]);
+            }
+
+            function paintCurrentPage(force) {
+                const sorted = getSortedCards();
+                if (pendingPage !== null && isPageReady(pendingPage)) {
+                    currentPage = pendingPage;
+                    pendingPage = null;
+                    force = true;
+                }
+                const readyPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE) || 1);
+                if (!hasMoreHotels && currentPage > readyPages) {
+                    currentPage = readyPages;
+                    force = true;
+                }
+
+                const start = (currentPage - 1) * PAGE_SIZE;
+                const pageCards = sorted.slice(start, start + PAGE_SIZE);
+                const nextIds = pageCards.map(getCardId);
+
+                if (!force && sameIdList(nextIds, visibleCardIds())) {
+                    updateResultsSummary(totalHotelsCount);
+                    renderPagination();
+                    updateLoadingIndicator();
+                    return;
+                }
+
+                ['hotel-list', 'hotel-list-mobile'].forEach((id) => {
+                    const hotelList = document.getElementById(id);
+                    if (!hotelList) return;
+                    hotelList.replaceChildren();
+                    pageCards.forEach((card, i) => hotelList.appendChild(prepareCardForDisplay(card, i)));
+                });
+
+                updateResultsSummary(totalHotelsCount);
+                renderPagination();
+                updateLoadingIndicator();
+            }
+
+            function goToPage(page, scrollToResults) {
+                const totalPages = getTotalPages();
+                const nextPage = Math.min(Math.max(1, page), totalPages);
+                if (isPageReady(nextPage)) {
+                    pendingPage = null;
+                    currentPage = nextPage;
+                    paintCurrentPage(true);
+                    if (scrollToResults) {
+                        const toolbar = document.querySelector('.results-toolbar');
+                        if (toolbar) toolbar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    return;
+                }
+                pendingPage = nextPage;
+                renderPagination();
+                updateLoadingIndicator();
+                if (scrollToResults) {
+                    const toolbar = document.querySelector('.results-toolbar');
+                    if (toolbar) toolbar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+
+            function applyHotelSort() {
+                currentPage = 1;
+                pendingPage = null;
+                paintCurrentPage(true);
+            }
+
             function sortHotelsByAvailability() {
-                applyHotelSort();
+                paintCurrentPage(false);
             }
 
             function updateResultsSummary(totalCount) {
@@ -479,10 +680,32 @@
                 const pageCount = document.querySelectorAll('#hotel-list .hotel-card-link').length;
                 const loc = resultsCounter.getAttribute('data-location') || '';
                 const resultWord = pageCount === 1 ? 'result' : 'results';
-                const total = typeof totalCount === 'number' ? totalCount : pageCount;
+                const loadedTotal = allHotelCards.length || pageCount;
+                const total = typeof totalCount === 'number' && totalCount > 0
+                    ? totalCount
+                    : loadedTotal;
                 resultsCounter.textContent = loc
                     ? `${loc} : ${pageCount} ${resultWord} on this page out of ${total}`
                     : `${pageCount} ${resultWord} on this page out of ${total}`;
+            }
+
+            snapshotInitialCards();
+            renderPagination();
+
+            const paginationNav = document.getElementById('hotel-pagination');
+            if (paginationNav) {
+                paginationNav.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-page]');
+                    if (!btn || btn.disabled) return;
+                    const value = btn.getAttribute('data-page');
+                    if (value === 'prev') {
+                        goToPage(currentPage - 1, true);
+                    } else if (value === 'next') {
+                        goToPage(currentPage + 1, true);
+                    } else {
+                        goToPage(parseInt(value, 10), true);
+                    }
+                });
             }
 
             const sortToggle = document.getElementById('sort-by-toggle');
@@ -541,27 +764,26 @@
                 }
             });
 
-            // Progressive loading
+            // Progressive loading: keep page 1 visible, prefetch remaining pages in the background
             @if (isset($searchHash))
                 const searchHash = '{{ $searchHash }}';
                 let currentChunk = 1; // Start from chunk 1 (chunk 0 already loaded)
-                let activeRequests = 0;
                 let maxParallelRequests = 3; // Load 3 chunks in parallel
-                let hasMoreHotels = {{ isset($loadMore) && $loadMore ? 'true' : 'false' }};
-                let totalHotelsCount = {{ $totalHotels ?? 0 }};
                 let loadedChunks = new Set([0]); // Chunk 0 already loaded
-                let priceUpdateInterval;
+
+                function parseCardsFromHtml(html) {
+                    const wrap = document.createElement('div');
+                    wrap.innerHTML = html;
+                    return Array.from(wrap.querySelectorAll('.hotel-card-link'));
+                }
 
                 function loadChunk(chunkNumber) {
                     if (loadedChunks.has(chunkNumber)) return;
                     loadedChunks.add(chunkNumber);
 
                     activeRequests++;
-                    if (activeRequests === 1) {
-                        document.getElementById('loading-more').classList.remove('d-none');
-                    }
+                    updateLoadingIndicator();
 
-                    // Get current search parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     urlParams.append('chunk', chunkNumber);
 
@@ -578,39 +800,25 @@
 
                             if (data.error) {
                                 console.error('Error loading hotels:', data.error);
-                                loadedChunks.delete(chunkNumber); // Allow retry
+                                loadedChunks.delete(chunkNumber);
+                                updateLoadingIndicator();
                                 return;
                             }
 
-                            // Hide skeleton on first load
                             if (chunkNumber === 0) {
                                 const skeleton = document.getElementById('loading-skeleton');
                                 if (skeleton) skeleton.remove();
                             }
 
-                            // Append hotels
                             if (data.html) {
-                                const hotelList = document.getElementById('hotel-list');
-                                const hotelListMobile = document.getElementById('hotel-list-mobile');
-
-                                // Append to desktop list
-                                if (hotelList) {
-                                    hotelList.insertAdjacentHTML('beforeend', data.html);
-                                }
-
-                                // Append to mobile list
-                                if (hotelListMobile) {
-                                    hotelListMobile.insertAdjacentHTML('beforeend', data.html);
-                                }
-
-                                // Sort hotels: available ones first
-                                sortHotelsByAvailability();
+                                const newCards = parseCardsFromHtml(data.html);
+                                const startIndex = allHotelCards.length;
+                                newCards.forEach((card, i) => {
+                                    card.dataset.hotelIndex = String(startIndex + i);
+                                });
+                                allHotelCards = allHotelCards.concat(newCards);
                             }
 
-                            // Augment mapHotels with any hotel objects returned in the response
-                            // This allows the map to stay in sync with the hotels currently
-                            // visible on the page.  Some APIs may return hotel data in
-                            // different properties (e.g. `hotels`, `results`, or `data`).
                             if (Array.isArray(data.hotels)) {
                                 window.mapHotels = window.mapHotels.concat(data.hotels);
                             } else if (Array.isArray(data.results)) {
@@ -622,39 +830,39 @@
                                 window.refreshHotelMapMarkers();
                             }
 
-                            // Update counter
-                            totalHotelsCount = data.totalCount || 0;
-                            updateResultsSummary(totalHotelsCount);
-
-                            // Check if more to load
+                            totalHotelsCount = data.totalCount || totalHotelsCount;
                             hasMoreHotels = data.hasMore;
 
-                            if (activeRequests === 0) {
-                                document.getElementById('loading-more').classList.add('d-none');
+                            if (pendingPage !== null && isPageReady(pendingPage)) {
+                                goToPage(pendingPage, false);
+                            } else if (currentSort !== 'default') {
+                                paintCurrentPage(false);
+                            } else {
+                                updateResultsSummary(totalHotelsCount);
+                                renderPagination();
+                                updateLoadingIndicator();
                             }
 
-                            // Continue loading more chunks
                             if (hasMoreHotels) {
                                 scheduleNextBatch();
                             } else {
-                                // All loaded
-                                if (totalHotelsCount === 0) {
+                                if (allHotelCards.length === 0 && totalHotelsCount === 0) {
                                     document.getElementById('no-results').classList.remove('d-none');
+                                }
+                                if (pendingPage !== null) {
+                                    goToPage(pendingPage, false);
                                 } else {
-                                    updateResultsSummary(totalHotelsCount);
+                                    paintCurrentPage(false);
+                                    updateLoadingIndicator();
                                 }
                             }
                         })
                         .catch(error => {
                             console.error('Error loading chunk ' + chunkNumber + ':', error);
                             activeRequests--;
-                            loadedChunks.delete(chunkNumber); // Allow retry
+                            loadedChunks.delete(chunkNumber);
+                            updateLoadingIndicator();
 
-                            if (activeRequests === 0) {
-                                document.getElementById('loading-more').classList.add('d-none');
-                            }
-
-                            // Retry this chunk after delay
                             setTimeout(() => {
                                 if (hasMoreHotels && !loadedChunks.has(chunkNumber)) {
                                     loadChunk(chunkNumber);
@@ -664,54 +872,21 @@
                 }
 
                 function scheduleNextBatch() {
-                    // Load multiple chunks in parallel
                     while (activeRequests < maxParallelRequests && hasMoreHotels) {
                         const nextChunk = currentChunk++;
 
-                        // Quick successive loading for first few chunks
                         if (nextChunk < 5) {
                             loadChunk(nextChunk);
                         } else {
-                            // Slight delay for subsequent chunks
                             setTimeout(() => loadChunk(nextChunk), 100 * (nextChunk - 4));
                             break;
                         }
                     }
                 }
 
-                // Function to update prices for existing hotels
-                function updatePrices() {
-                    const hotelElements = document.querySelectorAll('.hotel-listcard');
-                    hotelElements.forEach(hotelEl => {
-                        const priceEl = hotelEl.querySelector('.hotel-listcard__price');
-                        if (priceEl && priceEl.textContent.includes('Loading price')) {
-                            // Price is still loading, will be updated via chunk loading
-                            return;
-                        }
-                    });
-                }
-
-                // Start loading immediately
                 if (hasMoreHotels) {
                     scheduleNextBatch();
                 }
-
-                // Sort initial hotels after a short delay to allow prices to load
-                setTimeout(() => {
-                    sortHotelsByAvailability();
-                }, 2000); // Wait 2 seconds for initial prices to load
-
-                // Start updating prices for loaded hotels
-                priceUpdateInterval = setInterval(() => {
-                    updatePrices();
-                }, 2000);
-
-                // Clean up interval after 30 seconds
-                setTimeout(() => {
-                    if (priceUpdateInterval) {
-                        clearInterval(priceUpdateInterval);
-                    }
-                }, 30000);
             @endif
         });
     </script>
@@ -842,12 +1017,14 @@
             width: 44%;
             min-width: 340px;
             max-width: 480px;
+            background-color: #e8eef5;
         }
 
         .hotel-listcard__media img {
             width: 100%;
             height: 250px;
             object-fit: cover;
+            background-color: #e8eef5;
         }
 
         .hotel-listcard__content {
@@ -960,6 +1137,7 @@
             height: 190px;
             border-bottom: 1px solid #ececec;
             flex: 0 0 190px;
+            background-color: #e8eef5;
             /* fixed image height for consistency */
         }
 
@@ -1082,6 +1260,7 @@
             height: 200px;
             border-bottom: 1px solid #ececec;
             flex: 0 0 200px;
+            background-color: #e8eef5;
         }
 
         #hotel-list-mobile .hotel-listcard__media img {
@@ -1367,6 +1546,64 @@
             line-height: 1;
             padding: 0 4px;
             cursor: pointer;
+        }
+
+        .hotel-pagination {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin: 4px 0 28px;
+        }
+
+        .hotel-page-btn {
+            min-width: 40px;
+            height: 40px;
+            padding: 0 12px;
+            border: 1px solid #e6e6e6;
+            background: #fff;
+            color: #0d1b50;
+            border-radius: 8px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .hotel-page-btn:hover:not(:disabled):not(.is-active) {
+            border-color: #EF7F44;
+            color: #EF7F44;
+        }
+
+        .hotel-page-btn.is-active {
+            background: #0B0B45;
+            color: #fff;
+            border-color: #0B0B45;
+        }
+
+        .hotel-page-btn.is-pending {
+            border-color: #EF7F44;
+            color: #EF7F44;
+        }
+
+        .hotel-page-btn.is-unloaded {
+            color: #8a93a6;
+            background: #f7f8fa;
+        }
+
+        .hotel-page-btn:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        .hotel-page-ellipsis {
+            color: #8a93a6;
+            padding: 0 2px;
+            font-weight: 700;
+        }
+
+        .hotel-page-loading {
+            min-height: 0;
         }
 
         .results-toolbar {
