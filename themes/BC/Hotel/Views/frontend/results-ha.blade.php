@@ -41,7 +41,7 @@
                     <input type="hidden" name="longitude" value="{{ request('longitude') }}">
                     <input type="hidden" name="currency" value="{{ request('currency', 'EUR') }}">
                     <input type="hidden" name="children_count" value="{{ request('children_count', 0) }}">
-                    <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ request('sort_by', 'popularity') }}">
+                    <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ in_array(request('sort_by'), ['price_low', 'price_high', 'rating'], true) ? request('sort_by') : 'default' }}">
                     @foreach (request('children', []) as $age)
                         <input type="hidden" name="children[]" value="{{ $age }}">
                     @endforeach
@@ -83,7 +83,7 @@
                         <label class="custom-checkbox">
                             <input type="hidden" name="breakfast_included" value="0">
                             <input type="checkbox" id="breakfast_included" name="breakfast_included" value="1"
-                                @if (!request()->has('breakfast_included') || request('breakfast_included')) checked @endif>
+                                @if (request()->boolean('breakfast_included')) checked @endif>
                             <span class="checkmark"></span> Breakfast Included
                         </label>
                     </div>
@@ -122,7 +122,7 @@
                             <input type="hidden" name="longitude" value="{{ request('longitude') }}">
                             <input type="hidden" name="currency" value="{{ request('currency', 'EUR') }}">
                             <input type="hidden" name="children_count" value="{{ request('children_count', 0) }}">
-                            <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ request('sort_by', 'popularity') }}">
+                            <input type="hidden" name="sort_by" class="js-sort-by-input" value="{{ in_array(request('sort_by'), ['price_low', 'price_high', 'rating'], true) ? request('sort_by') : 'default' }}">
                             @foreach (request('children', []) as $age)
                                 <input type="hidden" name="children[]" value="{{ $age }}">
                             @endforeach
@@ -173,7 +173,7 @@
                                 <label class="custom-checkbox">
                                     <input type="hidden" name="breakfast_included" value="0">
                                     <input type="checkbox" id="mobile_breakfast_included" name="breakfast_included"
-                                        value="1" @if (!request()->has('breakfast_included') || request('breakfast_included')) checked @endif>
+                                        value="1" @if (request()->boolean('breakfast_included')) checked @endif>
                                     <span class="checkmark"></span> Breakfast Included
                                 </label>
                             </div>
@@ -201,16 +201,17 @@
                     $pageHotelCount = $hotels->count();
                     $totalHotelCount = $totalHotels ?? $pageHotelCount;
                     $resultWord = $pageHotelCount === 1 ? 'result' : 'results';
-                    $sortBy = request('sort_by', 'popularity');
+                    $sortBy = request('sort_by', 'default');
                     $sortLabels = [
-                        'popularity' => 'Popularity',
+                        'default' => 'Default',
                         'price_low' => 'Price (Low to High)',
                         'price_high' => 'Price (High to Low)',
-                        'distance' => 'Closest to City Center',
                         'rating' => 'Guest Rating (High to Low)',
-                        'date' => 'Date',
                     ];
-                    $sortLabel = $sortLabels[$sortBy] ?? 'Popularity';
+                    if (!isset($sortLabels[$sortBy]) || $sortBy === 'popularity') {
+                        $sortBy = 'default';
+                    }
+                    $sortLabel = $sortLabels[$sortBy];
                 @endphp
                 {{-- Header --}}
                 <div class="results-toolbar">
@@ -244,12 +245,10 @@
                                 <i class="fa fa-chevron-down" aria-hidden="true"></i>
                             </button>
                             <ul class="sort-by-menu d-none" id="sort-by-menu">
-                                <li data-value="popularity" @class(['is-selected' => $sortBy === 'popularity'])>Popularity</li>
+                                <li data-value="default" @class(['is-selected' => $sortBy === 'default'])>Default</li>
                                 <li data-value="price_low" @class(['is-selected' => $sortBy === 'price_low'])>Price (Low to High)</li>
                                 <li data-value="price_high" @class(['is-selected' => $sortBy === 'price_high'])>Price (High to Low)</li>
-                                <li data-value="distance" @class(['is-selected' => $sortBy === 'distance'])>Closest to City Center</li>
                                 <li data-value="rating" @class(['is-selected' => $sortBy === 'rating'])>Guest Rating (High to Low)</li>
-                                <li data-value="date" @class(['is-selected' => $sortBy === 'date'])>Date</li>
                             </ul>
                         </div>
                     </div>
@@ -324,15 +323,21 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div>
-                        <h5 class="modal-title mb-0" id="mapModalLabel">Hotel Map</h5>
+                        <h5 class="modal-title mb-0" id="mapModalLabel">{{ __('hotel.map') }}</h5>
                         <div class="hotel-map-modal__meta" id="hotelMapCount"></div>
                     </div>
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" aria-label="Close">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" aria-label="{{ __('hotel.close') }}">
                         <i class="fa fa-close"></i>
                     </button>
                 </div>
                 <div class="modal-body p-0">
-                    <div id="hotelMap" class="hotel-map-canvas"></div>
+                    <div class="hotel-map-canvas-wrap">
+                        <div id="hotelMap" class="hotel-map-canvas"></div>
+                        <div id="hotelMapLoading" class="hotel-map-loading d-none" aria-hidden="true">
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span>{{ __('hotel.loading_hotels') }}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -374,15 +379,14 @@
             const searchLat = @json(request()->filled('latitude') ? (float) request('latitude') : null);
             const searchLng = @json(request()->filled('longitude') ? (float) request('longitude') : null);
             const sortLabels = {
-                popularity: 'Popularity',
+                default: 'Default',
+                popularity: 'Default',
                 price_low: 'Price (Low to High)',
                 price_high: 'Price (High to Low)',
-                distance: 'Closest to City Center',
-                rating: 'Guest Rating (High to Low)',
-                date: 'Date'
+                rating: 'Guest Rating (High to Low)'
             };
-            let currentSort = @json(request('sort_by', 'popularity'));
-            if (!sortLabels[currentSort]) currentSort = 'popularity';
+            let currentSort = @json(request('sort_by', 'default'));
+            if (!sortLabels[currentSort] || currentSort === 'popularity') currentSort = 'default';
 
             function parseCardPrice(card) {
                 const raw = card.getAttribute('data-hotel-price');
@@ -441,7 +445,7 @@
                     const bIdx = parseInt(b.dataset.hotelIndex || '0', 10);
                     return aIdx - bIdx;
                 }
-                // Popularity: available hotels first (existing behaviour)
+                // Default: available hotels first (existing behaviour)
                 const aAvailable = isCardAvailable(a);
                 const bAvailable = isCardAvailable(b);
                 if (aAvailable && !bAvailable) return -1;
@@ -1651,10 +1655,32 @@
             margin-top: 2px;
         }
 
+        .hotel-map-canvas-wrap {
+            position: relative;
+        }
+
         .hotel-map-canvas {
             height: 70vh;
             min-height: 420px;
             width: 100%;
+        }
+
+        .hotel-map-loading {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.94);
+            color: #0B0B45;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 10px;
+            border-radius: 999px;
+            box-shadow: 0 2px 8px rgba(16, 24, 40, 0.14);
+            pointer-events: none;
         }
 
         .hotel-map-pin {
@@ -1769,6 +1795,27 @@
                 iconAnchor: [8, 20]
             });
 
+            const hotelMapI18n = {
+                hotelFallback: @json(__('hotel.hotel')),
+                address: @json(__('hotel.address')),
+                starRating: @json(__('hotel.star_rating')),
+                price: @json(__('hotel.price')),
+                viewDetails: @json(__('hotel.view_details')),
+                oneHotel: @json(__('hotel.one_hotel')),
+                hotelsCount: @json(__('hotel.hotels_count')),
+                noLocations: @json(__('hotel.no_locations')),
+                zoomHint: @json(__('hotel.zoom_hint')),
+                locationsAppear: @json(__('hotel.locations_appear')),
+                na: @json(__('hotel.na'))
+            };
+            const hotelMapEndpoint = @json(route('hotel.map'));
+            const modalMarkers = new Map();
+            let initialMapPositionDone = false;
+            let ignoreMoveEnd = false;
+            let mapMoveTimer = null;
+            let mapHotelsAbort = null;
+            let mapHotelsRequestSeq = 0;
+
             function escapeHtml(value) {
                 return String(value == null ? '' : value)
                     .replace(/&/g, '&amp;')
@@ -1776,6 +1823,16 @@
                     .replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
+            }
+
+            function hotelMarkerId(hotel) {
+                if (hotel.hotel_id) {
+                    return String(hotel.hotel_id);
+                }
+                if (hotel.hid) {
+                    return 'hid:' + String(hotel.hid);
+                }
+                return '';
             }
 
             function hotelsWithCoords() {
@@ -1791,7 +1848,7 @@
                     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
                         return;
                     }
-                    const id = hotel.hotel_id || (lat + ',' + lng);
+                    const id = hotelMarkerId(hotel) || (lat + ',' + lng);
                     if (seen.has(id)) {
                         return;
                     }
@@ -1836,21 +1893,28 @@
             }
 
             function popupContent(hotel) {
-                const name = escapeHtml(hotel.name || hotel.title || 'Hotel');
-                const address = escapeHtml(hotel.address || 'N/A');
-                const stars = escapeHtml(hotel.star_rating || 'N/A');
-                const price = hotel.daily_price ? ('€' + hotel.daily_price) : 'N/A';
+                const name = escapeHtml(hotel.name || hotel.title || hotelMapI18n.hotelFallback);
+                const address = escapeHtml(hotel.address || hotelMapI18n.na);
+                const stars = escapeHtml(hotel.star_rating || hotelMapI18n.na);
+                const price = hotel.daily_price ? ('€' + hotel.daily_price) : hotelMapI18n.na;
                 const hotelUrl = hotelDetailUrl(hotel);
 
                 return `
                     <div class="hotel-map-popup">
                         <h6 class="fw-bold mb-2">${name}</h6>
-                        <p class="mb-1"><strong>Address:</strong> ${address}</p>
-                        <p class="mb-1"><strong>Star Rating:</strong> ${stars}</p>
-                        <p class="mb-2"><strong>Price:</strong> ${price}</p>
-                        <a href="${hotelUrl}" class="btn btn-primary btn-sm">View Details</a>
+                        <p class="mb-1"><strong>${escapeHtml(hotelMapI18n.address)}:</strong> ${address}</p>
+                        <p class="mb-1"><strong>${escapeHtml(hotelMapI18n.starRating)}:</strong> ${stars}</p>
+                        <p class="mb-2"><strong>${escapeHtml(hotelMapI18n.price)}:</strong> ${price}</p>
+                        <a href="${hotelUrl}" class="btn btn-primary btn-sm">${escapeHtml(hotelMapI18n.viewDetails)}</a>
                     </div>
                 `;
+            }
+
+            function countLabel(count) {
+                if (count === 1) {
+                    return hotelMapI18n.oneHotel;
+                }
+                return hotelMapI18n.hotelsCount.replace(':count', count);
             }
 
             function createClusterGroup() {
@@ -1900,7 +1964,7 @@
 
                 if (shouldFit !== false) {
                     if (hotels.length === 1) {
-                        map.setView(bounds.getCenter(), 15);
+                        map.setView(bounds.getCenter(), 13);
                     } else if (hotels.length > 1) {
                         map.fitBounds(bounds, { padding: [36, 36], maxZoom: 13 });
                     }
@@ -1909,17 +1973,65 @@
                 return hotels.length;
             }
 
-            function updateCounts(count) {
-                const label = count === 1 ? '1 hotel' : (count + ' hotels');
+            function updatePreviewCounts() {
+                const count = hotelsWithCoords().length;
+                const label = countLabel(count);
                 document.querySelectorAll('[data-map-count]').forEach(function(el) {
-                    el.textContent = count ? label : 'No locations yet';
+                    el.textContent = count ? label : hotelMapI18n.noLocations;
                 });
+            }
+
+            function updateModalCount(count) {
                 const modalCount = document.getElementById('hotelMapCount');
-                if (modalCount) {
-                    modalCount.textContent = count
-                        ? label + ' · zoom in for streets, zoom out for more hotels'
-                        : 'Locations appear as hotels load';
+                if (!modalCount) {
+                    return;
                 }
+                modalCount.textContent = count
+                    ? countLabel(count) + ' · ' + hotelMapI18n.zoomHint
+                    : hotelMapI18n.locationsAppear;
+            }
+
+            function setMapLoading(isLoading) {
+                const el = document.getElementById('hotelMapLoading');
+                if (!el) {
+                    return;
+                }
+                el.classList.toggle('d-none', !isLoading);
+                el.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+            }
+
+            function upsertModalMarkers(hotels, pruneOutsideBounds) {
+                if (!maps.modal.map || !maps.modal.cluster) {
+                    return;
+                }
+
+                hotels.forEach(function(hotel) {
+                    const id = hotelMarkerId(hotel);
+                    if (!id || modalMarkers.has(id)) {
+                        return;
+                    }
+                    const lat = parseFloat(hotel.latitude);
+                    const lng = parseFloat(hotel.longitude);
+                    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                        return;
+                    }
+                    const marker = L.marker([lat, lng], { icon: hotelPinIcon });
+                    marker.bindPopup(popupContent(hotel));
+                    maps.modal.cluster.addLayer(marker);
+                    modalMarkers.set(id, marker);
+                });
+
+                if (pruneOutsideBounds) {
+                    const padded = maps.modal.map.getBounds().pad(0.2);
+                    modalMarkers.forEach(function(marker, id) {
+                        if (!padded.contains(marker.getLatLng())) {
+                            maps.modal.cluster.removeLayer(marker);
+                            modalMarkers.delete(id);
+                        }
+                    });
+                }
+
+                updateModalCount(modalMarkers.size);
             }
 
             const maps = {
@@ -1966,25 +2078,131 @@
                 instance.map.invalidateSize();
             }
 
-            function refreshAllMaps(fitPreview, fitModal) {
+            function refreshPreviewMaps(fitPreview) {
                 refreshPreview('desktop', 'hotelMapPreviewDesktop', fitPreview);
                 refreshPreview('mobile', 'hotelMapPreviewMobile', fitPreview);
+                updatePreviewCounts();
+            }
 
-                if (maps.modal.map) {
-                    plotHotels(maps.modal.map, maps.modal.cluster, hotelPinIcon, true, !!fitModal);
-                    maps.modal.map.invalidateSize();
+            function loadViewportHotels() {
+                if (!maps.modal.map || ignoreMoveEnd || !initialMapPositionDone) {
+                    return;
                 }
-                updateCounts(hotelsWithCoords().length);
+
+                const bounds = maps.modal.map.getBounds();
+                const params = new URLSearchParams({
+                    north: bounds.getNorth(),
+                    south: bounds.getSouth(),
+                    east: bounds.getEast(),
+                    west: bounds.getWest(),
+                    zoom: maps.modal.map.getZoom()
+                });
+
+                if (mapHotelsAbort && typeof mapHotelsAbort.abort === 'function') {
+                    mapHotelsAbort.abort();
+                }
+
+                const requestSeq = ++mapHotelsRequestSeq;
+                const canAbort = typeof AbortController === 'function';
+                const controller = canAbort ? new AbortController() : null;
+                mapHotelsAbort = controller;
+
+                setMapLoading(true);
+
+                const fetchOptions = {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                };
+                if (controller) {
+                    fetchOptions.signal = controller.signal;
+                }
+
+                fetch(hotelMapEndpoint + '?' + params.toString(), fetchOptions)
+                    .then(function(response) {
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        if (requestSeq !== mapHotelsRequestSeq) {
+                            return;
+                        }
+                        upsertModalMarkers(Array.isArray(data.hotels) ? data.hotels : [], true);
+                    })
+                    .catch(function(err) {
+                        if (err && err.name === 'AbortError') {
+                            return;
+                        }
+                    })
+                    .finally(function() {
+                        if (requestSeq === mapHotelsRequestSeq) {
+                            setMapLoading(false);
+                        }
+                    });
+            }
+
+            function scheduleViewportLoad() {
+                if (ignoreMoveEnd || !initialMapPositionDone) {
+                    return;
+                }
+                if (mapMoveTimer) {
+                    clearTimeout(mapMoveTimer);
+                }
+                mapMoveTimer = setTimeout(loadViewportHotels, 400);
+            }
+
+            function finishInitialMapPosition() {
+                if (!ignoreMoveEnd) {
+                    return;
+                }
+                ignoreMoveEnd = false;
+                loadViewportHotels();
+            }
+
+            function applyInitialMapPosition(map) {
+                const hotels = hotelsWithCoords();
+                ignoreMoveEnd = true;
+                upsertModalMarkers(hotels, false);
+
+                if (hotels.length === 1) {
+                    map.setView([
+                        parseFloat(hotels[0].latitude),
+                        parseFloat(hotels[0].longitude)
+                    ], 13);
+                } else if (hotels.length > 1) {
+                    const bounds = L.latLngBounds();
+                    hotels.forEach(function(hotel) {
+                        bounds.extend([
+                            parseFloat(hotel.latitude),
+                            parseFloat(hotel.longitude)
+                        ]);
+                    });
+                    map.fitBounds(bounds, { padding: [36, 36], maxZoom: 13 });
+                } else {
+                    map.setView([20, 0], 2);
+                }
+
+                initialMapPositionDone = true;
+                map.once('moveend', finishInitialMapPosition);
+                setTimeout(function() {
+                    if (ignoreMoveEnd) {
+                        finishInitialMapPosition();
+                    }
+                }, 500);
             }
 
             window.refreshHotelMapMarkers = function() {
-                const modalOpen = mapModal.classList.contains('show');
-                refreshAllMaps(true, !modalOpen);
+                refreshPreviewMaps(true);
+                if (maps.modal.map && initialMapPositionDone) {
+                    upsertModalMarkers(hotelsWithCoords(), false);
+                    maps.modal.map.invalidateSize();
+                }
             };
 
-            refreshAllMaps(true, false);
+            refreshPreviewMaps(true);
             setTimeout(function() {
-                refreshAllMaps(true, false);
+                refreshPreviewMaps(true);
             }, 400);
 
             window.addEventListener('resize', function() {
@@ -2006,25 +2224,34 @@
                     e.preventDefault();
                     if (window.jQuery && typeof jQuery.fn.modal === 'function') {
                         jQuery('#mapModal').modal('show');
+                    } else if (window.bootstrap && typeof bootstrap.Modal === 'function') {
+                        bootstrap.Modal.getOrCreateInstance(mapModal).show();
                     }
                 });
             });
 
             function onHotelMapModalShown() {
                 if (!maps.modal.map) {
+                    ignoreMoveEnd = true;
                     maps.modal.map = L.map('hotelMap', {
                         minZoom: 2,
-                        maxZoom: 19,
-                        zoomSnap: 0.5
-                    }).setView([51.505, -0.09], 10);
+                        maxZoom: 18,
+                        zoomSnap: 0.5,
+                        worldCopyJump: true
+                    }).setView([20, 0], 2);
                     addHotelTiles(maps.modal.map);
                     maps.modal.cluster = createClusterGroup();
                     maps.modal.map.addLayer(maps.modal.cluster);
+                    maps.modal.map.on('moveend', scheduleViewportLoad);
                 }
 
-                plotHotels(maps.modal.map, maps.modal.cluster, hotelPinIcon, true, true);
                 maps.modal.map.invalidateSize();
-                updateCounts(hotelsWithCoords().length);
+
+                if (!initialMapPositionDone) {
+                    applyInitialMapPosition(maps.modal.map);
+                }
+
+                updateModalCount(modalMarkers.size || hotelsWithCoords().length);
             }
 
             mapModal.addEventListener('shown.bs.modal', onHotelMapModalShown);
