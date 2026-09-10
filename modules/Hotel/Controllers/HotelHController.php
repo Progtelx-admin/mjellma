@@ -479,11 +479,6 @@ class HotelHController extends Controller
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
     {
-        ini_set('memory_limit', '512M');
-
-        Log::info('REGION DEBUG 1 - entered getHotelIdsForRegion', [
-            'region_id' => $regionId
-        ]);
         if ($regionId <= 0) {
             return [];
         }
@@ -532,11 +527,6 @@ class HotelHController extends Controller
         $startedAt = microtime(true);
 
         try {
-            Log::info('REGION DEBUG 2 - before RateHawk request', [
-                'region_id' => $regionId,
-                'url' => $this->getApiUrl() . 'search/serp/region/',
-            ]);
-
             $response = Http::timeout(30)
                 ->withOptions($this->httpOptions)
                 ->withBasicAuth(
@@ -551,27 +541,8 @@ class HotelHController extends Controller
                     $body
                 );
 
-            Log::info('REGION DEBUG 3 - after RateHawk request', [
-                'status' => $response->status()
-            ]);
-
-            Log::info('REGION DEBUG 4 - before JSON decode', [
-                'content_length' => $response->header('Content-Length'),
-                'body_bytes' => strlen($response->body()),
-                'memory_limit' => ini_get('memory_limit'),
-                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
-                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
-            ]);
-
-
             $durationMs = round((microtime(true) - $startedAt) * 1000);
             $json = $response->json();
-
-            Log::info('REGION DEBUG 5 - after JSON decode', [
-                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
-                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
-            ]);
-
 
             Log::info('ETG region search response', [
                 'region_id' => $regionId,
@@ -635,12 +606,6 @@ class HotelHController extends Controller
      */
     private function applyHaSearchConstraints($query, array $params, bool $applyRegionOrder = false)
     {
-        Log::info('APPLY DEBUG 1 - entered', [
-            'region_id' => $params['region_id'] ?? null,
-            'hid' => $params['hid'] ?? null,
-            'etg_hotel_id' => $params['etg_hotel_id'] ?? null,
-        ]);
-
         if (!empty($params['hid'])) {
             $query->where('hid', (int) $params['hid']);
         } elseif (!empty($params['etg_hotel_id'])) {
@@ -654,20 +619,10 @@ class HotelHController extends Controller
         }
 
         if (!empty($params['region_id'])) {
-
-            Log::info('APPLY DEBUG 2 - before getHotelIdsForRegion', [
-                'region_id' => $params['region_id']
-            ]);
-
             $regionHotelIds = $this->getHotelIdsForRegion(
                 (int) $params['region_id'],
                 $params
             );
-
-            Log::info('APPLY DEBUG 3 - after getHotelIdsForRegion', [
-                'count' => count($regionHotelIds)
-            ]);
-
             if (empty($regionHotelIds)) {
                 $query->whereRaw('1 = 0');
             } else {
@@ -706,23 +661,14 @@ class HotelHController extends Controller
             'rooms' => $request->input('rooms'),
             'children_count' => $request->input('children_count'),
         ]);
+        // Extend execution time for large dataset searches
+        set_time_limit(120);
 
         try {
             // Set breakfast_included to true by default if not provided
             // if (!$request->has('breakfast_included')) {
             //   $request->merge(['breakfast_included' => true]);
             // } 
-
-            Log::info('DEBUG STEP 1 - entered try');
-
-            // Extend execution time if allowed by server
-            if (function_exists('set_time_limit')) {
-                set_time_limit(120);
-            }
-
-            Log::info('DEBUG STEP 2 - after set_time_limit');
-
-            Log::info('DEBUG STEP 3 - before validation');
 
             // 1) Validate inputs, including children_count & per-child ages
             $request->validate([
@@ -751,8 +697,6 @@ class HotelHController extends Controller
                 'breakfast_included' => 'nullable|boolean',
                 'chunk' => 'nullable|integer',
             ]);
-
-            Log::info('DEBUG STEP 4 - after validation');
 
             // 2) Build cache key including both count and ages
             $searchHash = md5(json_encode([
@@ -785,32 +729,17 @@ class HotelHController extends Controller
                 return $this->loadHotelChunk($request, $searchHash, $childAges);
             }
 
-            Log::info('DEBUG STEP 5 - before haSearchParamsFromRequest');
-
             // 4) Get hotels from database immediately (no API calls)
             $haParams = $this->haSearchParamsFromRequest($request);
-
-            Log::info('DEBUG STEP 6 - after haSearchParamsFromRequest', [
-                'haParams' => $haParams
-            ]);
-
-            Log::info('DEBUG STEP 7 - before applyHaSearchConstraints');
-
             $hotelQuery = $this->applyHaSearchConstraints(
                 DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
                 $haParams,
                 true
             );
-            Log::info('DEBUG STEP 8 - after applyHaSearchConstraints');
 
-            Log::info('DEBUG STEP 9 - before hotel query get');
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
             $hotels = $hotelQuery->limit(50)->get();
-
-            Log::info('DEBUG STEP 10 - hotels loaded', [
-                'count' => $hotels->count()
-            ]);
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -872,14 +801,8 @@ class HotelHController extends Controller
                 'isLoading' => false, // Show hotels immediately
                 'loadMore' => $totalCount > 50,
             ]);
-        } catch (\Throwable $e) {
-            Log::error('Error searching hotels', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'type' => get_class($e),
-            ]);
-
+        } catch (\Exception $e) {
+            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
