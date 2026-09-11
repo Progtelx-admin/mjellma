@@ -6,6 +6,12 @@
             request()->only([
                 'hotel_name',
                 'location',
+                'hid',
+                'etg_hotel_id',
+                'hotel_region_id',
+                'region_id',
+                'region_type',
+                'region_country_code',
                 'checkin',
                 'checkout',
                 'adults',
@@ -14,6 +20,10 @@
                 'longitude',
                 'currency',
                 'breakfast_included',
+                'min_price',
+                'max_price',
+                'star_rating',
+                'sort_by',
             ]),
             ['children_count' => request('children_count', 0)],
             ['children' => request('children', [])],
@@ -27,9 +37,16 @@
             'EUR' => '€',
             default => request('currency', '€'),
         };
+
+    $cardImageUrl = $hotel->image_url ?? '';
+    if ($cardImageUrl !== '' && str_contains($cardImageUrl, 'cdn.worldota.net')) {
+        $cardImageUrl = preg_replace('#(/t/)\d+x\d+(/)#', '${1}640x400${2}', $cardImageUrl) ?: $cardImageUrl;
+    }
+    $imgLoading = (isset($loop) && $loop->index < 6) ? 'eager' : 'lazy';
 @endphp
 
 <a href="{{ route('hotel.info', $query) }}" class="text-decoration-none hotel-card-link"
+    data-hotel-id="{{ $hotel->hotel_id }}"
     data-hotel-price="{{ $hotel->daily_price ?? '' }}"
     data-hotel-rating="{{ $hotel->star_rating ?? 0 }}"
     data-hotel-lat="{{ $hotel->latitude ?? '' }}"
@@ -37,10 +54,12 @@
     <article class="hotel-listcard">
         {{-- IMAGE --}}
         <div class="hotel-listcard__media">
-            @if ($hotel->image_url)
-                <img src="{{ $hotel->image_url }}" alt="{{ $hotel->name }}">
+            @if ($cardImageUrl)
+                <img src="{{ $cardImageUrl }}" alt="{{ $hotel->name }}" width="640" height="400"
+                    loading="{{ $imgLoading }}" decoding="async">
             @else
-                <img src="{{ asset('uploads/no_img.jpeg') }}" alt="No image available">
+                <img src="{{ asset('uploads/no_img.jpeg') }}" alt="No image available" width="640" height="400"
+                    loading="{{ $imgLoading }}" decoding="async">
             @endif
 
             {{-- grid-only price badge --}}
