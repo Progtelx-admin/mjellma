@@ -475,6 +475,60 @@ class HotelHController extends Controller
     }
 
     /**
+     * Search query string to carry from results → hotel page → back to results.
+     */
+    private function hotelSearchContextQuery($request, array $fallback = [], $hotelId = null): array
+    {
+        $keys = [
+            'hotel_name',
+            'location',
+            'hid',
+            'etg_hotel_id',
+            'hotel_region_id',
+            'region_id',
+            'region_type',
+            'region_country_code',
+            'checkin',
+            'checkout',
+            'adults',
+            'rooms',
+            'latitude',
+            'longitude',
+            'currency',
+            'children_count',
+            'breakfast_included',
+            'min_price',
+            'max_price',
+            'star_rating',
+            'sort_by',
+        ];
+
+        $query = [];
+        foreach ($keys as $key) {
+            $value = $request->input($key, $fallback[$key] ?? null);
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $query[$key] = $value;
+        }
+
+        $children = $request->input('children', $fallback['children'] ?? []);
+        if (is_array($children) && $children !== []) {
+            $query['children'] = $children;
+        }
+
+        if (!isset($query['children_count'])) {
+            $query['children_count'] = (int) ($fallback['children_count'] ?? 0);
+        }
+
+        if ($hotelId !== null && $hotelId !== '') {
+            $query['id'] = $hotelId;
+        }
+
+        return $query;
+    }
+
+    /**
      * Ranked ETG hotel IDs for a city/region. Used by Search-by-Region.
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
@@ -739,7 +793,7 @@ class HotelHController extends Controller
 
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
-            $hotels = $hotelQuery->limit(50)->get();
+            $hotels = $hotelQuery->limit(48)->get();
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -755,7 +809,7 @@ class HotelHController extends Controller
             }
 
             // Take first 10 for immediate display
-            $hotels = collect($hotels)->take(50);
+            $hotels = collect($hotels)->take(48);
 
 
             // Cache search params for AJAX
@@ -799,7 +853,7 @@ class HotelHController extends Controller
                 'maxPrice' => 999,
                 'searchHash' => $searchHash,
                 'isLoading' => false, // Show hotels immediately
-                'loadMore' => $totalCount > 50,
+                'loadMore' => $totalCount > 48,
             ]);
         } catch (\Exception $e) {
             Log::error('Error searching hotels', ['message' => $e->getMessage()]);
@@ -898,7 +952,7 @@ class HotelHController extends Controller
         set_time_limit(60);
 
         $chunk = (int) $request->input('chunk', 0);
-        $chunkSize = 50; // Process 50 hotels at a time
+        $chunkSize = 48; // 48 fills 3-col and 2-col grids with no leftover cell
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
@@ -1072,12 +1126,7 @@ class HotelHController extends Controller
             $html = '';
             foreach ($filtered as $hotelData) {
                 $hotel = (object) $hotelData;
-                $query = array_merge(
-                    ['id' => $hotel->hotel_id],
-                    $request->only(['checkin', 'checkout', 'adults', 'rooms', 'latitude', 'longitude', 'currency']),
-                    ['children_count' => $searchParams['children_count']],
-                    ['children' => $searchParams['children']]
-                );
+                $query = $this->hotelSearchContextQuery($request, $searchParams, $hotel->hotel_id);
 
                 $currencySym = match ($request->input('currency', 'EUR')) {
                     'USD' => '$',

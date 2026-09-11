@@ -258,21 +258,6 @@
                     @foreach ($hotels as $hotel)
                         @include('Hotel::frontend.partials.hotel-card-chunk', [
                             'hotel' => $hotel,
-                            'query' => array_merge(
-                                ['id' => $hotel->hotel_id],
-                                request()->only([
-                                    'hotel_name',
-                                    'location',
-                                    'checkin',
-                                    'checkout',
-                                    'adults',
-                                    'rooms',
-                                    'latitude',
-                                    'longitude',
-                                    'currency',
-                                ]),
-                                ['children_count' => request('children_count', 0)],
-                                ['children' => request('children', [])]),
                         ])
                     @endforeach
                 </div>
@@ -282,21 +267,6 @@
                     @foreach ($hotels as $hotel)
                         @include('Hotel::frontend.partials.hotel-card-chunk', [
                             'hotel' => $hotel,
-                            'query' => array_merge(
-                                ['id' => $hotel->hotel_id],
-                                request()->only([
-                                    'hotel_name',
-                                    'location',
-                                    'checkin',
-                                    'checkout',
-                                    'adults',
-                                    'rooms',
-                                    'latitude',
-                                    'longitude',
-                                    'currency',
-                                ]),
-                                ['children_count' => request('children_count', 0)],
-                                ['children' => request('children', [])]),
                         ])
                     @endforeach
                 </div>
@@ -455,7 +425,7 @@
                 return 0;
             }
 
-            const PAGE_SIZE = 50;
+            const PAGE_SIZE = 48;
             let currentPage = 1;
             let pendingPage = null;
             let allHotelCards = [];
@@ -2097,34 +2067,9 @@
             }
 
             function hotelDetailUrl(hotel) {
-                const urlParams = new URLSearchParams({
-                    id: hotel.hotel_id,
-                    checkin: '{{ request('checkin') }}',
-                    checkout: '{{ request('checkout') }}',
-                    adults: '{{ request('adults') }}',
-                    rooms: '{{ request('rooms') }}',
-                    currency: '{{ request('currency', 'EUR') }}',
-                    children_count: '{{ request('children_count', 0) }}'
-                });
-
-                @if (request('children'))
-                    @foreach (request('children') as $age)
-                        urlParams.append('children[]', '{{ $age }}');
-                    @endforeach
-                @endif
-
-                @if (request('hotel_name'))
-                    urlParams.set('hotel_name', '{{ request('hotel_name') }}');
-                @endif
-                @if (request('location'))
-                    urlParams.set('location', '{{ request('location') }}');
-                @endif
-                @if (request('latitude'))
-                    urlParams.set('latitude', '{{ request('latitude') }}');
-                @endif
-                @if (request('longitude'))
-                    urlParams.set('longitude', '{{ request('longitude') }}');
-                @endif
+                const urlParams = new URLSearchParams(window.location.search);
+                urlParams.delete('chunk');
+                urlParams.set('id', hotel.hotel_id);
 
                 return `/hotel/${hotel.hotel_id}?${urlParams.toString()}`;
             }

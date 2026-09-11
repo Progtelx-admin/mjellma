@@ -5,23 +5,7 @@
 
         {{-- Back to Results --}}
         <div class="mb-4">
-            <a href="{{ route(
-                'hotel.search',
-                request()->only([
-                    'hotel_name',
-                    'location',
-                    'checkin',
-                    'checkout',
-                    'adults',
-                    'rooms',
-                    'latitude',
-                    'longitude',
-                    'currency',
-                    'children_count',
-                    'children',
-                    'breakfast_included',
-                ]),
-            ) }}"
+            <a href="{{ route('hotel.search', request()->except(['id'])) }}"
                 class="btn btn-outline-secondary">
                 ← Back to results
             </a>
