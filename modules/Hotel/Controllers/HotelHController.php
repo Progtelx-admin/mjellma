@@ -530,6 +530,11 @@ class HotelHController extends Controller
 
     /**
      * Ranked ETG hotel IDs for a city/region. Used by Search-by-Region.
+     *
+     * Istanbul-sized SERP payloads can be tens/hundreds of MB (every hotel with
+     * full rates). Decoding that JSON with $response->json() OOMs PHP and the
+     * browser shows HTTP 500 with no Laravel error line. Stream the body to
+     * disk and pull only hotel string IDs.
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
     {
@@ -540,7 +545,7 @@ class HotelHController extends Controller
         $checkin = $params['checkin'] ?? null;
         $checkout = $params['checkout'] ?? null;
         $adults = (int) ($params['adults'] ?? 1);
-        $children = $params['children'] ?? [];
+        $children = is_array($params['children'] ?? null) ? array_values($params['children']) : [];
         $currency = $params['currency'] ?? 'EUR';
 
         if (!$checkin || !$checkout) {
@@ -571,18 +576,33 @@ class HotelHController extends Controller
             'guests' => [
                 [
                     'adults' => $adults,
-                    'children' => array_values($children),
+                    'children' => $children,
                 ],
             ],
             'region_id' => $regionId,
             'currency' => $currency,
+            // Ask ETG to stop rate-searching before typical proxy/FPM limits.
+            'timeout' => 25,
         ];
 
         $startedAt = microtime(true);
+        $tmpFile = tempnam(sys_get_temp_dir(), 'etg_serp_');
+
+        if ($tmpFile === false) {
+            Log::error('ETG region search failed', [
+                'region_id' => $regionId,
+                'message' => 'Could not create temp file for SERP body',
+            ]);
+
+            return [];
+        }
 
         try {
-            $response = Http::timeout(30)
-                ->withOptions($this->httpOptions)
+            $response = Http::timeout(60)
+                ->connectTimeout(15)
+                ->withOptions(array_merge($this->httpOptions, [
+                    'sink' => $tmpFile,
+                ]))
                 ->withBasicAuth(
                     $this->getApiUsername(),
                     $this->getApiPassword()
@@ -596,63 +616,157 @@ class HotelHController extends Controller
                 );
 
             $durationMs = round((microtime(true) - $startedAt) * 1000);
-            $json = $response->json();
+            $bytes = is_file($tmpFile) ? (int) filesize($tmpFile) : 0;
+            $meta = $this->readEtgSerpFileMeta($tmpFile);
 
             Log::info('ETG region search response', [
                 'region_id' => $regionId,
                 'http_status' => $response->status(),
                 'duration_ms' => $durationMs,
-                'status' => $json['status'] ?? null,
-                'error' => $json['error'] ?? null,
-                'total_hotels' => $json['data']['total_hotels'] ?? null,
-                'request_id' => $json['debug']['request_id'] ?? null,
+                'bytes' => $bytes,
+                'status' => $meta['status'],
+                'error' => $meta['error'],
+                'total_hotels' => $meta['total_hotels'],
+                'request_id' => $meta['request_id'],
             ]);
 
             if (
                 !$response->successful()
-                || ($json['status'] ?? null) !== 'ok'
-                || !empty($json['error'])
+                || ($meta['status'] !== null && $meta['status'] !== 'ok')
+                || !empty($meta['error'])
             ) {
                 throw new \RuntimeException(
                     'RateHawk region search failed: '
-                        . ($json['error'] ?? 'HTTP ' . $response->status())
+                        . ($meta['error'] ?? 'HTTP ' . $response->status())
                 );
             }
 
-            $hotels = $json['data']['hotels'] ?? [];
-
-            if (!is_array($hotels)) {
-                return [];
-            }
-
-            $ids = [];
-
-            foreach ($hotels as $hotel) {
-                $id = $hotel['id'] ?? null;
-
-                if ($id !== null && $id !== '') {
-                    $ids[] = $id;
-                }
-            }
-
-            $ids = array_values(array_unique($ids));
+            $ids = $this->extractHotelIdsFromEtgSerpFile($tmpFile);
 
             Log::info('ETG region hotel IDs loaded', [
                 'region_id' => $regionId,
                 'ids_count' => count($ids),
+                'bytes' => $bytes,
             ]);
 
             Cache::put($cacheKey, $ids, now()->addMinutes(15));
 
             return $ids;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('ETG region search failed', [
                 'region_id' => $regionId,
                 'message' => $e->getMessage(),
             ]);
 
-            throw $e;
+            return [];
+        } finally {
+            if (is_file($tmpFile)) {
+                @unlink($tmpFile);
+            }
         }
+    }
+
+    /**
+     * Read status/error/total_hotels from the start and end of a SERP file
+     * without decoding the hotel/rates payload.
+     */
+    private function readEtgSerpFileMeta(string $path): array
+    {
+        $meta = [
+            'status' => null,
+            'error' => null,
+            'total_hotels' => null,
+            'request_id' => null,
+        ];
+
+        if (!is_file($path)) {
+            return $meta;
+        }
+
+        $size = (int) filesize($path);
+        if ($size <= 0) {
+            return $meta;
+        }
+
+        $fh = fopen($path, 'rb');
+        if ($fh === false) {
+            return $meta;
+        }
+
+        $headLen = min(8192, $size);
+        $head = fread($fh, $headLen);
+        $tail = $head;
+
+        if ($size > $headLen) {
+            $tailLen = min(16384, $size);
+            fseek($fh, -$tailLen, SEEK_END);
+            $tail = fread($fh, $tailLen) ?: '';
+        }
+
+        fclose($fh);
+
+        $blob = (string) $head . "\n" . (string) $tail;
+
+        if (preg_match('/"status"\s*:\s*"([^"]+)"/', $blob, $m)) {
+            $meta['status'] = $m[1];
+        }
+
+        if (preg_match('/"error"\s*:\s*(null|"([^"]*)")/', $blob, $m)) {
+            $meta['error'] = ($m[1] === 'null') ? null : ($m[2] ?? null);
+        }
+
+        if (preg_match('/"total_hotels"\s*:\s*(\d+)/', $blob, $m)) {
+            $meta['total_hotels'] = (int) $m[1];
+        }
+
+        if (preg_match('/"request_id"\s*:\s*"([^"]+)"/', $blob, $m)) {
+            $meta['request_id'] = $m[1];
+        }
+
+        return $meta;
+    }
+
+    /**
+     * Pull hotel string IDs from an ETG SERP file. Hotel objects start with
+     * {"id":"dukes_dubai","hid":8663536,"rates":[...]} — never load rates.
+     */
+    private function extractHotelIdsFromEtgSerpFile(string $path): array
+    {
+        $ids = [];
+        $fh = fopen($path, 'rb');
+        if ($fh === false) {
+            return [];
+        }
+
+        $carry = '';
+        while (!feof($fh)) {
+            $chunk = fread($fh, 256 * 1024);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+
+            $buffer = $carry . $chunk;
+            if (preg_match_all('/"id"\s*:\s*"([^"]+)"\s*,\s*"hid"\s*:/', $buffer, $matches)) {
+                foreach ($matches[1] as $id) {
+                    if ($id !== '') {
+                        $ids[$id] = true;
+                    }
+                }
+            }
+            if (preg_match_all('/"hid"\s*:\s*\d+\s*,\s*"id"\s*:\s*"([^"]+)"/', $buffer, $matches)) {
+                foreach ($matches[1] as $id) {
+                    if ($id !== '') {
+                        $ids[$id] = true;
+                    }
+                }
+            }
+
+            $carry = substr($buffer, -512);
+        }
+
+        fclose($fh);
+
+        return array_keys($ids);
     }
 
     /**
@@ -893,8 +1007,12 @@ class HotelHController extends Controller
                 'isLoading' => false, // Show hotels immediately
                 'loadMore' => $totalCount > 48,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('Error searching hotels', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
