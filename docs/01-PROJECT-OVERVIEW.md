@@ -1,72 +1,100 @@
 # Project Overview
 
-## What this project is
+## Overview
 
-Mjellma is a customized **Booking Core** (Laravel) travel-booking site. Composer `name` is `laravel/laravel`. `config/app.php` sets the display name default to `Booking Core` and `'version' => "3.4.2"`. The BC theme reports version `3.6.0` (`themes/BC/ThemeProvider.php`).
+Mjellma is a customized **Booking Core** travel marketplace built on **Laravel 10**. It lets travelers search and book hotels and cars (and other bookable services), while operators manage inventory, bookings, CMS content, users, and payments from an admin panel.
 
-It supports:
+Composer package name remains `laravel/laravel`. Display name defaults to `Booking Core` via `APP_NAME`. Application version: **`3.4.2`** in `config/app.php`. Active theme **BC** reports version **`3.6.0`** in `themes/BC/ThemeProvider.php`.
 
-- **Hotel search and booking via ETG / RateHawk / WorldOTA** (primary public homepage)
-- **Legacy Booking Core hotels** stored in `bravo_hotels` (admin/vendor CRUD still exists; public catalog routes are commented out)
-- **Car rental** via an external HTTP API (`CAR_API_BASE`)
-- **Tour, Space, Event, Flight, Boat** as Booking Core bookable modules (database-backed, vendor-managed)
-- **CMS**: pages, news, templates, popups, media, menus, languages
-- **Users, roles, vendors, wallets, plans, reviews, coupons, reports**
-- **Payments**: PCB Bank (custom), PayPal, Stripe, Payrexx, Paystack, offline, plus a TwoCheckout plugin
-- **Offers** (custom module registered in `config/app.php`)
-- **Pro** add-on namespace (`pro/`, `PRO_ENABLE`)
-- Mobile-oriented **JSON API** under `/api` (`modules/Api`)
+## Problem It Solves
 
-## What a user can do
+Travel agencies and marketplace operators need:
 
-1. Open `/` and search hotels by city (ETG region) or hotel name (ETG suggestion + local `hotels` table).
-2. Open a hotel page `/hotel/{id}`, pick a rate (`book_hash`), prebook, pay with PCB Bank, finish the ETG order.
-3. Search and book cars at `/car` against the Orange/rent-a-car style API.
-4. Register/login (Fortify + custom register routes), manage profile, wishlist, wallet, vendor listings.
-5. Admins use `/admin` for bookings, settings, users, CMS, and car-rent reservations.
+- Live hotel rates and booking against a wholesale supplier (ETG / RateHawk / WorldOTA)
+- A searchable local hotel catalog for discovery and SEO-friendly detail pages
+- Car rental search against a partner API
+- Classic on-platform inventory (tours, spaces, events, flights, boats) with vendor tools
+- Multi-gateway payments with a primary PCB Bank card flow
+- Admin/CMS, multi-language UI, roles/permissions, and a JSON API for clients
 
-## Technology summary
+## Intended Users
 
-| Layer | Technology | Evidence |
-|---|---|---|
-| Backend | PHP 8.1+, Laravel 10 | `composer.json` |
-| HTTP | Laravel routing, Blade views | `routes/`, `modules/*/Routes`, `themes/` |
-| Auth | Laravel Fortify, Sanctum, Socialite, custom roles | `config/fortify.php`, `app/User.php`, `modules/Api/Controllers/AuthController.php` |
-| Database | MySQL (default) | `.env.example`, `config/database.php` |
-| Frontend | Blade, jQuery, Vue 2 (admin), Sass, Laravel Mix | `package.json`, `public_html/themes/*/webpack.mix.js` |
-| HTTP clients | Guzzle / Laravel HTTP | ETG and car API calls |
-| Payments | Omnipay, Stripe PHP, Paystack, custom PCB mTLS | `composer.json`, `config/payment.php`, `app/Services/PcbBankService.php` |
-| Static hotel dump | Python scripts | `hotels_data.py`, `meal_data.py` |
+| Audience | Typical access |
+| --- | --- |
+| Guests / B2C customers | Public hotel/car search, booking, account |
+| B2B agents / vendors | Role-based ETG credentials, vendor listing tools |
+| Administrators | `/admin` dashboard (prefix configurable) |
+| Mobile / API clients | `/api/*` with Sanctum tokens |
 
-## Product vs Booking Core stock
+## Major System Responsibilities
 
-This fork changes the hotel product:
+1. **Hotel product (primary homepage)** — local `hotels` + ETG live rates, prebook, PCB payment, ETG order finish
+2. **Car rental** — proxy search/checkout to external car API + PCB/cash
+3. **Booking Core services** — tour, space, event, flight, boat CRUD, availability, cart/checkout
+4. **Payments** — gateway registry in `config/payment.php`
+5. **Identity** — Fortify web auth, custom roles/permissions, Sanctum API tokens
+6. **CMS** — pages, news, templates, popups, media, menus, offers
+7. **Ops** — reports, logs, settings, scheduled plan expiry
 
-| Stock Booking Core | This repository |
-|---|---|
-| `GET /hotel` search on `bravo_hotels` | Commented out in `modules/Hotel/Routes/web.php` |
-| Homepage `HomeController@index` | Commented out in `routes/web.php`; `/` is `HotelHController@showHotels` |
-| Vendor “Manage Hotel” menu | Commented out in `Hotel\ModuleProvider::getUserMenu` |
-| Admin “All Hotels” children | Commented out; admin menu points at `hotel.admin.booking.index` |
+## Main Modules
 
-Car search still uses Booking Core routes but `CarController` talks to `CAR_API_BASE` instead of only Eloquent inventory.
+Registered from `Themes\Base\ThemeProvider::$modules` (plus `Modules\Offers\ModuleProvider` in `config/app.php`):
 
-## Namespaces / autoload
+Core, Api, Booking, Hotel, Space, Car, Event, Tour, Flight, Boat, Contact, Dashboard, Email, Sms, Language, Media, News, Page, User, Template, Report, Vendor, Coupon, Location, Review, Popup, Offers, Theme.
 
-From `composer.json` `autoload.psr-4`:
+## Product Customizations vs Stock Booking Core
 
-- `App\` → `app/`
-- `Modules\` → `modules/`
-- `Themes\` → `themes/`
-- `Custom\` → `custom/`
-- `Plugins\` → `plugins/`
-- `Pro\` → `pro/`
-- Helpers: `app/Helpers/AppHelper.php`, `app/Helpers/ProHelper.php`
+| Stock Booking Core | This implementation |
+| --- | --- |
+| Homepage `HomeController@index` | Commented out; `/` → `HotelHController@showHotels` |
+| Public hotel search on `bravo_hotels` | Classic routes commented; ETG + `hotels` table drive public UX |
+| Vendor “Manage Hotel” prominence | Partially disabled in hotel menus |
+| Generic checkout only | HA hotel flow uses dedicated confirmation/PCB routes |
 
-## Related documentation
+## High-Level Request Lifecycle
 
-- [Project Structure](./02-PROJECT-STRUCTURE.md)
-- [Architecture](./03-ARCHITECTURE.md)
-- [Features](./20-FEATURES.md)
-- [Hotel Search](./21-HOTEL-SEARCH.md)
-- [External Integrations](./13-EXTERNAL-INTEGRATIONS.md)
+```text
+HTTP Request
+    → public_html/index.php
+    → Global middleware (installer redirect, CORS, …)
+    → web/api middleware group
+    → Route (routes/* or modules/*/Routes)
+    → Controller
+    → Models / Services / External HTTP
+    → Blade view or JSON response
+```
+
+## How Major Parts Communicate
+
+```mermaid
+flowchart TB
+    subgraph Frontend
+        Blade[Blade + jQuery/Vue]
+        AdminVue[Admin Vue 2 Mix build]
+    end
+    subgraph Backend
+        Controllers
+        Services[PcbBankService / InvoiceService]
+        Models
+    end
+    subgraph External
+        ETG
+        CarAPI
+        PCB
+    end
+    Blade --> Controllers
+    AdminVue --> Controllers
+    Controllers --> Models
+    Controllers --> Services
+    Controllers --> ETG
+    Controllers --> CarAPI
+    Services --> PCB
+    Models --> DB[(MySQL)]
+```
+
+## Related Documentation
+
+- [Technology Stack](./02-technology-stack.md)
+- [Project Architecture](./03-project-architecture.md)
+- [Features](./13-features.md)
+- [Integrations](./17-integrations.md)
