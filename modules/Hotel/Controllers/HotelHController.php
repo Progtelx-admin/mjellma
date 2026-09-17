@@ -656,9 +656,48 @@ class HotelHController extends Controller
     }
 
     /**
-     * Apply hotel-name / hid / city-region constraints to a hotels query.
+     * Local place filter when ETG region search returns no hotel IDs.
+     * Prefers lat/lng bounding box; otherwise matches location against address/name.
+     *
+     * @return bool True when a place constraint was applied
      */
-    private function applyHaSearchConstraints($query, array $params, bool $applyRegionOrder = false)
+    private function applyDbPlaceFallback($query, array $params): bool
+    {
+        if (!empty($params['latitude']) && !empty($params['longitude'])) {
+            $lat = (float) $params['latitude'];
+            $lng = (float) $params['longitude'];
+            $radius = (float) ($params['radius'] ?? 4);
+            $query->whereBetween('latitude', [
+                $lat - ($radius / 111),
+                $lat + ($radius / 111),
+            ])->whereBetween('longitude', [
+                $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                $lng + ($radius / (111 * cos(deg2rad($lat)))),
+            ]);
+
+            return true;
+        }
+
+        $location = trim((string) ($params['location'] ?? ''));
+        if ($location !== '') {
+            $like = '%' . $location . '%';
+            $query->where(function ($q) use ($like) {
+                $q->where('address', 'like', $like)
+                    ->orWhere('name', 'like', $like);
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Apply hotel-name / hid / city-region constraints to a hotels query.
+     * When region_id is set and ETG returns 0 IDs, falls back to local DB place match
+     * and sets $params['region_fallback_db'] so chunks reuse the same path.
+     */
+    private function applyHaSearchConstraints($query, array &$params, bool $applyRegionOrder = false)
     {
         if (!empty($params['hid'])) {
             $query->where('hid', (int) $params['hid']);
@@ -673,31 +712,45 @@ class HotelHController extends Controller
         }
 
         if (!empty($params['region_id'])) {
-            $regionHotelIds = $this->getHotelIdsForRegion(
-                (int) $params['region_id'],
-                $params
-            );
-            if (empty($regionHotelIds)) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereIn('hotel_id', $regionHotelIds);
+            $useFallback = !empty($params['region_fallback_db']);
 
-                if ($applyRegionOrder) {
-                    $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
-                    $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
+            if (!$useFallback) {
+                $regionHotelIds = $this->getHotelIdsForRegion(
+                    (int) $params['region_id'],
+                    $params
+                );
+
+                if (!empty($regionHotelIds)) {
+                    $params['region_fallback_db'] = false;
+                    $query->whereIn('hotel_id', $regionHotelIds);
+
+                    if ($applyRegionOrder) {
+                        $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
+                        $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
+                    }
+
+                    return $query;
+                }
+
+                $params['region_fallback_db'] = true;
+                $useFallback = true;
+
+                Log::info('ETG region search empty — falling back to local DB place filter', [
+                    'region_id' => $params['region_id'],
+                    'location' => $params['location'] ?? null,
+                    'has_latlng' => !empty($params['latitude']) && !empty($params['longitude']),
+                ]);
+            }
+
+            if ($useFallback) {
+                if (!$this->applyDbPlaceFallback($query, $params)) {
+                    $query->whereRaw('1 = 0');
+                } elseif ($applyRegionOrder) {
+                    $query->orderByDesc('star_rating')->orderBy('id');
                 }
             }
         } elseif (!empty($params['latitude']) && !empty($params['longitude'])) {
-            $lat = $params['latitude'];
-            $lng = $params['longitude'];
-            $radius = $params['radius'] ?? 4;
-            $query->whereBetween('latitude', [
-                $lat - ($radius / 111),
-                $lat + ($radius / 111),
-            ])->whereBetween('longitude', [
-                $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                $lng + ($radius / (111 * cos(deg2rad($lat)))),
-            ]);
+            $this->applyDbPlaceFallback($query, $params);
         }
 
         return $query;
@@ -812,28 +865,13 @@ class HotelHController extends Controller
             $hotels = collect($hotels)->take(48);
 
 
-            // Cache search params for AJAX
+            // Cache search params for AJAX (includes region_fallback_db when ETG returned 0 IDs)
             $cacheKey = "search_params_{$searchHash}";
-            Cache::put($cacheKey, [
-                'hotel_name' => $request->hotel_name,
-                'hid' => $request->hid,
-                'etg_hotel_id' => $request->etg_hotel_id,
-                'hotel_region_id' => $request->hotel_region_id,
-                'location' => $request->location,
-                'region_id' => $request->region_id,
-                'region_type' => $request->region_type,
-                'region_country_code' => $request->region_country_code,
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude,
-                'radius' => $request->radius,
-                'star_rating' => $request->star_rating,
-                'checkin' => $request->checkin,
-                'checkout' => $request->checkout,
-                'adults' => $request->adults,
-                'rooms' => $request->rooms,
+            Cache::put($cacheKey, array_merge($haParams, [
                 'children_count' => $childrenCount,
                 'children' => $childAges,
-            ], now()->addMinutes(30));
+                'region_fallback_db' => !empty($haParams['region_fallback_db']),
+            ]), now()->addMinutes(30));
 
             // Cache total count to avoid slow COUNT queries on large datasets
             $totalCountCacheKey = "hotel_count_{$searchHash}";
@@ -956,14 +994,14 @@ class HotelHController extends Controller
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
-            // Get search params from cache
+            // Get search params from cache (may include region_fallback_db from initial search)
             $searchParams = Cache::get("search_params_{$searchHash}");
             if (!$searchParams) {
                 return response()->json(['error' => 'Search expired'], 400);
             }
 
-            // Build base query for counting and fetching
-            $baseQuery = function ($applyRegionOrder = false) use ($searchParams) {
+            // Build base query for counting and fetching (by-ref so fallback flag persists)
+            $baseQuery = function ($applyRegionOrder = false) use (&$searchParams) {
                 return $this->applyHaSearchConstraints(
                     DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
                     $searchParams,
@@ -976,6 +1014,9 @@ class HotelHController extends Controller
             $totalHotels = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($baseQuery) {
                 return $baseQuery(false)->count();
             });
+
+            // Persist fallback flag if region search resolved during this chunk
+            Cache::put("search_params_{$searchHash}", $searchParams, now()->addMinutes(30));
 
             // Fetch only the current chunk from database
             $chunkHotels = $baseQuery(true)

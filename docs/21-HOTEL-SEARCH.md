@@ -20,7 +20,7 @@ Let travelers find ETG hotels by **city region** or **hotel name**, load live EU
 4. Selecting a city sets `region_id`, `region_type`, `region_country_code`.
 5. Submit GET `/hotels/search` with `checkin`, `checkout`, `adults`, `rooms`, `children_count`, `children[]`.
 6. First response: up to 10 hotels from MySQL (no prices yet).
-7. If the user picked a **city**, `getHotelIdsForRegion` calls ETG `search/serp/region/` then filters local `hotels`. Browser AJAX `chunk` loads more; each chunk calls ETG `search/serp/hotels` for prices/breakfast.
+7. If the user picked a **city**, `getHotelIdsForRegion` calls ETG `search/serp/region/` then filters local `hotels`. If ETG returns **0** IDs, falls back to local DB by lat/lng or `location` LIKE on address/name. Browser AJAX `chunk` loads more; each chunk calls ETG `search/serp/hotels` for prices/breakfast.
 8. Open `/hotel/{hotel_id}` — ETG `search/hp/` + `hotel/info/`.
 9. POST `/hotel/prebook` with `book_hash` — ETG `hotel/prebook/`.
 10. POST `/hotel/book` — ETG booking form + PCB `createOrder`.
@@ -86,6 +86,7 @@ Default `breakfast_included` is merged `true` if omitted (`searchHotels`).
 - else `hotel_name` LIKE
 - optional `star_rating` IN
 - `region_id` → `getHotelIdsForRegion` then `whereIn hotel_id`, optional MySQL `FIELD()` order
+- **If ETG returns 0 IDs** → DB fallback: lat/lng bounding box when present, else `address`/`name` LIKE `location`; sets `region_fallback_db` on cached search params (no `FIELD` order; `star_rating` desc). API failures still throw (no silent fallback).
 - else bounding box from lat/lng/`radius` (default radius 4)
 
 `getHotelIdsForRegion` POSTs `search/serp/region/` (checkin/checkout/guests/currency) and caches IDs 15 minutes (`etg_region_search_*`). This branch does **not** call `search/hotelsort/`. Geo search is a local lat/lng box on `hotels`, not ETG `search/serp/geo/`.

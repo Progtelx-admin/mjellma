@@ -82,17 +82,30 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
+        width: 56px;
+        height: 56px;
+        padding: 0;
         background-color: #25D366;
-        color: white;
+        color: #fff;
         border-radius: 50%;
-        padding: 15px;
-        font-size: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        line-height: 1;
+        text-decoration: none;
         z-index: 9999;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
     }
 
+    .whatsapp-float i {
+        margin: 0;
+        line-height: 1;
+    }
+
     .whatsapp-float:hover {
         background-color: #1ebe57;
+        color: #fff;
     }
 </style>
 
