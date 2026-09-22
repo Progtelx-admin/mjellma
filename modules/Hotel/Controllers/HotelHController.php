@@ -475,7 +475,66 @@ class HotelHController extends Controller
     }
 
     /**
+     * Search query string to carry from results → hotel page → back to results.
+     */
+    private function hotelSearchContextQuery($request, array $fallback = [], $hotelId = null): array
+    {
+        $keys = [
+            'hotel_name',
+            'location',
+            'hid',
+            'etg_hotel_id',
+            'hotel_region_id',
+            'region_id',
+            'region_type',
+            'region_country_code',
+            'checkin',
+            'checkout',
+            'adults',
+            'rooms',
+            'latitude',
+            'longitude',
+            'currency',
+            'children_count',
+            'breakfast_included',
+            'min_price',
+            'max_price',
+            'star_rating',
+            'sort_by',
+        ];
+
+        $query = [];
+        foreach ($keys as $key) {
+            $value = $request->input($key, $fallback[$key] ?? null);
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $query[$key] = $value;
+        }
+
+        $children = $request->input('children', $fallback['children'] ?? []);
+        if (is_array($children) && $children !== []) {
+            $query['children'] = $children;
+        }
+
+        if (!isset($query['children_count'])) {
+            $query['children_count'] = (int) ($fallback['children_count'] ?? 0);
+        }
+
+        if ($hotelId !== null && $hotelId !== '') {
+            $query['id'] = $hotelId;
+        }
+
+        return $query;
+    }
+
+    /**
      * Ranked ETG hotel IDs for a city/region. Used by Search-by-Region.
+     *
+     * Istanbul-sized SERP payloads can be tens/hundreds of MB (every hotel with
+     * full rates). Decoding that JSON with $response->json() OOMs PHP and the
+     * browser shows HTTP 500 with no Laravel error line. Stream the body to
+     * disk and pull only hotel string IDs.
      */
     private function getHotelIdsForRegion(int $regionId, array $params): array
     {
@@ -486,7 +545,7 @@ class HotelHController extends Controller
         $checkin = $params['checkin'] ?? null;
         $checkout = $params['checkout'] ?? null;
         $adults = (int) ($params['adults'] ?? 1);
-        $children = $params['children'] ?? [];
+        $children = is_array($params['children'] ?? null) ? array_values($params['children']) : [];
         $currency = $params['currency'] ?? 'EUR';
 
         if (!$checkin || !$checkout) {
@@ -517,18 +576,33 @@ class HotelHController extends Controller
             'guests' => [
                 [
                     'adults' => $adults,
-                    'children' => array_values($children),
+                    'children' => $children,
                 ],
             ],
             'region_id' => $regionId,
             'currency' => $currency,
+            // Ask ETG to stop rate-searching before typical proxy/FPM limits.
+            'timeout' => 25,
         ];
 
         $startedAt = microtime(true);
+        $tmpFile = tempnam(sys_get_temp_dir(), 'etg_serp_');
+
+        if ($tmpFile === false) {
+            Log::error('ETG region search failed', [
+                'region_id' => $regionId,
+                'message' => 'Could not create temp file for SERP body',
+            ]);
+
+            return [];
+        }
 
         try {
-            $response = Http::timeout(30)
-                ->withOptions($this->httpOptions)
+            $response = Http::timeout(60)
+                ->connectTimeout(15)
+                ->withOptions(array_merge($this->httpOptions, [
+                    'sink' => $tmpFile,
+                ]))
                 ->withBasicAuth(
                     $this->getApiUsername(),
                     $this->getApiPassword()
@@ -542,69 +616,202 @@ class HotelHController extends Controller
                 );
 
             $durationMs = round((microtime(true) - $startedAt) * 1000);
-            $json = $response->json();
+            $bytes = is_file($tmpFile) ? (int) filesize($tmpFile) : 0;
+            $meta = $this->readEtgSerpFileMeta($tmpFile);
 
             Log::info('ETG region search response', [
                 'region_id' => $regionId,
                 'http_status' => $response->status(),
                 'duration_ms' => $durationMs,
-                'status' => $json['status'] ?? null,
-                'error' => $json['error'] ?? null,
-                'total_hotels' => $json['data']['total_hotels'] ?? null,
-                'request_id' => $json['debug']['request_id'] ?? null,
+                'bytes' => $bytes,
+                'status' => $meta['status'],
+                'error' => $meta['error'],
+                'total_hotels' => $meta['total_hotels'],
+                'request_id' => $meta['request_id'],
             ]);
 
             if (
                 !$response->successful()
-                || ($json['status'] ?? null) !== 'ok'
-                || !empty($json['error'])
+                || ($meta['status'] !== null && $meta['status'] !== 'ok')
+                || !empty($meta['error'])
             ) {
                 throw new \RuntimeException(
                     'RateHawk region search failed: '
-                        . ($json['error'] ?? 'HTTP ' . $response->status())
+                        . ($meta['error'] ?? 'HTTP ' . $response->status())
                 );
             }
 
-            $hotels = $json['data']['hotels'] ?? [];
-
-            if (!is_array($hotels)) {
-                return [];
-            }
-
-            $ids = [];
-
-            foreach ($hotels as $hotel) {
-                $id = $hotel['id'] ?? null;
-
-                if ($id !== null && $id !== '') {
-                    $ids[] = $id;
-                }
-            }
-
-            $ids = array_values(array_unique($ids));
+            $ids = $this->extractHotelIdsFromEtgSerpFile($tmpFile);
 
             Log::info('ETG region hotel IDs loaded', [
                 'region_id' => $regionId,
                 'ids_count' => count($ids),
+                'bytes' => $bytes,
             ]);
 
             Cache::put($cacheKey, $ids, now()->addMinutes(15));
 
             return $ids;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('ETG region search failed', [
                 'region_id' => $regionId,
                 'message' => $e->getMessage(),
             ]);
 
-            throw $e;
+            return [];
+        } finally {
+            if (is_file($tmpFile)) {
+                @unlink($tmpFile);
+            }
         }
     }
 
     /**
-     * Apply hotel-name / hid / city-region constraints to a hotels query.
+     * Read status/error/total_hotels from the start and end of a SERP file
+     * without decoding the hotel/rates payload.
      */
-    private function applyHaSearchConstraints($query, array $params, bool $applyRegionOrder = false)
+    private function readEtgSerpFileMeta(string $path): array
+    {
+        $meta = [
+            'status' => null,
+            'error' => null,
+            'total_hotels' => null,
+            'request_id' => null,
+        ];
+
+        if (!is_file($path)) {
+            return $meta;
+        }
+
+        $size = (int) filesize($path);
+        if ($size <= 0) {
+            return $meta;
+        }
+
+        $fh = fopen($path, 'rb');
+        if ($fh === false) {
+            return $meta;
+        }
+
+        $headLen = min(8192, $size);
+        $head = fread($fh, $headLen);
+        $tail = $head;
+
+        if ($size > $headLen) {
+            $tailLen = min(16384, $size);
+            fseek($fh, -$tailLen, SEEK_END);
+            $tail = fread($fh, $tailLen) ?: '';
+        }
+
+        fclose($fh);
+
+        $blob = (string) $head . "\n" . (string) $tail;
+
+        if (preg_match('/"status"\s*:\s*"([^"]+)"/', $blob, $m)) {
+            $meta['status'] = $m[1];
+        }
+
+        if (preg_match('/"error"\s*:\s*(null|"([^"]*)")/', $blob, $m)) {
+            $meta['error'] = ($m[1] === 'null') ? null : ($m[2] ?? null);
+        }
+
+        if (preg_match('/"total_hotels"\s*:\s*(\d+)/', $blob, $m)) {
+            $meta['total_hotels'] = (int) $m[1];
+        }
+
+        if (preg_match('/"request_id"\s*:\s*"([^"]+)"/', $blob, $m)) {
+            $meta['request_id'] = $m[1];
+        }
+
+        return $meta;
+    }
+
+    /**
+     * Pull hotel string IDs from an ETG SERP file. Hotel objects start with
+     * {"id":"dukes_dubai","hid":8663536,"rates":[...]} — never load rates.
+     */
+    private function extractHotelIdsFromEtgSerpFile(string $path): array
+    {
+        $ids = [];
+        $fh = fopen($path, 'rb');
+        if ($fh === false) {
+            return [];
+        }
+
+        $carry = '';
+        while (!feof($fh)) {
+            $chunk = fread($fh, 256 * 1024);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+
+            $buffer = $carry . $chunk;
+            if (preg_match_all('/"id"\s*:\s*"([^"]+)"\s*,\s*"hid"\s*:/', $buffer, $matches)) {
+                foreach ($matches[1] as $id) {
+                    if ($id !== '') {
+                        $ids[$id] = true;
+                    }
+                }
+            }
+            if (preg_match_all('/"hid"\s*:\s*\d+\s*,\s*"id"\s*:\s*"([^"]+)"/', $buffer, $matches)) {
+                foreach ($matches[1] as $id) {
+                    if ($id !== '') {
+                        $ids[$id] = true;
+                    }
+                }
+            }
+
+            $carry = substr($buffer, -512);
+        }
+
+        fclose($fh);
+
+        return array_keys($ids);
+    }
+
+    /**
+     * Local place filter when ETG region search returns no hotel IDs.
+     * Prefers lat/lng bounding box; otherwise matches location against address/name.
+     *
+     * @return bool True when a place constraint was applied
+     */
+    private function applyDbPlaceFallback($query, array $params): bool
+    {
+        if (!empty($params['latitude']) && !empty($params['longitude'])) {
+            $lat = (float) $params['latitude'];
+            $lng = (float) $params['longitude'];
+            $radius = (float) ($params['radius'] ?? 4);
+            $query->whereBetween('latitude', [
+                $lat - ($radius / 111),
+                $lat + ($radius / 111),
+            ])->whereBetween('longitude', [
+                $lng - ($radius / (111 * cos(deg2rad($lat)))),
+                $lng + ($radius / (111 * cos(deg2rad($lat)))),
+            ]);
+
+            return true;
+        }
+
+        $location = trim((string) ($params['location'] ?? ''));
+        if ($location !== '') {
+            $like = '%' . $location . '%';
+            $query->where(function ($q) use ($like) {
+                $q->where('address', 'like', $like)
+                    ->orWhere('name', 'like', $like);
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Apply hotel-name / hid / city-region constraints to a hotels query.
+     * When region_id is set and ETG returns 0 IDs, falls back to local DB place match
+     * and sets $params['region_fallback_db'] so chunks reuse the same path.
+     */
+    private function applyHaSearchConstraints($query, array &$params, bool $applyRegionOrder = false)
     {
         if (!empty($params['hid'])) {
             $query->where('hid', (int) $params['hid']);
@@ -619,31 +826,45 @@ class HotelHController extends Controller
         }
 
         if (!empty($params['region_id'])) {
-            $regionHotelIds = $this->getHotelIdsForRegion(
-                (int) $params['region_id'],
-                $params
-            );
-            if (empty($regionHotelIds)) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereIn('hotel_id', $regionHotelIds);
+            $useFallback = !empty($params['region_fallback_db']);
 
-                if ($applyRegionOrder) {
-                    $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
-                    $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
+            if (!$useFallback) {
+                $regionHotelIds = $this->getHotelIdsForRegion(
+                    (int) $params['region_id'],
+                    $params
+                );
+
+                if (!empty($regionHotelIds)) {
+                    $params['region_fallback_db'] = false;
+                    $query->whereIn('hotel_id', $regionHotelIds);
+
+                    if ($applyRegionOrder) {
+                        $placeholders = implode(',', array_fill(0, count($regionHotelIds), '?'));
+                        $query->orderByRaw("FIELD(hotel_id, {$placeholders})", $regionHotelIds);
+                    }
+
+                    return $query;
+                }
+
+                $params['region_fallback_db'] = true;
+                $useFallback = true;
+
+                Log::info('ETG region search empty — falling back to local DB place filter', [
+                    'region_id' => $params['region_id'],
+                    'location' => $params['location'] ?? null,
+                    'has_latlng' => !empty($params['latitude']) && !empty($params['longitude']),
+                ]);
+            }
+
+            if ($useFallback) {
+                if (!$this->applyDbPlaceFallback($query, $params)) {
+                    $query->whereRaw('1 = 0');
+                } elseif ($applyRegionOrder) {
+                    $query->orderByDesc('star_rating')->orderBy('id');
                 }
             }
         } elseif (!empty($params['latitude']) && !empty($params['longitude'])) {
-            $lat = $params['latitude'];
-            $lng = $params['longitude'];
-            $radius = $params['radius'] ?? 4;
-            $query->whereBetween('latitude', [
-                $lat - ($radius / 111),
-                $lat + ($radius / 111),
-            ])->whereBetween('longitude', [
-                $lng - ($radius / (111 * cos(deg2rad($lat)))),
-                $lng + ($radius / (111 * cos(deg2rad($lat)))),
-            ]);
+            $this->applyDbPlaceFallback($query, $params);
         }
 
         return $query;
@@ -739,7 +960,7 @@ class HotelHController extends Controller
 
             // For better initial load performance, limit to reasonable batch
             // Sorting by breakfast happens in chunks after prices load from API
-            $hotels = $hotelQuery->limit(50)->get();
+            $hotels = $hotelQuery->limit(48)->get();
 
             // Attach images
             $hotelImages = DB::table('hotel_images')
@@ -755,31 +976,16 @@ class HotelHController extends Controller
             }
 
             // Take first 10 for immediate display
-            $hotels = collect($hotels)->take(50);
+            $hotels = collect($hotels)->take(48);
 
 
-            // Cache search params for AJAX
+            // Cache search params for AJAX (includes region_fallback_db when ETG returned 0 IDs)
             $cacheKey = "search_params_{$searchHash}";
-            Cache::put($cacheKey, [
-                'hotel_name' => $request->hotel_name,
-                'hid' => $request->hid,
-                'etg_hotel_id' => $request->etg_hotel_id,
-                'hotel_region_id' => $request->hotel_region_id,
-                'location' => $request->location,
-                'region_id' => $request->region_id,
-                'region_type' => $request->region_type,
-                'region_country_code' => $request->region_country_code,
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude,
-                'radius' => $request->radius,
-                'star_rating' => $request->star_rating,
-                'checkin' => $request->checkin,
-                'checkout' => $request->checkout,
-                'adults' => $request->adults,
-                'rooms' => $request->rooms,
+            Cache::put($cacheKey, array_merge($haParams, [
                 'children_count' => $childrenCount,
                 'children' => $childAges,
-            ], now()->addMinutes(30));
+                'region_fallback_db' => !empty($haParams['region_fallback_db']),
+            ]), now()->addMinutes(30));
 
             // Cache total count to avoid slow COUNT queries on large datasets
             $totalCountCacheKey = "hotel_count_{$searchHash}";
@@ -799,10 +1005,14 @@ class HotelHController extends Controller
                 'maxPrice' => 999,
                 'searchHash' => $searchHash,
                 'isLoading' => false, // Show hotels immediately
-                'loadMore' => $totalCount > 50,
+                'loadMore' => $totalCount > 48,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error searching hotels', ['message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('Error searching hotels', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return back()->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
@@ -898,18 +1108,18 @@ class HotelHController extends Controller
         set_time_limit(60);
 
         $chunk = (int) $request->input('chunk', 0);
-        $chunkSize = 50; // Process 50 hotels at a time
+        $chunkSize = 48; // 48 fills 3-col and 2-col grids with no leftover cell
         $fetchPrices = $request->boolean('fetch_prices', true);
 
         try {
-            // Get search params from cache
+            // Get search params from cache (may include region_fallback_db from initial search)
             $searchParams = Cache::get("search_params_{$searchHash}");
             if (!$searchParams) {
                 return response()->json(['error' => 'Search expired'], 400);
             }
 
-            // Build base query for counting and fetching
-            $baseQuery = function ($applyRegionOrder = false) use ($searchParams) {
+            // Build base query for counting and fetching (by-ref so fallback flag persists)
+            $baseQuery = function ($applyRegionOrder = false) use (&$searchParams) {
                 return $this->applyHaSearchConstraints(
                     DB::table('hotels')->select('hotel_id', 'name', 'latitude', 'longitude', 'star_rating', 'address'),
                     $searchParams,
@@ -922,6 +1132,9 @@ class HotelHController extends Controller
             $totalHotels = Cache::remember($totalCountCacheKey, now()->addMinutes(30), function () use ($baseQuery) {
                 return $baseQuery(false)->count();
             });
+
+            // Persist fallback flag if region search resolved during this chunk
+            Cache::put("search_params_{$searchHash}", $searchParams, now()->addMinutes(30));
 
             // Fetch only the current chunk from database
             $chunkHotels = $baseQuery(true)
@@ -1072,12 +1285,7 @@ class HotelHController extends Controller
             $html = '';
             foreach ($filtered as $hotelData) {
                 $hotel = (object) $hotelData;
-                $query = array_merge(
-                    ['id' => $hotel->hotel_id],
-                    $request->only(['checkin', 'checkout', 'adults', 'rooms', 'latitude', 'longitude', 'currency']),
-                    ['children_count' => $searchParams['children_count']],
-                    ['children' => $searchParams['children']]
-                );
+                $query = $this->hotelSearchContextQuery($request, $searchParams, $hotel->hotel_id);
 
                 $currencySym = match ($request->input('currency', 'EUR')) {
                     'USD' => '$',

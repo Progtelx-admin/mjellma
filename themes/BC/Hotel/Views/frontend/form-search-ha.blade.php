@@ -27,14 +27,13 @@
             <button type="button" data-target="#carouselBackground" data-slide-to="4" aria-label="Slide 5"></button>
         </div>
 
-        <div class="w-90 w-md-90 position-absolute px-3 px-md-0 pb-5" style="z-index: 1">
+        <div class="hotel-search-hero position-absolute px-3 px-md-4 pb-5" style="z-index: 1">
             <h1 class="text-white fw-bold mb-3 mb-md-4 text-center"
                 style="text-shadow:2px 2px 5px rgba(0,0,0,0.7); font-size: clamp(1.5rem, 5vw, 2.5rem);">
                 Rezervo Heret, Blej Lirë
             </h1>
-            <div class="p-3 rounded shadow-sm bg-white" style="opacity: 92%;">
-                <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist"
-                    style="overflow-x: auto; overflow-y: hidden;">
+            <div class="hotel-search-card p-3 p-md-4 rounded shadow-sm bg-white">
+                <ul class="nav nav-tabs mb-3 flex-nowrap" id="searchTabs" role="tablist">
                     <li class="nav-item flex-fill" role="presentation">
                         <a class="nav-link text-center" id="flight-tab" data-bs-toggle="tab" href="#flight" role="tab"
                             aria-controls="flight" aria-selected="false"><i class="fa fa-plane"></i><span
@@ -55,10 +54,12 @@
                 <div class="tab-content">
                     <div class="tab-pane fade" id="flight" role="tabpanel" aria-labelledby="flight-tab">
                         <!-- Thomalex flight widget embedded as an iframe. Embedding directly avoids any external
-                                                                                                                                                                                     JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
-                        <iframe
-                            src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
-                            class="flight-widget-iframe" allowfullscreen></iframe>
+                             JavaScript sizing logic and ensures the full desktop layout of the booking form is displayed. -->
+                        <div class="flight-widget-wrap">
+                            <iframe
+                                src="https://MjellmaTravel.resvoyage.com/widget/index?widgetId=b6f09e37-6e72-43cc-9da6-583d693a12fb&lang=en-US"
+                                class="flight-widget-iframe" allowfullscreen></iframe>
+                        </div>
                     </div>
 
                     <div class="tab-pane fade show active rounded" id="hotel" role="tabpanel"
@@ -110,7 +111,7 @@
 
                             {{-- Row 2: Dates / Guests / Rooms / Children --}}
                             <div class="row g-2 g-md-3 align-items-end">
-                                <div class="col-6 col-md-3">
+                                <div class="col-6 col-lg-3">
                                     <label for="checkin" class="form-label">Check-in Date</label>
                                     <input type="date" id="checkin" name="checkin"
                                         class="form-control @error('checkin') is-invalid @enderror"
@@ -119,7 +120,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-6 col-md-3">
+                                <div class="col-6 col-lg-3">
                                     <label for="checkout" class="form-label">Check-out Date</label>
                                     <input type="date" id="checkout" name="checkout"
                                         class="form-control @error('checkout') is-invalid @enderror"
@@ -128,7 +129,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-4 col-md-2">
+                                <div class="col-4 col-lg-2">
                                     <label for="adults" class="form-label">Adults</label>
                                     <input type="number" id="adults" name="adults"
                                         class="form-control @error('adults') is-invalid @enderror"
@@ -137,7 +138,7 @@
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-4 col-md-2">
+                                <div class="col-4 col-lg-2">
                                     <label for="rooms" class="form-label">Rooms</label>
                                     <input type="number" id="rooms" name="rooms"
                                         class="form-control @error('rooms') is-invalid @enderror"
@@ -148,7 +149,7 @@
                                 </div>
 
                                 {{-- Children Input --}}
-                                <div class="col-4 col-md-2">
+                                <div class="col-4 col-lg-2">
                                     <label for="children_count" class="form-label">Children</label>
                                     <input type="number" id="children_count" name="children_count"
                                         class="form-control @error('children_count') is-invalid @enderror"
@@ -166,7 +167,7 @@
                             <div class="row mt-3 mt-md-4">
                                 <div class="col d-flex justify-content-center">
                                     <button type="submit" id="search-btn"
-                                        class="btn btn-blue w-50 w-sm-100 w-md-25 w-lg-15">
+                                        class="btn btn-blue hotel-search-btn">
                                         <span id="search-text">Search</span>
                                         <span id="search-spinner" class="spinner-border spinner-border-sm ms-2 d-none"
                                             role="status" aria-hidden="true"></span>
@@ -336,11 +337,46 @@
                 let timer = null;
                 let abortController = null;
                 let seq = 0;
+                let activeIndex = -1;
                 let selectedLabel = (config.hasSelection && input.value) ? input.value.trim() : '';
+
+                function getSelectableItems() {
+                    return Array.from(list.querySelectorAll('li.list-group-item[data-key]'));
+                }
+
+                function setActiveIndex(index) {
+                    const items = getSelectableItems();
+                    if (!items.length) {
+                        activeIndex = -1;
+                        return;
+                    }
+                    if (index < 0) {
+                        index = items.length - 1;
+                    } else if (index >= items.length) {
+                        index = 0;
+                    }
+                    activeIndex = index;
+                    items.forEach(function(item, i) {
+                        item.classList.toggle('active', i === activeIndex);
+                    });
+                    const activeItem = items[activeIndex];
+                    if (activeItem) {
+                        const listTop = list.scrollTop;
+                        const listBottom = listTop + list.clientHeight;
+                        const itemTop = activeItem.offsetTop;
+                        const itemBottom = itemTop + activeItem.offsetHeight;
+                        if (itemTop < listTop) {
+                            list.scrollTop = itemTop;
+                        } else if (itemBottom > listBottom) {
+                            list.scrollTop = itemBottom - list.clientHeight;
+                        }
+                    }
+                }
 
                 function hideList() {
                     list.innerHTML = '';
                     list.classList.add('d-none');
+                    activeIndex = -1;
                 }
                 etgAutocompleteClosers.push(hideList);
 
@@ -354,6 +390,7 @@
 
                 function showMessage(text) {
                     list.innerHTML = '';
+                    activeIndex = -1;
                     const li = document.createElement('li');
                     li.className = 'list-group-item text-muted';
                     li.textContent = text;
@@ -377,12 +414,17 @@
 
                 function render(items) {
                     list.innerHTML = '';
+                    activeIndex = -1;
                     items.forEach(function(item) {
                         const li = document.createElement('li');
                         li.className = 'list-group-item';
                         li.style.cursor = 'pointer';
                         li.textContent = config.label(item);
                         li.setAttribute('data-key', config.key(item));
+                        li.addEventListener('mouseenter', function() {
+                            const items = getSelectableItems();
+                            setActiveIndex(items.indexOf(li));
+                        });
                         li.addEventListener('click', function() {
                             selectedLabel = config.value(item);
                             input.value = selectedLabel;
@@ -471,8 +513,33 @@
                 });
 
                 input.addEventListener('keydown', function(e) {
+                    const items = getSelectableItems();
+                    const listOpen = !list.classList.contains('d-none') && items.length > 0;
+
                     if (e.key === 'Escape') {
                         hideList();
+                        return;
+                    }
+
+                    if (!listOpen) {
+                        return;
+                    }
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setActiveIndex(activeIndex + 1);
+                        return;
+                    }
+
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setActiveIndex(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
+                        return;
+                    }
+
+                    if (e.key === 'Enter' && activeIndex >= 0) {
+                        e.preventDefault();
+                        items[activeIndex].click();
                     }
                 });
 
@@ -843,30 +910,39 @@
 
 
     <style>
-        /* Responsive width utilities */
-        .w-md-95 {
-            width: 95% !important;
+        .hotel-search-hero {
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(96%, 1100px);
+            max-width: 100%;
         }
 
-        .w-lg-85 {
-            width: 85% !important;
+        .hotel-search-card {
+            opacity: 0.92;
+            overflow: visible;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
-        .w-sm-75 {
-            width: 75% !important;
+        #hotel-search-form,
+        #hotel-search-form .row {
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
         }
 
-        .w-md-50 {
-            width: 50% !important;
+        #hotel-search-form .form-control {
+            min-width: 0;
+            max-width: 100%;
         }
 
         /* Mobile adjustments */
         @media (max-width: 575.98px) {
-
-            .w-sm-75,
-            .w-md-50,
-            .w-lg-25 {
-                width: 100% !important;
+            .hotel-search-hero {
+                width: 100%;
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
             }
 
             .form-label {
@@ -881,8 +957,11 @@
 
         /* Navigation tabs overflow fix */
         .nav-tabs {
-            overflow-y: hidden !important;
+            overflow-x: auto;
+            overflow-y: hidden;
             border-bottom: 1px solid #dee2e6;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
         }
 
         .nav-tabs .nav-link {
@@ -896,22 +975,18 @@
             border-bottom-color: #0B0B45;
         }
 
-        @media (min-width: 768px) and (max-width: 991.98px) {
-            .w-md-95 {
-                width: 95% !important;
-            }
-        }
-
-        @media (min-width: 992px) {
-            .w-lg-85 {
-                width: 85% !important;
-            }
-        }
-
         .carousel-item {
             background-size: cover;
             background-position: center;
             min-height: 100vh;
+        }
+
+        #carouselBackground {
+            overflow: visible;
+        }
+
+        #carouselBackground .carousel-inner {
+            overflow: hidden;
         }
 
         @media (max-width: 767.98px) {
@@ -966,6 +1041,17 @@
             font-weight: 500;
             border-radius: 0.375rem;
             transition: all 0.3s ease;
+        }
+
+        .hotel-search-btn {
+            width: 100%;
+            max-width: 280px;
+        }
+
+        @media (max-width: 575.98px) {
+            .hotel-search-btn {
+                max-width: 100%;
+            }
         }
 
         .btn-blue:hover {
@@ -1054,9 +1140,25 @@
             }
         }
 
-        /* Tab content responsive padding */
-        .tab-pane {
-            overflow-x: hidden;
+        /* Keep inactive panes out of layout; allow autocomplete overflow on hotel tab */
+        .tab-content {
+            overflow: visible;
+        }
+
+        .tab-content > .tab-pane {
+            display: none;
+        }
+
+        .tab-content > .tab-pane.active {
+            display: block;
+        }
+
+        #hotel.tab-pane {
+            overflow: visible;
+        }
+
+        #hotel .position-relative {
+            overflow: visible;
         }
 
         /* Suggestions list responsive */
@@ -1064,6 +1166,19 @@
         #suggestions,
         #hotel_suggestions {
             font-size: 0.9rem;
+            left: 0;
+            right: 0;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            background: #fff;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .etg-autocomplete-list .list-group-item.active {
+            background-color: #0B0B45;
+            border-color: #0B0B45;
+            color: #fff;
         }
 
         @media (max-width: 575.98px) {
@@ -1186,16 +1301,24 @@
         }
 
         /* Flight widget iframe responsive styles */
+        .flight-widget-wrap {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .flight-widget-iframe {
             width: 100%;
             min-width: 780px;
             height: 550px;
             border: none;
+            display: block;
         }
 
         @media (max-width: 767.98px) {
             .flight-widget-iframe {
-                min-width: unset;
+                min-width: 100%;
                 width: 100%;
                 height: 600px;
             }
