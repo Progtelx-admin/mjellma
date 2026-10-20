@@ -18,6 +18,7 @@ class CarPaymentVerificationTest extends TestCase
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
         DB::purge('sqlite');
         (require database_path('migrations/2026_10_19_000001_create_car_payment_orders_table.php'))->up();
+        (require database_path('migrations/2026_10_20_000001_add_car_order_filter_columns.php'))->up();
     }
 
     /** @dataProvider paymentCases */
@@ -129,6 +130,78 @@ class CarPaymentVerificationTest extends TestCase
             'unrecognized response' => [['success' => true, 'status' => 200, 'data' => ['message' => 'unknown']], 'review_required'],
             'timeout' => [['success' => false, 'error' => 'timeout'], 'review_required'],
         ];
+    }
+
+    public function test_dashboard_filters_search_and_rental_dates(): void
+    {
+        $order = CarPaymentOrder::create([
+            'token_hash' => hash('sha256', 'filters'), 'bank_order_id' => 'BANK-123',
+            'amount' => '120.00', 'currency' => 'EUR',
+            'booking_data' => ['reservation_data' => ['pickup_datetime' => '2026-10-21 10:00', 'dropoff_datetime' => '2026-10-24 10:00']],
+            'reservation_response' => ['reservation_id' => 'RES-456'],
+        ]);
+        foreach (['BANK-123', 'RES-456', '#'.$order->id] as $search) {
+            $this->assertSame(1, CarPaymentOrder::dashboardFilters(['search' => $search])->count());
+        }
+        $dates = ['dateFrom' => '2026-10-24', 'dateTo' => '2026-10-24'];
+        $this->assertSame(1, CarPaymentOrder::dashboardFilters($dates + ['column' => 'returns'])->count());
+        $this->assertSame(0, CarPaymentOrder::dashboardFilters($dates + ['column' => 'pickups'])->count());
+        $this->assertSame(1, CarPaymentOrder::dashboardFilters($dates)->count());
+        $this->assertSame(0, CarPaymentOrder::dashboardFilters($dates + ['search' => 'unknown'])->count());
+    }
+
+    public function test_local_details_use_saved_customer_and_vehicle_information(): void
+    {
+        $order = CarPaymentOrder::create([
+            'token_hash' => hash('sha256', 'details'), 'bank_order_id' => 'BANK-DETAILS',
+            'bank_password' => 'private-password', 'amount' => '120.00', 'currency' => 'EUR', 'payment_status' => 'paid',
+            'booking_data' => ['first_name' => 'Test', 'last_name' => 'Customer', 'email' => 'test@example.com',
+                'reservation_data' => ['car_id' => 27, 'pickup_place' => 4, 'dropoff_location' => 4,
+                    'pickup_datetime' => '2026-10-21 10:00', 'dropoff_datetime' => '2026-10-24 10:00'],
+                'api_response' => ['car' => ['car_manufacturer' => ['name' => 'Seat'], 'car_model' => ['name' => 'Touran']]]],
+        ]);
+        $details = $order->fresh()->reservationDetails();
+        $this->assertSame('Test Customer', $details['client_name']);
+        $this->assertSame('Seat', $details['vehicle_manufacturer']);
+        $this->assertSame('Touran', $details['vehicle_model']);
+        $this->assertSame(120.0, $details['paid_amount']);
+        $this->assertStringNotContainsString('private-password', json_encode($details));
+    }
+
+    public function test_local_details_require_authentication(): void
+    {
+        \Illuminate\Support\Facades\Auth::shouldReceive('check')->once()->andReturn(false);
+        $controller = new \Custom\CarRent\Admin\CarRentReservationController();
+        try {
+            $controller->showLocal(Request::create('/'), 1);
+            $this->fail('Unauthenticated access was allowed');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+    }
+
+    public function test_local_summary_excludes_demos_and_separates_paid_review_orders(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-20 12:00:00'));
+        foreach ([['REAL-1', 'completed', 'EUR'], ['DEMO-1', 'completed', 'EUR'],
+            ['REAL-2', 'review_required', 'EUR'], ['REAL-3', 'completed', 'USD']] as $i => [$bankId, $status, $currency]) {
+            CarPaymentOrder::create([
+                'token_hash' => hash('sha256', 'summary-'.$i), 'bank_order_id' => $bankId,
+                'amount' => '120.00', 'currency' => $currency, 'payment_status' => 'paid', 'reservation_status' => $status,
+                'verified_at' => now(), 'booking_data' => ['reservation_data' => [
+                    'pickup_datetime' => '2026-10-20 10:00', 'dropoff_datetime' => '2026-10-23 10:00']],
+            ]);
+        }
+        $summary = app(\App\Services\CarOrderSummary::class)->local([]);
+        $this->assertSame(2, $summary['total_reservations']);
+        $this->assertSame(2, $summary['active_reservations']);
+        $this->assertNull($summary['overdue_reservations']);
+        $this->assertEquals(120, $summary['total_revenue']);
+        $this->assertEquals(120, $summary['review_amount']);
+        $filtered = app(\App\Services\CarOrderSummary::class)->local(['dateFrom' => '2026-10-23', 'column' => 'returns']);
+        $this->assertSame(2, $filtered['total_reservations']);
+        $this->assertEquals(0, $filtered['total_revenue']);
+        $this->travelBack();
     }
 
     public static function paymentCases(): array

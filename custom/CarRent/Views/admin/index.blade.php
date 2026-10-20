@@ -1,6 +1,58 @@
 @extends('admin.layouts.app')
 @push('css')
 <style>
+    .car-orders{container-type:inline-size;min-width:0;border:1px solid #ddd;border-radius:4px;background:#fff;margin-bottom:20px;overflow:hidden}
+    .car-orders-header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #ddd}
+    .car-orders-header h4{font-size:17px;font-weight:600;margin:0}
+    .car-orders-count{font-size:12px;color:#6c757d;white-space:nowrap}
+    .car-orders .table{margin:0;width:100%;table-layout:fixed}
+    .car-orders .table thead th{background:#f7f7f7;border-top:0;border-bottom:1px solid #ddd;padding:12px 16px;font-size:12px;white-space:nowrap}
+    .car-orders .table tbody td{padding:12px 16px;vertical-align:middle;font-size:13px}
+    .car-orders .table tbody tr:hover{background:#fafafa}
+    .car-order-ref{display:block;font-size:12px;overflow-wrap:anywhere;max-width:350px}
+    .car-order-amount{font-weight:600;white-space:nowrap}
+    .car-order-currency{font-size:11px;color:#6c757d;margin-left:4px}
+    .car-status{display:inline-block;max-width:100%;overflow-wrap:anywhere;border-radius:3px;padding:3px 7px;font-size:12px;white-space:normal;background:#eee;color:#555}
+    .car-status-success{background:#e8f3eb;color:#28633a}
+    .car-status-warning{background:#fff3d7;color:#795b18}
+    .car-status-danger{background:#f8e5e5;color:#963838}
+    .car-status-info{background:#e6eff8;color:#365f86}
+    .car-demo{display:inline-block;font-size:10px;border:1px solid #ccc;color:#666;border-radius:3px;padding:1px 5px;margin-bottom:4px}
+    .car-order-date{white-space:nowrap}
+    .car-order-time{display:block;color:#6c757d;font-size:11px;margin-top:2px}
+    .car-orders-footer{padding:12px 20px;border-top:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#6c757d;font-size:12px}
+    .car-orders-footer .pagination{margin:0;flex-wrap:wrap}
+    .car-api-notice{padding:12px 16px;background:#fff3cd;border:1px solid #ffeeba;border-radius:4px;margin-bottom:18px;color:#856404;font-size:13px}
+    .car-api-notice details{margin-top:6px;font-size:12px;overflow-wrap:anywhere}
+    .car-orders-pagination{display:flex;gap:4px;list-style:none;padding:0;margin:0;flex-wrap:wrap}
+    .car-orders-pagination a,.car-orders-pagination span{display:block;padding:6px 10px;border:1px solid #ddd;border-radius:3px;line-height:1.3;background:#fff;color:#455a70}
+    .car-orders-pagination .active span{background:#17a2b8;border-color:#17a2b8;color:white}
+    .car-orders-pagination .disabled span{color:#aaa;background:#fafafa}
+    .filter-form-right{flex-wrap:wrap;gap:8px;margin-bottom:16px}
+    .filter-form-right .ml-2{margin-left:0!important}
+    .filter-form-right .form-control{width:auto;min-width:150px}
+    .car-orders .table td{overflow-wrap:anywhere}
+    .car-orders .table th:nth-child(1){width:6%}
+    .car-orders .table th:nth-child(2){width:17%}
+    .car-orders .table th:nth-child(3){width:12%}
+    .car-orders .table th:nth-child(4){width:11%}
+    .car-orders .table th:nth-child(5),.car-orders .table th:nth-child(6){width:12%}
+    .car-orders .table th:nth-child(7){width:19%}
+    .car-orders .table th:nth-child(8){width:11%}
+    .car-orders .table thead th,.car-orders .table tbody td{padding:12px 8px}
+    .car-orders .table td:last-child .btn{white-space:normal}
+    @media(max-width:767px){
+        .car-orders .table-responsive{overflow:visible}
+        .car-orders .table thead{display:none}
+        .car-orders .table,.car-orders .table tbody{display:block;width:100%;min-width:0}
+        .car-orders .table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:16px;border-bottom:1px solid #ddd}
+        .car-orders .table tbody td{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:0;border:0;white-space:normal}
+        .car-orders .table tbody td::before{content:attr(data-label);font-size:11px;font-weight:600;color:#6c757d}
+        .car-orders .table td:nth-child(2),.car-orders .table td:nth-child(7),.car-orders .table td:last-child,.car-orders .table td.car-orders-empty{grid-column:1/-1}
+        .car-orders .table td:last-child .btn{width:100%}
+        .car-orders .table td.car-orders-empty::before{display:none}
+    }
+    @media(max-width:767px){.car-orders .table{min-width:0}.filter-div,.filter-div>.col-left{display:block;width:100%}.filter-form-right .form-control{width:100%;min-width:0}}
     .car-rent-summary-card{
         border:1px solid #e7eaed;
         border-radius:10px;
@@ -49,6 +101,9 @@
         @include('admin.message')
 
         @if(!empty($home_summary))
+            <div class="text-muted mb-2" style="font-size:12px">
+                {{ ($home_summary['source'] ?? '') === 'local' ? __('Local records only. Test orders excluded.') : __('Provider statistics') }}
+            </div>
             <div class="row mb-4">
                 <div class="col-md-3 col-sm-6">
                     <div class="car-rent-summary-card">
@@ -61,21 +116,27 @@
                     <div class="car-rent-summary-card">
                         <div class="label">{{__('Active')}}</div>
                         <div class="value text-success">{{ number_format($home_summary['active_reservations'] ?? 0) }}</div>
-                        <div class="muted">{{__('Currently in progress')}}</div>
+                        <div class="muted">{{ ($home_summary['source'] ?? '') === 'local' ? __('Scheduled by rental dates; return status not verified') : __('Currently in progress') }}</div>
                     </div>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="car-rent-summary-card">
                         <div class="label">{{__('Overdue')}}</div>
-                        <div class="value text-danger">{{ number_format($home_summary['overdue_reservations'] ?? 0) }}</div>
-                        <div class="muted">{{__('Need attention')}}</div>
+                        <div class="value text-danger">{{ isset($home_summary['overdue_reservations']) ? number_format($home_summary['overdue_reservations']) : '-' }}</div>
+                        <div class="muted">{{ isset($home_summary['overdue_reservations']) ? __('Need attention') : __('Requires provider return status') }}</div>
                     </div>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="car-rent-summary-card">
                         <div class="label">{{__('Revenue')}}</div>
-                        <div class="value">{{ number_format($home_summary['total_revenue'] ?? 0, 2) }} €</div>
-                        <div class="muted">{{__('Today')}}</div>
+                        <div class="value">{{ number_format($home_summary['total_revenue'] ?? 0, 2) }} &euro;</div>
+                        <div class="muted">{{ $home_summary['revenue_period'] ?? __('Today') }}</div>
+                        @if(($home_summary['source'] ?? '') === 'local')
+                            <div class="muted">{{__('EUR payments for confirmed reservations')}}</div>
+                            @if(($home_summary['review_amount'] ?? 0) > 0)
+                                <div class="text-warning" style="font-size:12px">{{__('Paid, awaiting reservation')}}: {{ number_format($home_summary['review_amount'], 2) }} &euro;</div>
+                            @endif
+                        @endif
                     </div>
                 </div>
             </div>
@@ -123,7 +184,7 @@
                                             <span class="badge badge-{{ $badge }}">{{ $status }}</span>
                                         </td>
                                         <td>
-                                            {{ number_format(data_get($dailyReservation,'rental_price', data_get($dailyReservation,'total_price',0)),2) }} €
+                                            {{ number_format(data_get($dailyReservation,'rental_price', data_get($dailyReservation,'total_price',0)),2) }} &euro;
                                         </td>
                                     </tr>
                                 @endforeach
@@ -148,7 +209,7 @@
             </div>
             <div class="col-left">
                 <form method="get" action="{{ route('carrent.admin.reservations.index') }}" class="filter-form filter-form-right d-flex justify-content-end flex-column flex-sm-row" role="search">
-                    <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="{{__('Search by reservation ID (e.g., 81402)')}}" class="form-control" pattern="[0-9]*" inputmode="numeric">
+                    <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="{{__('Reservation, bank or local ID')}}" class="form-control" >
                     <input type="date" name="dateFrom" value="{{ $filters['dateFrom'] }}" placeholder="{{__('Date From')}}" class="form-control ml-2">
                     <input type="date" name="dateTo" value="{{ $filters['dateTo'] }}" placeholder="{{__('Date To')}}" class="form-control ml-2">
                     <select name="column" class="form-control ml-2">
@@ -163,42 +224,69 @@
         </div>
 
         @if($error)
-            <div class="alert alert-danger">
-                {{ $error }}
+            <div class="car-api-notice" role="status">
+                {{__('Unable to load reservations from the provider.')}}
+                <details><summary>{{__('Details')}}</summary>{{ $error }}</details>
             </div>
         @endif
 
         @if(isset($local_orders))
-            <div class="panel"><div class="panel-body">
-                <h4>{{__('Local car payment orders')}}</h4>
-                <p>{{__('Payment status and external reservation status are tracked separately. Orders requiring review must be checked with the provider before creating another reservation.')}}</p>
-                <div class="table-responsive"><table class="table table-hover">
+            <div class="car-orders">
+                <div class="car-orders-header">
+                    <h4>{{__('Car payment orders')}}</h4>
+                    <span class="car-orders-count">{{ number_format($local_orders->total()) }} {{__('orders')}}</span>
+                </div>
+                <div class="table-responsive"><table class="table">
                     <thead><tr>
-                        <th>{{__('Local ID')}}</th><th>{{__('Bank order')}}</th><th>{{__('Amount')}}</th>
-                        <th>{{__('Payment')}}</th><th>{{__('Reservation')}}</th><th>{{__('Created')}}</th>
+                        <th>{{__('Local ID')}}</th><th>{{__('Customer')}}</th><th>{{__('Car')}}</th><th>{{__('Amount')}}</th>
+                        <th>{{__('Pickup')}}</th><th>{{__('Return')}}</th><th>{{__('Status')}}</th><th>{{__('Actions')}}</th>
                     </tr></thead>
                     <tbody>
                     @forelse($local_orders as $localOrder)
+                        @php
+                            $details = $localOrder->reservationDetails();
+                            $paymentLabels = ['paid' => __('Paid'), 'pending' => __('Pending'), 'initialization_failed' => __('Not initialized')];
+                            $reservationLabels = ['completed' => __('Confirmed'), 'pending' => __('Pending'), 'creating' => __('Processing'), 'review_required' => __('Needs review')];
+                            $paymentColor = $localOrder->payment_status === 'paid' ? 'success' : ($localOrder->payment_status === 'initialization_failed' ? 'danger' : 'warning');
+                            $reservationColors = ['completed' => 'success', 'pending' => 'warning', 'creating' => 'info', 'review_required' => 'danger'];
+                        @endphp
                         <tr>
-                            <td>{{ $localOrder->id }}</td><td>{{ $localOrder->bank_order_id }}</td>
-                            <td>{{ $localOrder->amount }} {{ $localOrder->currency }}</td>
-                            <td>{{ $localOrder->payment_status }}</td><td>{{ $localOrder->reservation_status }}</td>
-                            <td>{{ $localOrder->created_at }}</td>
+                            <td data-label="{{__('Local ID')}}"><div><strong>#{{ $localOrder->id }}</strong>
+                                @if(\Illuminate\Support\Str::startsWith($localOrder->bank_order_id ?? '', 'DEMO-'))
+                                    <small class="d-block text-muted">{{__('Test')}}</small>
+                                @endif
+                            </div></td>
+                            <td data-label="{{__('Customer')}}"><div>{{ $details['client_name'] ?? '-' }}</div></td>
+                            <td data-label="{{__('Car')}}">{{ trim(($details['vehicle_manufacturer'] ?? '').' '.($details['vehicle_model'] ?? '')) ?: '-' }}</td>
+                            <td data-label="{{__('Amount')}}"><span class="car-order-amount">{{ number_format((float) $localOrder->amount, 2) }}<span class="car-order-currency">{{ $localOrder->currency }}</span></span></td>
+                            <td data-label="{{__('Pickup')}}" class="car-order-date">{{ optional($localOrder->pickup_at)->format('d.m.Y') ?? '-' }}<span class="car-order-time">{{ optional($localOrder->pickup_at)->format('H:i') }}</span></td>
+                            <td data-label="{{__('Return')}}" class="car-order-date">{{ optional($localOrder->return_at)->format('d.m.Y') ?? '-' }}<span class="car-order-time">{{ optional($localOrder->return_at)->format('H:i') }}</span></td>
+                            <td data-label="{{__('Status')}}"><div>
+                                <div class="mb-1"><span class="car-status car-status-{{ $paymentColor }}">{{__('Payment')}}: {{ $paymentLabels[$localOrder->payment_status] ?? $localOrder->payment_status }}</span></div>
+                                <div><span class="car-status car-status-{{ $reservationColors[$localOrder->reservation_status] ?? 'info' }}">{{__('Reservation')}}: {{ $reservationLabels[$localOrder->reservation_status] ?? $localOrder->reservation_status }}</span></div>
+                            </div></td>
+                            <td data-label="{{__('Actions')}}"><a href="{{ route('carrent.admin.orders.show', ['id' => $localOrder->id]) }}" class="btn btn-sm btn-info">{{__('View Details')}}</a></td>
                         </tr>
                     @empty
-                        <tr><td colspan="6">{{__('No local car payment orders recorded yet. Older orders are not imported automatically.')}}</td></tr>
+                        <tr><td colspan="8" class="car-orders-empty">{{__('No orders match the selected filters.')}}</td></tr>
                     @endforelse
                     </tbody>
                 </table></div>
-                {{ $local_orders->withQueryString()->links() }}
-            </div></div>
+                <div class="car-orders-footer">
+                    <span>{{ $local_orders->firstItem() ?? 0 }} - {{ $local_orders->lastItem() ?? 0 }} / {{ number_format($local_orders->total()) }}</span>
+                    @if($local_orders->hasPages())
+                        {{ $local_orders->onEachSide(1)->withQueryString()->links('CarRent::admin.orders-pagination') }}
+                    @endif
+                </div>
+            </div>
         @endif
 
+        @if(!$error || !empty($reservations))
         <div class="panel">
             <div class="panel-body">
                 @if(empty($reservations) || count($reservations) == 0)
                     <div class="alert alert-info">
-                        {{ $error ? __('External reservations could not be loaded. Their existence cannot be determined.') : __('No reservations found') }}
+                        {{__('No reservations found')}}
                     </div>
                 @else
                     <div class="table-responsive">
@@ -354,6 +442,7 @@
                 @endif
             </div>
         </div>
+        @endif
     </div>
 
     @if(!empty($report_rows))
@@ -366,8 +455,8 @@
                     </div>
                     <div class="car-rent-report-badges">
                         <span class="badge badge-primary">{{__('Total')}}: {{ number_format($report_summary['total_reservations'] ?? 0) }}</span>
-                        <span class="badge badge-success">{{__('Revenue')}}: {{ number_format($report_summary['total_revenue'] ?? 0, 2) }} €</span>
-                        <span class="badge badge-info">{{__('Avg.')}}: {{ number_format($report_summary['average_revenue'] ?? 0, 2) }} €</span>
+                        <span class="badge badge-success">{{__('Revenue')}}: {{ number_format($report_summary['total_revenue'] ?? 0, 2) }} &euro;</span>
+                        <span class="badge badge-info">{{__('Avg.')}}: {{ number_format($report_summary['average_revenue'] ?? 0, 2) }} &euro;</span>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -380,7 +469,7 @@
                                 <th>{{__('Pickup')}}</th>
                                 <th>{{__('Dropoff')}}</th>
                                 <th>{{__('Status')}}</th>
-                                <th>{{__('Amount (€)')}}</th>
+                                <th>{{__('Amount (&euro;)')}}</th>
                             </tr>
                         </thead>
                         <tbody>

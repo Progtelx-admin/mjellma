@@ -19,10 +19,15 @@ Run on the deployment host, before accepting new payments:
 
 ```sh
 php artisan migrate --path=database/migrations/2026_10_19_000001_create_car_payment_orders_table.php --force
+php artisan migrate --path=database/migrations/2026_10_20_000001_add_car_order_filter_columns.php --force
 php artisan config:cache
 ```
 
 New attempts are persisted in `car_payment_orders` before contacting the bank.
+The second migration backfills searchable rental dates and external reservation IDs from the
+encrypted data using the existing APP_KEY. It must also be applied when upgrading an existing
+installation. Dashboard search matches exact local, bank, or external reservation IDs. Date
+filters use pickup or return dates; All Columns matches either date, not the creation date.
 The browser token is stored as a hash. Customer data, provider responses and bank passwords
 are encrypted. The callback can recover data without the original browser session.
 The dashboard lists local payment orders separately from external reservations.

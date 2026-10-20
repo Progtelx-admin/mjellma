@@ -246,7 +246,7 @@
         <!-- Header -->
         <div class="invoice-header">
             <div>
-                <h1 class="invoice-title">{{__('Invoice')}}: #{{ $reservation['id'] ?? 'N/A' }}</h1>
+                <h1 class="invoice-title">{{ isset($local_order) ? __('Car payment order') : __('Invoice') }}: #{{ isset($local_order) ? $local_order->id : ($reservation['id'] ?? 'N/A') }}</h1>
                 <nav aria-label="breadcrumb" class="mt-2">
                     <ol class="breadcrumb">
                         <li class="breadcrumb-item"><a href="{{ route('admin.index') }}">{{__('Dashboard')}}</a></li>
@@ -258,6 +258,9 @@
             </div>
             <div class="invoice-actions">
                 <a href="{{ route('carrent.admin.reservations.index') }}" class="btn btn-secondary">{{__('Back')}}</a>
+                @if(isset($local_order) && $local_order->external_reservation_id && !\Illuminate\Support\Str::startsWith($local_order->bank_order_id ?? '', 'DEMO-'))
+                    <a href="{{ route('carrent.admin.reservations.show', ['id' => $local_order->external_reservation_id]) }}" class="btn btn-info">{{__('Provider details / invoice')}}</a>
+                @endif
                 @if(!empty($invoice) && !empty($reservation_id))
                     <a href="{{ route('carrent.admin.reservations.invoice.download', ['id' => $reservation_id, 'preview' => 1]) }}" target="_blank" class="btn btn-outline-primary">
                         {{ __('Open PDF') }}
@@ -270,6 +273,18 @@
         </div>
 
         @include('admin.message')
+
+        @if(isset($local_order))
+            <div class="alert alert-light border">
+                <strong>{{__('Bank order')}}:</strong> {{ $local_order->bank_order_id ?? '-' }} &nbsp;
+                <strong>{{__('Payment')}}:</strong> {{ $local_order->payment_status }} &nbsp;
+                <strong>{{__('Reservation')}}:</strong> {{ $local_order->reservation_status }} &nbsp;
+                <strong>{{__('Currency')}}:</strong> {{ $local_order->currency }}
+                @if(\Illuminate\Support\Str::startsWith($local_order->bank_order_id ?? '', 'DEMO-'))
+                    <div>{{__('Test order. No real payment or reservation.')}}</div>
+                @endif
+            </div>
+        @endif
 
         @if($error)
             <div class="alert alert-danger">
@@ -320,9 +335,13 @@
                 <div class="overview-row">
                     <div class="overview-label">{{__('Provider')}}:</div>
                     <div class="overview-value">
+                        @if(isset($local_order))
+                            {{__('External car provider')}}
+                        @else
                         <strong>RENT A CAR ORANGE</strong><br>
                         10000 Prishtina International Airport<br>
                         {{__('Phone')}}: 044 240 383
+                        @endif
                     </div>
                 </div>
                 <div class="overview-row">
@@ -392,6 +411,7 @@
                             @endif
                         </span>
                     </div>
+                    @if(!isset($local_order))
                     <div class="pricing-row">
                         <span>{{__('Traffic Fine')}}:</span>
                         <span>0.00 €</span>
@@ -400,6 +420,7 @@
                         <span>{{__('Franchise 1000€')}}:</span>
                         <span>0.00 €</span>
                     </div>
+                    @endif
                     <div class="pricing-row">
                         <span><strong>{{__('Total')}}:</strong></span>
                         <span>
@@ -552,6 +573,32 @@
                 </div>
             @endif
 
+            @if(isset($local_order))
+                @php($savedBooking = $local_order->booking_data ?? [])
+                <div class="details-section">
+                    <div class="details-column">
+                        <h5>{{__('Driver details')}}</h5>
+                        @foreach(['birthday' => __('Birthday'), 'driving_license' => __('Driving license'), 'plz' => __('Postal code'), 'city' => __('City'), 'country' => __('Country')] as $field => $label)
+                            <div class="detail-item"><div class="detail-label">{{ $label }}</div><div class="detail-value">{{ $savedBooking[$field] ?? '-' }}</div></div>
+                        @endforeach
+                        <div class="detail-item"><div class="detail-label">{{__('Created')}}</div><div class="detail-value">{{ $local_order->created_at->format('d.m.Y H:i:s') }}</div></div>
+                        <div class="detail-item"><div class="detail-label">{{__('Payment verified')}}</div><div class="detail-value">{{ optional($local_order->verified_at)->format('d.m.Y H:i:s') ?? '-' }}</div></div>
+                    </div>
+                    <div class="details-column">
+                        <h5>{{__('Extras and insurance')}}</h5>
+                        @forelse($savedBooking['extras'] ?? [] as $extra)
+                            <div class="detail-item"><div class="detail-label">{{ $extra['name'] ?? ('#'.($extra['id'] ?? '')) }}</div><div class="detail-value">{{ isset($extra['price']) ? number_format((float) $extra['price'], 2).' '.$local_order->currency : '-' }}</div></div>
+                        @empty
+                            <p class="text-muted">{{__('No extras recorded')}}</p>
+                        @endforelse
+                        <div class="detail-item"><div class="detail-label">{{__('Insurance')}}</div><div class="detail-value">{{ data_get($savedBooking, 'franchise.name', '-') }}</div></div>
+                        <div class="detail-item"><div class="detail-label">{{__('Provider reservation ID')}}</div><div class="detail-value">{{ $local_order->external_reservation_id ?? '-' }}</div></div>
+                        <div class="detail-item"><div class="detail-label">{{__('Provider response status')}}</div><div class="detail-value">{{ $local_order->reservation_http_status ?? '-' }}</div></div>
+                    </div>
+                </div>
+                <p class="text-muted">{{__('Saved checkout information. Missing vehicle or location names are shown by ID. Official invoice details require the provider API.')}}</p>
+            @endif
+
             @if(!empty($invoice))
                 <div class="invoice-preview">
                     <div class="invoice-preview-header">
@@ -676,8 +723,20 @@
             <!-- Comments Section -->
             <div class="comments-section">
                 <h5>{{__('Comments')}}</h5>
+                @if(isset($local_order))
+                    @foreach(data_get($local_order->booking_data, 'admin_comments', []) as $comment)
+                        <div class="border-bottom py-2"><small class="text-muted">{{ $comment['created_at'] ?? '' }} - {{__('User')}} #{{ $comment['author_id'] ?? '' }}</small><p style="white-space:pre-wrap">{{ $comment['text'] ?? '' }}</p></div>
+                    @endforeach
+                    <form method="post" action="{{ route('carrent.admin.orders.comments', ['id' => $local_order->id]) }}">
+                        @csrf
+                        <textarea name="comment" class="comments-textarea" required maxlength="2000" placeholder="{{__('Add comments here...')}}">{{ old('comment') }}</textarea>
+                        @error('comment')<div class="text-danger">{{ $message }}</div>@enderror
+                        <button type="submit" class="btn btn-primary btn-sm">{{__('Save Comment')}}</button>
+                    </form>
+                @else
                 <textarea class="comments-textarea" placeholder="{{__('Add comments here...')}}"></textarea>
                 <button type="button" class="btn btn-primary btn-sm">{{__('Save Comment')}}</button>
+                @endif
             </div>
         @else
             <div class="alert alert-warning">

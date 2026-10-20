@@ -26,6 +26,13 @@ class CarRentReservationController extends AdminController
      */
     public function index(Request $request)
     {
+        $request->validate([
+            'search' => 'nullable|string|max:190',
+            'dateFrom' => 'nullable|date_format:Y-m-d',
+            'dateTo' => 'nullable|date_format:Y-m-d',
+            'filter_date' => 'nullable|date_format:Y-m-d',
+            'column' => 'nullable|in:pickups,returns',
+        ]);
         // Check if user is authenticated (handled by dashboard middleware)
         // The dashboard middleware already checks for 'dashboard_access' permission
         // So we don't need to check carrent_view here unless specifically required
@@ -201,7 +208,9 @@ class CarRentReservationController extends AdminController
 
         $homeResponse = $this->fetchHomeData($filters);
         $homeReservations = $this->extractListFromResponse($homeResponse);
-        $homeSummary = $this->buildHomeSummary($homeResponse, $homeReservations, $filters);
+        $homeSummary = !empty($homeResponse)
+            ? $this->buildHomeSummary($homeResponse, $homeReservations, $filters)
+            : app(\App\Services\CarOrderSummary::class)->local($filters);
 
         $reportRange = $this->resolveReportRange($filters);
         $reportResponse = $this->fetchReportData($reportRange['from'], $reportRange['to']);
@@ -209,7 +218,7 @@ class CarRentReservationController extends AdminController
         $reportSummary = $this->buildReportSummary($reportRows, $reportRange);
 
         $data = [
-            'local_orders' => \App\Models\CarPaymentOrder::latest()->paginate(20, ['id', 'bank_order_id', 'amount', 'currency', 'payment_status', 'reservation_status', 'created_at'], 'orders_page'),
+            'local_orders' => \App\Models\CarPaymentOrder::dashboardFilters($filters)->latest('id')->paginate(20, ['id', 'bank_order_id', 'external_reservation_id', 'pickup_at', 'return_at', 'amount', 'currency', 'payment_status', 'reservation_status', 'created_at', 'booking_data', 'reservation_response'], 'orders_page'),
             'reservations' => $reservations,
             'error' => $error,
             'filters' => $filters,
@@ -238,6 +247,32 @@ class CarRentReservationController extends AdminController
     /**
      * Show reservation details
      */
+    public function showLocal(Request $request, $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $order = \App\Models\CarPaymentOrder::findOrFail($id);
+        return view('CarRent::admin.show', [
+            'reservation' => $order->reservationDetails(),
+            'reservation_id' => $order->external_reservation_id,
+            'local_order' => $order,
+            'invoice' => null, 'invoice_error' => null, 'error' => null,
+            'page_title' => __('Car payment order').' #'.$order->id,
+        ]);
+    }
+
+    public function commentLocal(Request $request, $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $validated = $request->validate(['comment' => 'required|string|max:2000']);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($id, $validated) {
+            $order = \App\Models\CarPaymentOrder::lockForUpdate()->findOrFail($id);
+            $booking = $order->booking_data;
+            $booking['admin_comments'][] = ['text' => $validated['comment'], 'author_id' => auth()->id(), 'created_at' => now()->toIso8601String()];
+            $order->update(['booking_data' => $booking]);
+        });
+        return redirect()->route('carrent.admin.orders.show', ['id' => $id])->with('success', __('Comment saved'));
+    }
+
     public function show(Request $request, $id)
     {
         // Check if user is authenticated (handled by dashboard middleware)
