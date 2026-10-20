@@ -11,11 +11,13 @@ use Modules\AdminController;
 
 class CarRentReservationController extends AdminController
 {
-    private $apiBaseUrl = 'https://dev.rentacar-orange.com/api/agency';
-    private $apiToken = 'Bearer tBMCZBWsjAZzKJbpvZZSt9saYVstWxppPFRFnSuX';
+    private $apiBaseUrl;
+    private $apiToken;
 
     public function __construct()
     {
+        $this->apiBaseUrl = rtrim(config('car_rent_dashboard.base_url'), '/');
+        $this->apiToken = config('car_rent_dashboard.authorization');
         $this->setActiveMenu(route('carrent.admin.reservations.index'));
     }
 
@@ -207,6 +209,7 @@ class CarRentReservationController extends AdminController
         $reportSummary = $this->buildReportSummary($reportRows, $reportRange);
 
         $data = [
+            'local_orders' => \App\Models\CarPaymentOrder::latest()->paginate(20, ['id', 'bank_order_id', 'amount', 'currency', 'payment_status', 'reservation_status', 'created_at'], 'orders_page'),
             'reservations' => $reservations,
             'error' => $error,
             'filters' => $filters,

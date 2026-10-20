@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\CarBookingConfirmationEmail;
+use App\Models\CarPaymentOrder;
 use DB;
 
 class CarController extends Controller
@@ -97,6 +98,7 @@ class CarController extends Controller
             if ($response->successful()) {
                 return [
                     'success' => true,
+                    'status' => $response->status(),
                     'data' => $response->json()
                 ];
             }
@@ -1100,16 +1102,30 @@ class CarController extends Controller
         $description = 'Car Rental Payment - ' . $validated['first_name'] . ' ' . $validated['last_name'];
         $redirectUrl = route('car.pcb.return', ['token' => $token]);
 
+        // Persist before contacting the bank; a lost browser session must not lose the order.
+        $paymentOrder = CarPaymentOrder::create([
+            'token_hash' => hash('sha256', $token),
+            'amount' => number_format($totalAmount, 2, '.', ''),
+            'currency' => config('pcb_bank.default_currency'),
+            'booking_data' => $bookingData,
+        ]);
+
         // Create PCB Bank order
-        $pcb = new \App\Services\PcbBankService();
+        $pcb = app(\App\Services\PcbBankService::class);
         $order = $pcb->createOrder($totalAmount, $description, $redirectUrl);
 
         if ($order && isset($order['id'], $order['password'], $order['hppUrl'])) {
+            $paymentOrder->update([
+                'bank_order_id' => (string) $order['id'],
+                'bank_password' => $order['password'],
+            ]);
             // Store PCB order in session
             session([
                 "car_pcb_order_{$token}" => [
                     'id' => $order['id'],
                     'password' => $order['password'],
+                    'amount' => number_format($totalAmount, 2, '.', ''),
+                    'currency' => config('pcb_bank.default_currency'),
                 ]
             ]);
 
@@ -1120,7 +1136,8 @@ class CarController extends Controller
             ]);
         }
 
-        Log::error('❌ PCB createOrder failed for car rental');
+        $paymentOrder->update(['payment_status' => 'initialization_failed']);
+        Log::error('❌ PCB createOrder failed for car rental', ['local_order_id' => $paymentOrder->id]);
         return response()->json([
             'success' => false,
             'message' => __('Failed to initialize payment gateway. Please try again.')
@@ -1135,32 +1152,82 @@ class CarController extends Controller
         $orderId = $request->query('ID');
         $status = $request->query('STATUS');
         $token = $request->query('token');
+        if (!is_string($token) || !preg_match('/^[a-zA-Z0-9]{32}$/D', $token)) {
+            return redirect()->route('car.search')->withErrors(['error' => __('Invalid payment reference. Please contact support before paying again.')]);
+        }
+
+        $paymentOrder = CarPaymentOrder::where('token_hash', hash('sha256', $token))->first();
 
         // Retrieve booking data from session
-        $bookingData = session("car_pending_booking_{$token}");
-        $pcbOrder = session("car_pcb_order_{$token}");
+        $bookingData = $paymentOrder ? $paymentOrder->booking_data : session("car_pending_booking_{$token}");
+        $pcbOrder = $paymentOrder && $paymentOrder->bank_order_id ? [
+            'id' => $paymentOrder->bank_order_id,
+            'password' => $paymentOrder->bank_password,
+            'amount' => $paymentOrder->amount,
+            'currency' => $paymentOrder->currency,
+        ] : session("car_pcb_order_{$token}");
 
         if (!$bookingData || !$pcbOrder) {
             Log::error('No car booking data found in session');
-            return redirect()->route('car.search')->withErrors(['error' => 'Session expired. Please try again.']);
+            return redirect()->route('car.search')->withErrors(['error' => __('Payment reference is unavailable. Please contact support before paying again.')]);
         }
 
-        // Check if payment was successful
-        if (strtolower($status) !== 'fullypaid') {
-            Log::error('PCB Bank payment was not successful for car rental', ['status' => $status]);
-            return redirect()->route('car.search')->withErrors(['error' => 'Payment was not successful.']);
+        if ($orderId !== null && (string) $orderId !== (string) $pcbOrder['id']) {
+            Log::error('Car payment return order mismatch', ['expected_order_id' => $pcbOrder['id']]);
+            return redirect()->route('car.search')->withErrors(['error' => __('Payment could not be verified. Please contact support before paying again.')]);
+        }
+
+        if ($paymentOrder && $paymentOrder->reservation_status === 'completed') {
+            session(['car_booking_complete' => [
+                'api_response' => $paymentOrder->reservation_response,
+                'customer_data' => $bookingData,
+                'reservation_data' => $bookingData['reservation_data'],
+                'pcb_order' => ['id' => $pcbOrder['id']],
+            ]]);
+            return redirect()->route('car.checkout.confirm');
         }
 
         // Store PCB Bank order details
-        $pcbService = new \App\Services\PcbBankService();
+        $pcbService = app(\App\Services\PcbBankService::class);
         $orderDetails = $pcbService->getOrderDetails($pcbOrder['id'], $pcbOrder['password']);
 
-        if ($orderDetails) {
-            session(["car_pcb_response_{$token}" => $orderDetails]);
+        Log::info('Car payment verification', [
+            'order_id' => $pcbOrder['id'],
+            'return_status' => $status,
+            'verified_status' => $orderDetails['status'] ?? null,
+        ]);
+
+        // The browser return is not proof of payment. Always verify with the bank.
+        if (!$orderDetails ||
+            (string) ($orderDetails['id'] ?? '') !== (string) $pcbOrder['id'] ||
+            strtolower($orderDetails['status'] ?? '') !== 'fullypaid' ||
+            !isset($pcbOrder['amount'], $pcbOrder['currency'], $orderDetails['amount'], $orderDetails['currency']) ||
+            number_format((float) $orderDetails['amount'], 2, '.', '') !== $pcbOrder['amount'] ||
+            strtoupper($orderDetails['currency']) !== strtoupper($pcbOrder['currency'])) {
+            return redirect()->route('car.search')->withErrors(['error' => __('Payment could not be verified. Please contact support with order #:order before paying again.', ['order' => $pcbOrder['id']])]);
+        }
+
+        session(["car_pcb_response_{$token}" => $orderDetails]);
+
+        if ($paymentOrder) {
+            $paymentOrder->update(['payment_status' => 'paid', 'verified_at' => now()]);
+            if (!$paymentOrder->claimReservation()) {
+                return redirect()->route('car.search')->withErrors(['error' => __('Payment received. Reservation requires review or is already processing. Contact support with order #:order. Do not pay again.', ['order' => $pcbOrder['id']])]);
+            }
+        } else {
+            // Legacy sessions have no durable claim; do not risk a duplicate reservation.
+            return redirect()->route('car.search')->withErrors(['error' => __('Payment verified. This older order requires manual review. Contact support with order #:order. Do not pay again.', ['order' => $pcbOrder['id']])]);
         }
 
         // Complete the booking with the external car API
-        return $this->completeCarBookingAfterPayment($bookingData, $pcbOrder, $token);
+        try {
+            return $this->completeCarBookingAfterPayment($bookingData, $pcbOrder, $token);
+        } catch (\Throwable $e) {
+            CarPaymentOrder::whereKey($paymentOrder->id)->where('reservation_status', 'creating')
+                ->update(['reservation_status' => 'review_required']);
+            Log::error('Car reservation completion requires review', ['order_id' => $pcbOrder['id'], 'exception' => get_class($e)]);
+            return redirect()->route('car.search')->withErrors(['error' => __('Payment received. Contact support with order #:order to check the reservation. Do not pay again.', ['order' => $pcbOrder['id']])]);
+        }
     }
 
     /**
@@ -1214,9 +1281,32 @@ class CarController extends Controller
         ];
 
         // Call external API store-checkout endpoint
+        Log::info('Car reservation creation started', ['order_id' => $pcbOrder['id']]);
         $response = $this->makeApiRequest('store-checkout', 'POST', $storeData);
+        Log::info('Car reservation creation result', [
+            'order_id' => $pcbOrder['id'],
+            'http_success' => $response['success'] ?? false,
+            'http_status' => $response['status'] ?? null,
+        ]);
 
-        if ($response['success']) {
+        $paymentOrder = CarPaymentOrder::where('token_hash', hash('sha256', $token))->firstOrFail();
+        $payload = $response['data'] ?? null;
+        $acknowledged = is_array($payload) && (
+            ($payload['success'] ?? null) === true ||
+            data_get($payload, 'reservation_id') || data_get($payload, 'reservation.id') ||
+            data_get($payload, 'data.reservation_id') || data_get($payload, 'data.id') || data_get($payload, 'id')
+        );
+        $confirmed = ($response['success'] ?? false) && is_array($payload) && !empty($payload)
+            && $acknowledged
+            && (!array_key_exists('success', $payload) || $payload['success'] === true)
+            && empty($payload['error']) && empty($payload['errors']);
+        $paymentOrder->update([
+            'reservation_status' => $confirmed ? 'completed' : 'review_required',
+            'reservation_response' => is_array($payload) ? $payload : null,
+            'reservation_http_status' => $response['status'] ?? null,
+        ]);
+
+        if ($confirmed) {
             // Store final confirmation data in session
             session([
                 'car_booking_complete' => [
@@ -1263,7 +1353,7 @@ class CarController extends Controller
             return redirect()->route('car.checkout.confirm')->with('success', __('Booking completed successfully!'));
         } else {
             return redirect()->route('car.search')->withErrors([
-                'error' => $response['message'] ?? $response['error'] ?? __('Booking failed. Please try again.')
+                'error' => __('Payment was verified, but the reservation could not be completed. Please contact support with order #:order. Do not pay again.', ['order' => $pcbOrder['id']])
             ]);
         }
     }

@@ -168,11 +168,37 @@
             </div>
         @endif
 
+        @if(isset($local_orders))
+            <div class="panel"><div class="panel-body">
+                <h4>{{__('Local car payment orders')}}</h4>
+                <p>{{__('Payment status and external reservation status are tracked separately. Orders requiring review must be checked with the provider before creating another reservation.')}}</p>
+                <div class="table-responsive"><table class="table table-hover">
+                    <thead><tr>
+                        <th>{{__('Local ID')}}</th><th>{{__('Bank order')}}</th><th>{{__('Amount')}}</th>
+                        <th>{{__('Payment')}}</th><th>{{__('Reservation')}}</th><th>{{__('Created')}}</th>
+                    </tr></thead>
+                    <tbody>
+                    @forelse($local_orders as $localOrder)
+                        <tr>
+                            <td>{{ $localOrder->id }}</td><td>{{ $localOrder->bank_order_id }}</td>
+                            <td>{{ $localOrder->amount }} {{ $localOrder->currency }}</td>
+                            <td>{{ $localOrder->payment_status }}</td><td>{{ $localOrder->reservation_status }}</td>
+                            <td>{{ $localOrder->created_at }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6">{{__('No local car payment orders recorded yet. Older orders are not imported automatically.')}}</td></tr>
+                    @endforelse
+                    </tbody>
+                </table></div>
+                {{ $local_orders->withQueryString()->links() }}
+            </div></div>
+        @endif
+
         <div class="panel">
             <div class="panel-body">
                 @if(empty($reservations) || count($reservations) == 0)
                     <div class="alert alert-info">
-                        {{__('No reservations found')}}
+                        {{ $error ? __('External reservations could not be loaded. Their existence cannot be determined.') : __('No reservations found') }}
                     </div>
                 @else
                     <div class="table-responsive">
