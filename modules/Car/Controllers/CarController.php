@@ -42,6 +42,7 @@ class CarController extends Controller
     /**
      * Display car search page
      */
+    /*
     public function index(Request $request)
     {
         $locations = $this->getCompanyLocations();
@@ -62,6 +63,15 @@ class CarController extends Controller
             'list_location' => $list_location,
             'seo_meta' => $this->carClass->getSeoMetaForPageList()
         ]);
+    }
+    */
+
+    /**
+     * Redirect the car landing page to the site homepage.
+     */
+    public function index()
+    {
+        return redirect('/');
     }
 
     /**

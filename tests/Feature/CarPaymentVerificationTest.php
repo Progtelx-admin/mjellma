@@ -21,6 +21,15 @@ class CarPaymentVerificationTest extends TestCase
         (require database_path('migrations/2026_10_20_000001_add_car_order_filter_columns.php'))->up();
     }
 
+    public function test_car_landing_redirects_to_homepage(): void
+    {
+        $controller = new class extends CarController {
+            public function __construct() {}
+        };
+
+        $this->assertSame(url('/'), $controller->index()->getTargetUrl());
+    }
+
     /** @dataProvider paymentCases */
     public function test_booking_requires_verified_bank_payment($returnStatus, $details, $expected)
     {
